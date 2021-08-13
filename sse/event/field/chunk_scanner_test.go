@@ -1,0 +1,63 @@
+package field
+
+import (
+	"bytes"
+	"reflect"
+	"testing"
+	"unsafe"
+)
+
+func getByteSliceDataAddress(b []byte) uintptr {
+	return (*reflect.SliceHeader)(unsafe.Pointer(&b)).Data
+}
+
+func TestScanner(t *testing.T) {
+	buf := []byte("sarmale")
+	s := &chunkScanner{Buffer: buf}
+
+	if !s.Scan() {
+		t.Fatalf("Scan should return true")
+	}
+
+	chunk, endsInNewline := s.Chunk()
+
+	if getByteSliceDataAddress(buf) != getByteSliceDataAddress(chunk) {
+		t.Fatalf("First chunk should always have the same address as the given buffer")
+	}
+
+	if bytes.Compare(buf, chunk) != 0 {
+		t.Fatalf("Expected chunk %q, got %q", string(buf), string(chunk))
+	}
+
+	if endsInNewline {
+		t.Fatalf("Ends in newline flag incorrect: expected %t, got %t", false, endsInNewline)
+	}
+
+	type result struct {
+		chunk         string
+		endsInNewline bool
+	}
+
+	s.Buffer = []byte("sarmale cu\nghimbir\r\nsunt\rsuper\n\ngenial sincer")
+
+	expected := []result{
+		{"sarmale cu\n", true},
+		{"ghimbir\r\n", true},
+		{"sunt\r", true},
+		{"super\n", true},
+		{"\n", true},
+		{"genial sincer", false},
+	}
+
+	var got []result
+
+	for s.Scan() {
+		chunk, endsInNewline := s.Chunk()
+
+		got = append(got, result{string(chunk), endsInNewline})
+	}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("Bad result:\n\texpected %#v\n\tgot %#v", expected, got)
+	}
+}
