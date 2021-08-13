@@ -1,1 +1,1 @@
-module "go-metrics"
+module "github.com/tmaxmax/go-sse"
