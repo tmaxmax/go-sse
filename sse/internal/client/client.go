@@ -9,45 +9,52 @@ type Client struct {
 	messages chan io.WriterTo
 	writer   io.Writer
 	flusher  http.Flusher
-	id       string
 }
 
-func New(writer io.Writer, flusher http.Flusher, id string) *Client {
+func NewClient(writer io.Writer, flusher http.Flusher) *Client {
 	return &Client{
 		messages: make(chan io.WriterTo),
 		writer:   writer,
 		flusher:  flusher,
-		id:       id,
 	}
 }
 
+func (c *Client) Close() {
+	close(c.messages)
+}
+
 func (c *Client) Send(message io.WriterTo) {
+	if message == nil {
+		panic("sse.internal.client: message sent to client can't be nil")
+	}
+
 	c.messages <- message
 }
 
-func (c *Client) ID() string {
-	return c.id
-}
-
-func (c *Client) Receive(cancel <-chan struct{}) error {
+func (c *Client) Receive() error {
 	if c.writer == nil {
 		return nil
 	}
 
-	for {
-		select {
-		case <-cancel:
-			return nil
-		case message := <-c.messages:
-			if _, err := message.WriteTo(c.writer); err != nil {
-				return err
-			}
+	c.flush()
 
-			if c.flusher != nil {
-				c.flusher.Flush()
-			}
+	for {
+		message := <-c.messages
+
+		if message == nil {
+			return nil
 		}
+
+		if _, err := message.WriteTo(c.writer); err != nil {
+			return err
+		}
+
+		c.flush()
 	}
 }
 
-// TODO: Close method?
+func (c *Client) flush() {
+	if c.flusher != nil {
+		c.flusher.Flush()
+	}
+}

@@ -2,114 +2,84 @@ package sse
 
 import (
 	"context"
-	"fmt"
-	"go-metrics/sse/internal/client"
 	"log"
 	"net/http"
+
+	"github.com/tmaxmax/go-sse/sse/event"
+	. "github.com/tmaxmax/go-sse/sse/internal/client"
 )
 
 type Configuration struct {
-	Headers      map[string]string
-	CloseMessage Messager
+	Headers    map[string]string
+	CloseEvent *event.Event
 }
 
 type Handler struct {
-	notifier       chan *Message
-	newClients     chan *client.Client
-	closingClients chan *client.Client
-	clients        map[*client.Client]struct{}
+	notifier       chan *event.Event
+	newClients     chan *Client
+	closingClients chan *Client
+	clients        map[*Client]struct{}
 
 	configuration *Configuration
 	closer        <-chan struct{}
 }
 
-func New(configuration *Configuration) *Handler {
+func NewHandler(configuration *Configuration) *Handler {
 	return &Handler{
-		notifier:       make(chan *Message, 1),
-		newClients:     make(chan *client.Client),
-		closingClients: make(chan *client.Client),
-		clients:        make(map[*client.Client]struct{}),
+		notifier:       make(chan *event.Event, 1),
+		newClients:     make(chan *Client),
+		closingClients: make(chan *Client),
+		clients:        make(map[*Client]struct{}),
 		configuration:  configuration,
 		// Will be set on start
 		closer: nil,
 	}
 }
 
-func (h *Handler) Send(message Messager) error {
-	raw, err := message.Message()
-	if err != nil {
-		return err
+func (h *Handler) Send(ev *event.Event) {
+	if ev == nil {
+		return
 	}
 
-	h.notifier <- raw
-
-	return nil
+	h.notifier <- ev
 }
 
-func (h *Handler) Start(ctx context.Context) error {
+func (h *Handler) Start(ctx context.Context) {
 	if ctx == nil {
-		return h.StartWithSignal(nil)
+		h.StartWithSignal(nil)
 	} else {
-		return h.StartWithSignal(ctx.Done())
+		h.StartWithSignal(ctx.Done())
 	}
 }
 
-func (h *Handler) StartWithSignal(cancel <-chan struct{}) (err error) {
-	var closeMessage *Message
-	if h.configuration != nil && h.configuration.CloseMessage != nil {
-		closeMessage, err = h.configuration.CloseMessage.Message()
-		if err != nil {
-			return
-		}
-
-		log.Println("Closing message is", closeMessage.String())
+func (h *Handler) StartWithSignal(cancel <-chan struct{}) {
+	var closeEvent *event.Event
+	if cfg := h.configuration; cfg != nil {
+		closeEvent = cfg.CloseEvent
 	}
-
-	h.closer = mergeCancelChannels(cancel, nil)
 
 	for {
 		select {
 		case c := <-h.newClients:
 			h.clients[c] = struct{}{}
-
-			log.Println("Received client", c.ID())
 		case c := <-h.closingClients:
-			delete(h.clients, c)
-
-			log.Println("Removed client", c.ID())
-
-			select {
-			case <-h.closer:
-				log.Println("There")
-
-				if closeMessage != nil {
-					c.Send(closeMessage)
-
-					log.Println("Sent closing message")
-				}
-
-				if len(h.clients) == 0 {
-					log.Println("Exiting event stream handler")
-
-					return
-				}
-			default:
-				log.Println("Here")
-			}
+			h.removeClient(c, nil)
 		case m := <-h.notifier:
-			log.Printf("Received message: %q", m)
-
 			for c, _ := range h.clients {
 				c.Send(m)
-
-				log.Println("Message sent to client", c.ID())
 			}
+		case <-cancel:
+			for c, _ := range h.clients {
+				h.removeClient(c, closeEvent)
+			}
+
+			return
 		}
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c := h.clientFromRequest(w, r)
+	c := h.subscribe(w, r)
 	if c == nil {
 		http.Error(w, "Server-sent events are not supported", http.StatusBadRequest)
 
@@ -118,43 +88,43 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.newClients <- c
 
-	defer func() {
+	go func() {
+		<-r.Context().Done()
+
 		h.closingClients <- c
 	}()
 
-	_ = c.Receive(mergeCancelChannels(h.closer, r.Context().Done()))
+	log.Println(c.Receive())
 }
 
-func (h *Handler) clientFromRequest(w http.ResponseWriter, r *http.Request) *client.Client {
+func (h *Handler) subscribe(w http.ResponseWriter, _ *http.Request) *Client {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return nil
 	}
 
+	header := w.Header()
+
 	if h.configuration != nil {
 		for key, value := range h.configuration.Headers {
-			r.Header.Set(key, value)
+			header.Set(key, value)
 		}
 	}
 
-	r.Header.Set("Content-Type", "text/event-stream")
-	r.Header.Set("Cache-Control", "no-cache")
-	r.Header.Set("Connection", "keep-alive")
+	header.Set("Content-Type", "text/event-stream")
+	header.Set("Cache-Control", "no-cache")
+	header.Set("Connection", "keep-alive")
+	header.Set("Transfer-Encoding", "chunked")
 
-	return client.New(w, flusher, fmt.Sprintf("%s: %s", r.RemoteAddr, r.UserAgent()))
+	return NewClient(w, flusher)
 }
 
-func mergeCancelChannels(a, b <-chan struct{}) <-chan struct{} {
-	cancel := make(chan struct{})
+func (h *Handler) removeClient(c *Client, ev *event.Event) {
+	if ev != nil {
+		c.Send(ev)
+	}
 
-	go func() {
-		select {
-		case <-a:
-			close(cancel)
-		case <-b:
-			close(cancel)
-		}
-	}()
+	c.Close()
 
-	return cancel
+	delete(h.clients, c)
 }
