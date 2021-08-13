@@ -2,23 +2,23 @@ package main
 
 import (
 	"context"
-	"go-metrics/sse"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"time"
+
+	"github.com/tmaxmax/go-sse/sse"
+	"github.com/tmaxmax/go-sse/sse/event"
 )
 
-var eventHandler = sse.New(&sse.Configuration{
+var eventHandler = sse.NewHandler(&sse.Configuration{
 	Headers: map[string]string{
 		"Access-Control-Allow-Origin": "*",
 	},
-	CloseMessage: &sse.Message{
-		Event: "close",
-		Data:  []byte("Event stream closed!"),
-	},
+	CloseEvent: event.New().Text("we are done here\ngoodbye y'all!").ID("CLOSE"),
 })
 
 func main() {
@@ -54,7 +54,26 @@ func main() {
 
 	go recordMetric("ops", time.Second*2, cancel)
 	go recordMetric("cycles", time.Millisecond*500, cancel)
-	//go recordMetric("sarmale", time.Microsecond, cancel)
+
+	go func() {
+		for {
+			r := 100 + rand.Int63n(1400)
+
+			select {
+			case <-time.After(time.Millisecond * time.Duration(r)):
+				b := event.New().Name("Random numbers")
+				count := 1 + rand.Intn(5)
+
+				for i := 0; i < count; i += 1 {
+					b.Text(strconv.FormatUint(rand.Uint64(), 10))
+				}
+
+				eventHandler.Send(b)
+			case <-cancel:
+				return
+			}
+		}
+	}()
 
 	if err := runServer(server, cancel); err != nil {
 		log.Println(err)
@@ -65,12 +84,7 @@ func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}
 	for {
 		select {
 		case <-time.After(frequency):
-			newValue := Inc(metric)
-
-			_ = eventHandler.Send(&sse.Message{
-				Event: metric,
-				Data:  []byte(strconv.FormatInt(newValue, 10)),
-			})
+			eventHandler.Send(event.New().Name(metric).Text(strconv.FormatInt(Inc(metric), 10)))
 		case <-cancel:
 			break
 		}
