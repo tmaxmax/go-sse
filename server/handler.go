@@ -1,113 +1,53 @@
 package server
 
 import (
-	"context"
 	"log"
 	"net/http"
+	"sync/atomic"
+
+	"github.com/tmaxmax/go-sse/pkg/hub"
 
 	"github.com/tmaxmax/go-sse/server/event"
-
-	. "github.com/tmaxmax/go-sse/server/internal"
 )
 
-type Configuration struct {
-	Headers    map[string]string
-	CloseEvent *event.Event
-}
+var connCount int64
 
 type Handler struct {
-	notifier       chan *event.Event
-	newClients     chan *Client
-	closingClients chan *Client
-	clients        map[*Client]struct{}
+	Headers    map[string]string
+	CloseEvent *event.Event
 
-	configuration *Configuration
-	closer        <-chan struct{}
+	hub *hub.Hub
 }
 
-func NewHandler(configuration *Configuration) *Handler {
-	return &Handler{
-		notifier:       make(chan *event.Event, 1),
-		newClients:     make(chan *Client),
-		closingClients: make(chan *Client),
-		clients:        make(map[*Client]struct{}),
-		configuration:  configuration,
-		// Will be set on start
-		closer: nil,
-	}
-}
+func New() *Handler {
+	h := &Handler{}
+	h.hub = hub.New(
+		hub.OnHubStop(func(c *hub.Connection) bool {
+			c.Send(h.CloseEvent)
 
-func (h *Handler) Send(ev *event.Event) {
-	if ev == nil {
-		return
-	}
-
-	h.notifier <- ev
-}
-
-func (h *Handler) Start(ctx context.Context) {
-	if ctx == nil {
-		h.StartWithSignal(nil)
-	} else {
-		h.StartWithSignal(ctx.Done())
-	}
+			return true
+		}),
+	)
+	return h
 }
 
 func (h *Handler) StartWithSignal(cancel <-chan struct{}) {
-	var closeEvent *event.Event
-	if cfg := h.configuration; cfg != nil {
-		closeEvent = cfg.CloseEvent
-	}
+	go h.hub.Start()
 
-	for {
-		select {
-		case c := <-h.newClients:
-			h.clients[c] = struct{}{}
-		case c := <-h.closingClients:
-			h.removeClient(c, nil)
-		case m := <-h.notifier:
-			for c := range h.clients {
-				c.Send(m)
-			}
-		case <-cancel:
-			for c := range h.clients {
-				h.removeClient(c, closeEvent)
-			}
+	<-cancel
 
-			return
-		}
-	}
+	h.hub.Stop()
+}
+
+func (h *Handler) Broadcast(ev *event.Event) {
+	h.hub.Broadcast(ev)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c := h.subscribe(w, r)
-	if c == nil {
-		http.Error(w, "Server-sent events are not supported", http.StatusBadRequest)
-
-		return
-	}
-
-	h.newClients <- c
-
-	go func() {
-		<-r.Context().Done()
-
-		h.closingClients <- c
-	}()
-
-	log.Println(c.Receive())
-}
-
-func (h *Handler) subscribe(w http.ResponseWriter, _ *http.Request) *Client {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return nil
-	}
-
 	header := w.Header()
 
-	if h.configuration != nil {
-		for key, value := range h.configuration.Headers {
+	if h.Headers != nil {
+		for key, value := range h.Headers {
 			header.Set(key, value)
 		}
 	}
@@ -117,15 +57,30 @@ func (h *Handler) subscribe(w http.ResponseWriter, _ *http.Request) *Client {
 	header.Set("Connection", "keep-alive")
 	header.Set("Transfer-Encoding", "chunked")
 
-	return NewClient(w, flusher)
-}
+	var c *hub.Connection
 
-func (h *Handler) removeClient(c *Client, ev *event.Event) {
-	if ev != nil {
-		c.Send(ev)
+	flusher, ok := w.(http.Flusher)
+	if ok {
+		flusher.Flush()
+
+		c = hub.NewConnection(w)
 	}
 
-	c.Close()
+	if c == nil {
+		http.Error(w, "Server-sent events are not supported", http.StatusBadRequest)
 
-	delete(h.clients, c)
+		return
+	}
+
+	c.AttachTo(h.hub, atomic.AddInt64(&connCount, 1))
+
+	go func() {
+		<-r.Context().Done()
+
+		c.Close()
+
+		atomic.AddInt64(&connCount, -1)
+	}()
+
+	log.Println(c.Receive())
 }

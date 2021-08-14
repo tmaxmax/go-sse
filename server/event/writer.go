@@ -18,7 +18,7 @@ type singleFieldWriter struct {
 	charsWrittenOnClose int
 }
 
-func newSingleFieldWriter(w io.Writer, f Field) *singleFieldWriter {
+func newSingleFieldWriter(w io.Writer, f field) *singleFieldWriter {
 	return &singleFieldWriter{
 		w:                   w,
 		s:                   &ChunkScanner{},
@@ -94,16 +94,15 @@ type writer struct {
 	closed bool
 }
 
-func (w *writer) WriteField(f Field) (int64, error) {
+func (w *writer) WriteField(f field) error {
 	s := newSingleFieldWriter(w.Writer, f)
 	defer s.Close()
 
-	n, err := f.WriteTo(s)
-	if err != nil {
-		return n, err
+	if err := f.Message(s); err != nil {
+		return err
 	}
 
-	return n, s.Close()
+	return s.Close()
 }
 
 func (w *writer) Close() error {

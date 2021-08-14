@@ -12,8 +12,17 @@ func (i ID) name() string {
 	return "id"
 }
 
-func (i ID) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write([]byte(i))
+func (i ID) apply(e *Event) {
+	if e.idIndex == -1 {
+		e.idIndex = len(e.fields)
+		e.fields = append(e.fields, i)
+	} else {
+		e.fields[e.idIndex] = i
+	}
+}
 
-	return int64(n), err
+func (i ID) Message(w io.Writer) error {
+	_, err := w.Write([]byte(i))
+
+	return err
 }

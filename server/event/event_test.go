@@ -17,7 +17,7 @@ func escape(s string) string {
 func TestNewEvent(t *testing.T) {
 	t.Parallel()
 
-	input := []Field{
+	input := []Option{
 		Name("whatever"),
 		ID("again"),
 		Text("input"),
@@ -28,7 +28,7 @@ func TestNewEvent(t *testing.T) {
 		Name("x"),
 	}
 
-	expected := []Field{
+	expected := []field{
 		Name("x"),
 		ID("lol"),
 		Text("input"),
@@ -36,7 +36,7 @@ func TestNewEvent(t *testing.T) {
 		Raw("amazing"),
 	}
 
-	e := NewEvent(input...)
+	e := New(input...)
 
 	if d := deep.Equal(expected, e.fields); d != nil {
 		t.Fatalf("Fields set incorrectly:\n%v", d)
@@ -51,7 +51,7 @@ type testJSON struct {
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
-	input := []Field{
+	input := []Option{
 		Text("This is an example\nOf an event"),
 		ID("example_id"),
 		Retry(time.Second * 5),
@@ -63,11 +63,10 @@ func TestEvent_WriteTo(t *testing.T) {
 
 	expected := escape("data:This is an example\ndata:Of an event\nid:example_id\nretry:5000\ndata:raw bytes here\nevent:test_event\n:This test should pass\ndata:Important data\ndata:Important again\rdata:\rdata:Very important\r\n\n")
 
-	e := NewEvent(input...)
+	e := New(input...)
 	w := &strings.Builder{}
 
-	_, err := e.WriteTo(w)
-	if err != nil {
+	if err := e.Message(w); err != nil {
 		t.Fatalf("Failed to write event: %v", err)
 	}
 
