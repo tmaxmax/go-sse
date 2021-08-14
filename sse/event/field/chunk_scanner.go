@@ -19,7 +19,6 @@ func nextChunk(s []byte) (chunk []byte, remaining []byte) {
 		i += 1
 
 		if b == '\n' || b == '\r' {
-
 			if b == '\r' && i < l && s[i] == '\n' {
 				i += 1
 			}
