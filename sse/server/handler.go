@@ -5,17 +5,16 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/tmaxmax/go-sse/sse/server/event"
 	. "github.com/tmaxmax/go-sse/sse/server/internal/client"
 )
 
 type Configuration struct {
 	Headers    map[string]string
-	CloseEvent *event.Event
+	CloseEvent *Event
 }
 
 type Handler struct {
-	notifier       chan *event.Event
+	notifier       chan *Event
 	newClients     chan *Client
 	closingClients chan *Client
 	clients        map[*Client]struct{}
@@ -26,7 +25,7 @@ type Handler struct {
 
 func NewHandler(configuration *Configuration) *Handler {
 	return &Handler{
-		notifier:       make(chan *event.Event, 1),
+		notifier:       make(chan *Event, 1),
 		newClients:     make(chan *Client),
 		closingClients: make(chan *Client),
 		clients:        make(map[*Client]struct{}),
@@ -36,7 +35,7 @@ func NewHandler(configuration *Configuration) *Handler {
 	}
 }
 
-func (h *Handler) Send(ev *event.Event) {
+func (h *Handler) Send(ev *Event) {
 	if ev == nil {
 		return
 	}
@@ -53,7 +52,7 @@ func (h *Handler) Start(ctx context.Context) {
 }
 
 func (h *Handler) StartWithSignal(cancel <-chan struct{}) {
-	var closeEvent *event.Event
+	var closeEvent *Event
 	if cfg := h.configuration; cfg != nil {
 		closeEvent = cfg.CloseEvent
 	}
@@ -119,7 +118,7 @@ func (h *Handler) subscribe(w http.ResponseWriter, _ *http.Request) *Client {
 	return NewClient(w, flusher)
 }
 
-func (h *Handler) removeClient(c *Client, ev *event.Event) {
+func (h *Handler) removeClient(c *Client, ev *Event) {
 	if ev != nil {
 		c.Send(ev)
 	}

@@ -1,28 +1,28 @@
 package field
 
-import "io"
+import (
+	"io"
+
+	"github.com/tmaxmax/go-sse/sse/server/field/internal"
+)
 
 var newline = []byte{'\n'}
 
 type singleFieldWriter struct {
 	w io.Writer
-	s *chunkScanner
+	s *internal.ChunkScanner
 
-	name       []byte // this also has the colon
-	singleLine bool
-	isNewLine  bool // indicates if the next write will start a new line
+	name      []byte // this also has the colon
+	isNewLine bool   // indicates if the next write will start a new line
 
 	charsWrittenOnClose int
 }
 
 func newSingleFieldWriter(w io.Writer, f Field) *singleFieldWriter {
-	_, isSingleLine := f.(singleLine)
-
 	return &singleFieldWriter{
 		w:                   w,
-		s:                   &chunkScanner{},
+		s:                   &internal.ChunkScanner{},
 		name:                []byte(f.name() + ":"),
-		singleLine:          isSingleLine,
 		isNewLine:           true,
 		charsWrittenOnClose: -1,
 	}
@@ -44,33 +44,26 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 		return
 	}
 
-	var m int
+	var (
+		m     int
+		chunk []byte
+	)
 
-	if s.singleLine {
-		m, err = s.w.Write(p)
+	s.s.Buffer = p
+
+	for s.s.Scan() {
+		m, err = s.writeName()
 		n += m
 		if err != nil {
 			return
 		}
-	} else {
-		s.s.Buffer = p
 
-		var chunk []byte
+		chunk, s.isNewLine = s.s.Chunk()
 
-		for s.s.Scan() {
-			m, err = s.writeName()
-			n += m
-			if err != nil {
-				return
-			}
-
-			chunk, s.isNewLine = s.s.Chunk()
-
-			m, err = s.w.Write(chunk)
-			n += m
-			if err != nil {
-				return
-			}
+		m, err = s.w.Write(chunk)
+		n += m
+		if err != nil {
+			return
 		}
 	}
 

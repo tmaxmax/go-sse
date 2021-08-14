@@ -1,4 +1,4 @@
-package field
+package internal
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ func getByteSliceDataAddress(b []byte) uintptr {
 
 func TestScanner(t *testing.T) {
 	buf := []byte("sarmale")
-	s := &chunkScanner{Buffer: buf}
+	s := &ChunkScanner{Buffer: buf}
 
 	if !s.Scan() {
 		t.Fatalf("Scan should return true")

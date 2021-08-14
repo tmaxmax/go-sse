@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+
+	"github.com/tmaxmax/go-sse/sse/server/field/internal"
 )
 
 // Data implements the Field.name method. Embed this struct in
@@ -16,55 +18,53 @@ func (d Data) name() string {
 
 // Raw is a multiline data payload consisting of bytes that represent an UTF-8 encoded string.
 // Do not use this for binary data!
-type Raw struct {
-	Data
+type Raw []byte
 
-	Payload []byte
+func (r Raw) name() string {
+	return Data{}.name()
 }
 
 func (r Raw) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write(r.Payload)
+	n, err := w.Write(r)
 
 	return int64(n), err
 }
 
 // Text is a data payload consisting of a UTF-8 encoded string.
-type Text struct {
-	Data
+type Text string
 
-	Text string
+func (t Text) name() string {
+	return Data{}.name()
 }
 
 func (t Text) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write([]byte(t.Text))
+	n, err := w.Write([]byte(t))
 
 	return int64(n), err
 }
 
 // JSON is a single-line data payload consisting of a JSON encoded object.
 type JSON struct {
-	Data
-	SingleLine
-
 	Value interface{}
+
+	Data
 }
 
 func (j JSON) WriteTo(w io.Writer) (int64, error) {
-	cw := &countWriter{w: w}
+	cw := &internal.CountWriter{Writer: w}
 
 	err := json.NewEncoder(cw).Encode(j.Value)
 
-	return int64(cw.count), err
+	return int64(cw.Count), err
 }
 
 // Base64 is a single-line data payload consisting of Base64 encoded bytes.
 // You can send binary data using it.
 type Base64 struct {
-	Data
-	SingleLine
-
 	Payload  []byte
 	Encoding *base64.Encoding
+
+	Data
 }
 
 func (b Base64) WriteTo(w io.Writer) (int64, error) {

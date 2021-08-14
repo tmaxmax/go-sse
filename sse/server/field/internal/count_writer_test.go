@@ -1,4 +1,4 @@
-package field
+package internal
 
 import (
 	"io"
@@ -10,7 +10,7 @@ func TestCountWriter(t *testing.T) {
 
 	chunks := []string{"sarmale", "cu", "ghimbir"}
 	expectedCount := 0
-	cw := &countWriter{w: io.Discard}
+	cw := &CountWriter{Writer: io.Discard}
 
 	for _, chunk := range chunks {
 		l := len(chunk)
@@ -19,7 +19,7 @@ func TestCountWriter(t *testing.T) {
 		_, _ = cw.Write([]byte(chunk))
 	}
 
-	if expectedCount != cw.count {
-		t.Fatalf("Counting written bytes failed: expected %d, got %d", expectedCount, cw.count)
+	if expectedCount != cw.Count {
+		t.Fatalf("Counting written bytes failed: expected %d, got %d", expectedCount, cw.Count)
 	}
 }

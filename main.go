@@ -10,15 +10,19 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tmaxmax/go-sse/sse/server"
-	"github.com/tmaxmax/go-sse/sse/server/event"
+	sse "github.com/tmaxmax/go-sse/sse/server"
+
+	"github.com/tmaxmax/go-sse/sse/server/field"
 )
 
-var eventHandler = server.NewHandler(&server.Configuration{
+var eventHandler = sse.NewHandler(&sse.Configuration{
 	Headers: map[string]string{
 		"Access-Control-Allow-Origin": "*",
 	},
-	CloseEvent: event.New().AddText("we are done here\ngoodbye y'all!").SetID("CLOSE"),
+	CloseEvent: sse.NewEvent(
+		field.ID("CLOSE"),
+		field.Text("We're done here\nGoodbye y'all!"),
+	),
 })
 
 func main() {
@@ -61,14 +65,15 @@ func main() {
 
 			select {
 			case <-time.After(time.Millisecond * time.Duration(r)):
-				b := event.New().SetName("Random numbers")
+				var fields []field.Field
+
 				count := 1 + rand.Intn(5)
 
 				for i := 0; i < count; i += 1 {
-					b.AddText(strconv.FormatUint(rand.Uint64(), 10))
+					fields = append(fields, field.Text(strconv.FormatUint(rand.Uint64(), 10)))
 				}
 
-				eventHandler.Send(b)
+				eventHandler.Send(sse.NewEvent(fields...))
 			case <-cancel:
 				return
 			}
@@ -84,7 +89,13 @@ func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}
 	for {
 		select {
 		case <-time.After(frequency):
-			eventHandler.Send(event.New().SetName(metric).AddText(strconv.FormatInt(Inc(metric), 10)))
+			v := Inc(metric)
+			ev := sse.NewEvent(
+				field.Name(metric),
+				field.Text(strconv.FormatInt(v, 10)),
+			)
+
+			eventHandler.Send(ev)
 		case <-cancel:
 			break
 		}
