@@ -14,17 +14,14 @@ import (
 	"github.com/tmaxmax/go-sse/server/event"
 )
 
-var eventHandler = server.NewHandler(&server.Configuration{
-	Headers: map[string]string{
-		"Access-Control-Allow-Origin": "*",
-	},
-	CloseEvent: event.NewEvent(
-		event.ID("CLOSE"),
-		event.Text("We're done here\nGoodbye y'all!"),
-	),
-})
+var eventHandler = server.New()
 
 func main() {
+	eventHandler.Headers = map[string]string{
+		"Access-Control-Allow-Origin": "*",
+	}
+	eventHandler.CloseEvent = event.New(event.ID("LMAO PA"))
+
 	cancel := make(chan struct{})
 	cancelMetrics := make(chan struct{})
 	cancelSignal := make(chan os.Signal)
@@ -59,23 +56,31 @@ func main() {
 	go recordMetric("cycles", time.Millisecond*500, cancel)
 
 	go func() {
-		for {
-			r := 100 + rand.Int63n(1400)
+		getDuration := func() time.Duration {
+			return time.Duration(100+rand.Int63n(1400)) * time.Millisecond
+		}
 
+		var duration time.Duration
+
+		for {
 			select {
-			case <-time.After(time.Millisecond * time.Duration(r)):
-				var fields []event.Field
+			case <-time.After(duration):
+				var opts []event.Option
 
 				count := 1 + rand.Intn(5)
 
 				for i := 0; i < count; i += 1 {
-					fields = append(fields, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
+					opts = append(opts, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
 				}
 
-				eventHandler.Send(event.NewEvent(fields...))
+				duration = getDuration()
+				opts = append(opts, event.TTL(duration))
+
+				eventHandler.Broadcast(event.New(opts...))
 			case <-cancel:
 				return
 			}
+
 		}
 	}()
 
@@ -89,12 +94,13 @@ func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}
 		select {
 		case <-time.After(frequency):
 			v := Inc(metric)
-			ev := event.NewEvent(
+			ev := event.New(
 				event.Name(metric),
 				event.Text(strconv.FormatInt(v, 10)),
+				event.TTL(frequency),
 			)
 
-			eventHandler.Send(ev)
+			eventHandler.Broadcast(ev)
 		case <-cancel:
 			break
 		}
