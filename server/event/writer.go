@@ -60,10 +60,6 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 		m, err = s.w.Write(chunk)
 		n += m
 		if err != nil {
-			if m > 0 && (chunk[m-1] == '\n' || chunk[m-1] == '\r') {
-				s.isNewLine = true
-			}
-
 			return
 		}
 	}
@@ -73,7 +69,7 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 
 func (s *singleFieldWriter) Close() error {
 	if !s.isNewLine {
-		s.isNewLine = false
+		s.isNewLine = true
 
 		_, err := s.w.Write(newline)
 
@@ -86,6 +82,8 @@ func (s *singleFieldWriter) Close() error {
 // writer is a struct that is used to write event fields.
 type writer struct {
 	Writer io.Writer
+
+	closed bool
 }
 
 func (w *writer) WriteField(f Field) (int64, error) {
@@ -101,6 +99,12 @@ func (w *writer) WriteField(f Field) (int64, error) {
 }
 
 func (w *writer) Close() error {
+	if w.closed {
+		return nil
+	}
+
+	w.closed = true
+
 	_, err := w.Writer.Write(newline)
 
 	return err
