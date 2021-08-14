@@ -3,7 +3,7 @@ package server
 import (
 	"io"
 
-	"github.com/tmaxmax/go-sse/sse/server/field"
+	"github.com/tmaxmax/go-sse/server/field"
 )
 
 // Event is the representation of a single message. Use the New constructor to create one.

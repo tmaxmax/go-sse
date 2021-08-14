@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	. "github.com/tmaxmax/go-sse/sse/server/internal/client"
+	. "github.com/tmaxmax/go-sse/server/internal/client"
 )
 
 type Configuration struct {

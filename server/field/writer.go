@@ -3,7 +3,7 @@ package field
 import (
 	"io"
 
-	"github.com/tmaxmax/go-sse/sse/server/field/internal"
+	"github.com/tmaxmax/go-sse/server/field/internal"
 )
 
 var newline = []byte{'\n'}

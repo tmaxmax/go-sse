@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/tmaxmax/go-sse/sse/server/field/internal"
+	"github.com/tmaxmax/go-sse/server/field/internal"
 )
 
 // Data implements the Field.name method. Embed this struct in

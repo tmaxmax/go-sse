@@ -10,16 +10,15 @@ import (
 	"strconv"
 	"time"
 
-	sse "github.com/tmaxmax/go-sse/sse/server"
-
-	"github.com/tmaxmax/go-sse/sse/server/field"
+	"github.com/tmaxmax/go-sse/server"
+	"github.com/tmaxmax/go-sse/server/field"
 )
 
-var eventHandler = sse.NewHandler(&sse.Configuration{
+var eventHandler = server.NewHandler(&server.Configuration{
 	Headers: map[string]string{
 		"Access-Control-Allow-Origin": "*",
 	},
-	CloseEvent: sse.NewEvent(
+	CloseEvent: server.NewEvent(
 		field.ID("CLOSE"),
 		field.Text("We're done here\nGoodbye y'all!"),
 	),
@@ -49,7 +48,7 @@ func main() {
 	mux.Handle("/", SnapshotHTTPEndpoint)
 	mux.Handle("/events", eventHandler)
 
-	server := &http.Server{
+	s := &http.Server{
 		Addr:    "0.0.0.0:8080",
 		Handler: mux,
 	}
@@ -73,14 +72,14 @@ func main() {
 					fields = append(fields, field.Text(strconv.FormatUint(rand.Uint64(), 10)))
 				}
 
-				eventHandler.Send(sse.NewEvent(fields...))
+				eventHandler.Send(server.NewEvent(fields...))
 			case <-cancel:
 				return
 			}
 		}
 	}()
 
-	if err := runServer(server, cancel); err != nil {
+	if err := runServer(s, cancel); err != nil {
 		log.Println(err)
 	}
 }
@@ -90,7 +89,7 @@ func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}
 		select {
 		case <-time.After(frequency):
 			v := Inc(metric)
-			ev := sse.NewEvent(
+			ev := server.NewEvent(
 				field.Name(metric),
 				field.Text(strconv.FormatInt(v, 10)),
 			)
@@ -102,16 +101,16 @@ func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}
 	}
 }
 
-func runServer(server *http.Server, cancel <-chan struct{}) error {
+func runServer(s *http.Server, cancel <-chan struct{}) error {
 	shutdownError := make(chan error)
 
 	go func() {
 		<-cancel
 
-		shutdownError <- server.Shutdown(context.Background())
+		shutdownError <- s.Shutdown(context.Background())
 	}()
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 
