@@ -60,6 +60,14 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 		m, err = s.w.Write(chunk)
 		n += m
 		if err != nil {
+			// Set isNewLine to true on incomplete writes so Close tries to insert the field's endline
+			// even if the write errored here. If Close succeeds it ensures that the output won't break
+			// the protocol, at least.
+			// We are checking for endline characters and not for difference in chunk length and written
+			// bytes count because an incomplete write of a chunk that ends in \r\n could have \r written,
+			// or all the bytes could be written in spite of the error.
+			s.isNewLine = m > 0 && (chunk[m-1] == '\n' || chunk[m-1] == '\r')
+
 			return
 		}
 	}
