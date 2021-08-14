@@ -1,16 +1,16 @@
-package field
+package event
 
 import (
 	"io"
 
-	"github.com/tmaxmax/go-sse/server/field/internal"
+	. "github.com/tmaxmax/go-sse/server/event/internal"
 )
 
 var newline = []byte{'\n'}
 
 type singleFieldWriter struct {
 	w io.Writer
-	s *internal.ChunkScanner
+	s *ChunkScanner
 
 	name      []byte // this also has the colon
 	isNewLine bool   // indicates if the next write will start a new line
@@ -21,16 +21,16 @@ type singleFieldWriter struct {
 func newSingleFieldWriter(w io.Writer, f Field) *singleFieldWriter {
 	return &singleFieldWriter{
 		w:                   w,
-		s:                   &internal.ChunkScanner{},
+		s:                   &ChunkScanner{},
 		name:                []byte(f.name() + ":"),
 		isNewLine:           true,
 		charsWrittenOnClose: -1,
 	}
 }
 
-func (s *singleFieldWriter) writeName() (n int, err error) {
+func (s *singleFieldWriter) writeName() (err error) {
 	if s.isNewLine {
-		n, err = s.w.Write(s.name)
+		_, err = s.w.Write(s.name)
 
 		s.isNewLine = false
 	}
@@ -39,8 +39,7 @@ func (s *singleFieldWriter) writeName() (n int, err error) {
 }
 
 func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
-	n, err = s.writeName()
-	if err != nil {
+	if err = s.writeName(); err != nil {
 		return
 	}
 
@@ -52,9 +51,7 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 	s.s.Buffer = p
 
 	for s.s.Scan() {
-		m, err = s.writeName()
-		n += m
-		if err != nil {
+		if err = s.writeName(); err != nil {
 			return
 		}
 
@@ -63,6 +60,10 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 		m, err = s.w.Write(chunk)
 		n += m
 		if err != nil {
+			if m > 0 && (chunk[m-1] == '\n' || chunk[m-1] == '\r') {
+				s.isNewLine = true
+			}
+
 			return
 		}
 	}
@@ -70,36 +71,37 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (s *singleFieldWriter) End() (int, error) {
+func (s *singleFieldWriter) Close() error {
 	if !s.isNewLine {
 		s.isNewLine = false
 
-		return s.w.Write(newline)
+		_, err := s.w.Write(newline)
+
+		return err
 	}
 
-	return 0, nil
+	return nil
 }
 
-// Writer is a struct that is used to write event fields.
-type Writer struct {
+// writer is a struct that is used to write event fields.
+type writer struct {
 	Writer io.Writer
 }
 
-func (w *Writer) WriteField(f Field) (int64, error) {
+func (w *writer) WriteField(f Field) (int64, error) {
 	s := newSingleFieldWriter(w.Writer, f)
+	defer s.Close()
 
 	n, err := f.WriteTo(s)
 	if err != nil {
 		return n, err
 	}
 
-	m, err := s.End()
-
-	return n + int64(m), err
+	return n, s.Close()
 }
 
-func (w *Writer) End() (int64, error) {
-	n, err := w.Writer.Write(newline)
+func (w *writer) Close() error {
+	_, err := w.Writer.Write(newline)
 
-	return int64(n), err
+	return err
 }

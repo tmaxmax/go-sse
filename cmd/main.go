@@ -11,16 +11,16 @@ import (
 	"time"
 
 	"github.com/tmaxmax/go-sse/server"
-	"github.com/tmaxmax/go-sse/server/field"
+	"github.com/tmaxmax/go-sse/server/event"
 )
 
 var eventHandler = server.NewHandler(&server.Configuration{
 	Headers: map[string]string{
 		"Access-Control-Allow-Origin": "*",
 	},
-	CloseEvent: server.NewEvent(
-		field.ID("CLOSE"),
-		field.Text("We're done here\nGoodbye y'all!"),
+	CloseEvent: event.NewEvent(
+		event.ID("CLOSE"),
+		event.Text("We're done here\nGoodbye y'all!"),
 	),
 })
 
@@ -64,15 +64,15 @@ func main() {
 
 			select {
 			case <-time.After(time.Millisecond * time.Duration(r)):
-				var fields []field.Field
+				var fields []event.Field
 
 				count := 1 + rand.Intn(5)
 
 				for i := 0; i < count; i += 1 {
-					fields = append(fields, field.Text(strconv.FormatUint(rand.Uint64(), 10)))
+					fields = append(fields, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
 				}
 
-				eventHandler.Send(server.NewEvent(fields...))
+				eventHandler.Send(event.NewEvent(fields...))
 			case <-cancel:
 				return
 			}
@@ -89,9 +89,9 @@ func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}
 		select {
 		case <-time.After(frequency):
 			v := Inc(metric)
-			ev := server.NewEvent(
-				field.Name(metric),
-				field.Text(strconv.FormatInt(v, 10)),
+			ev := event.NewEvent(
+				event.Name(metric),
+				event.Text(strconv.FormatInt(v, 10)),
 			)
 
 			eventHandler.Send(ev)

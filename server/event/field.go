@@ -1,4 +1,4 @@
-package field
+package event
 
 import "io"
 

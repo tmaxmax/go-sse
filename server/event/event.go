@@ -1,35 +1,30 @@
-package server
+package event
 
 import (
 	"io"
-
-	"github.com/tmaxmax/go-sse/server/field"
 )
 
 // Event is the representation of a single message. Use the New constructor to create one.
 type Event struct {
-	fields []field.Field
+	fields []Field
 }
 
 func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
-	fw := &field.Writer{Writer: w}
-
-	var m int64
+	fw := &writer{Writer: w}
+	defer fw.Close()
 
 	for _, f := range e.fields {
-		m, err = fw.WriteField(f)
+		m, err := fw.WriteField(f)
 		n += m
 		if err != nil {
-			return
+			return n, err
 		}
 	}
 
-	m, err = fw.End()
-
-	return n + m, err
+	return n, fw.Close()
 }
 
-func NewEvent(fields ...field.Field) *Event {
+func NewEvent(fields ...Field) *Event {
 	var (
 		nameIndex  = -1
 		idIndex    = -1
@@ -45,11 +40,11 @@ func NewEvent(fields ...field.Field) *Event {
 		)
 
 		switch f.(type) {
-		case field.Name:
+		case Name:
 			fieldIndex = &nameIndex
-		case field.ID:
+		case ID:
 			fieldIndex = &idIndex
-		case field.Retry:
+		case Retry:
 			fieldIndex = &retryIndex
 		}
 

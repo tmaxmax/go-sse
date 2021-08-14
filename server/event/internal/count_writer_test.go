@@ -17,9 +17,9 @@ func TestCountWriter(t *testing.T) {
 		expectedCount += l
 
 		_, _ = cw.Write([]byte(chunk))
-	}
 
-	if expectedCount != cw.Count {
-		t.Fatalf("Counting written bytes failed: expected %d, got %d", expectedCount, cw.Count)
+		if expectedCount != cw.Count {
+			t.Fatalf("Counting written bytes failed: expected %d, got %d", expectedCount, cw.Count)
+		}
 	}
 }

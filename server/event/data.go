@@ -1,11 +1,11 @@
-package field
+package event
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
 
-	"github.com/tmaxmax/go-sse/server/field/internal"
+	. "github.com/tmaxmax/go-sse/server/event/internal"
 )
 
 // Data implements the Field.name method. Embed this struct in
@@ -51,7 +51,7 @@ type JSON struct {
 }
 
 func (j JSON) WriteTo(w io.Writer) (int64, error) {
-	cw := &internal.CountWriter{Writer: w}
+	cw := &CountWriter{Writer: w}
 
 	err := json.NewEncoder(cw).Encode(j.Value)
 
