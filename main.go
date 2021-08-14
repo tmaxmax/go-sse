@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tmaxmax/go-sse/sse"
-	"github.com/tmaxmax/go-sse/sse/event"
+	"github.com/tmaxmax/go-sse/sse/server"
+	"github.com/tmaxmax/go-sse/sse/server/event"
 )
 
-var eventHandler = sse.NewHandler(&sse.Configuration{
+var eventHandler = server.NewHandler(&server.Configuration{
 	Headers: map[string]string{
 		"Access-Control-Allow-Origin": "*",
 	},

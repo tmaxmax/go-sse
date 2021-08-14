@@ -1,12 +1,12 @@
-package sse
+package server
 
 import (
 	"context"
 	"log"
 	"net/http"
 
-	"github.com/tmaxmax/go-sse/sse/event"
-	. "github.com/tmaxmax/go-sse/sse/internal/client"
+	"github.com/tmaxmax/go-sse/sse/server/event"
+	. "github.com/tmaxmax/go-sse/sse/server/internal/client"
 )
 
 type Configuration struct {
