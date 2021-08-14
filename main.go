@@ -18,7 +18,7 @@ var eventHandler = sse.NewHandler(&sse.Configuration{
 	Headers: map[string]string{
 		"Access-Control-Allow-Origin": "*",
 	},
-	CloseEvent: event.New().Text("we are done here\ngoodbye y'all!").ID("CLOSE"),
+	CloseEvent: event.New().AddText("we are done here\ngoodbye y'all!").SetID("CLOSE"),
 })
 
 func main() {
@@ -61,11 +61,11 @@ func main() {
 
 			select {
 			case <-time.After(time.Millisecond * time.Duration(r)):
-				b := event.New().Name("Random numbers")
+				b := event.New().SetName("Random numbers")
 				count := 1 + rand.Intn(5)
 
 				for i := 0; i < count; i += 1 {
-					b.Text(strconv.FormatUint(rand.Uint64(), 10))
+					b.AddText(strconv.FormatUint(rand.Uint64(), 10))
 				}
 
 				eventHandler.Send(b)
@@ -84,7 +84,7 @@ func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}
 	for {
 		select {
 		case <-time.After(frequency):
-			eventHandler.Send(event.New().Name(metric).Text(strconv.FormatInt(Inc(metric), 10)))
+			eventHandler.Send(event.New().SetName(metric).AddText(strconv.FormatInt(Inc(metric), 10)))
 		case <-cancel:
 			break
 		}

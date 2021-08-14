@@ -7,46 +7,81 @@ import (
 	"github.com/tmaxmax/go-sse/sse/event/field"
 )
 
+// Event is the representation of a single message. Use the New constructor to create one.
 type Event struct {
 	fields []field.Field
+
+	nameIndex  int
+	retryIndex int
+	idIndex    int
 }
 
-func (e *Event) Field(f field.Field) *Event {
+// AddField appends a field to the event. It can be a predefined one or your custom event field implementations.
+func (e *Event) AddField(f field.Field) *Event {
+	var fieldIndex *int
+
+	switch f.(type) {
+	case field.Name:
+		fieldIndex = &e.nameIndex
+	case field.ID:
+		fieldIndex = &e.idIndex
+	case field.Retry:
+		fieldIndex = &e.retryIndex
+	}
+
+	if fieldIndex != nil {
+		if *fieldIndex == -1 {
+			*fieldIndex = len(e.fields)
+		} else {
+			e.fields[*fieldIndex] = f
+
+			return e
+		}
+	}
+
 	e.fields = append(e.fields, f)
 
 	return e
 }
 
-func (e *Event) Name(name string) *Event {
-	return e.Field(field.Event{Name: name})
+// SetName sets the event's name. Calling it multiple times overwrites the previously set name.
+func (e *Event) SetName(name string) *Event {
+	return e.AddField(field.Name{Name: name})
 }
 
-func (e *Event) Text(s string) *Event {
-	return e.Field(field.Text{Text: s})
+// AddText adds data fields that contain the given string.
+func (e *Event) AddText(s string) *Event {
+	return e.AddField(field.Text{Text: s})
 }
 
-func (e *Event) Raw(s []byte) *Event {
-	return e.Field(field.Raw{Payload: s})
+// AddRaw adds data fields that contain the given bytes.
+func (e *Event) AddRaw(s []byte) *Event {
+	return e.AddField(field.Raw{Payload: s})
 }
 
-func (e *Event) JSON(v interface{}) *Event {
-	return e.Field(field.JSON{Value: v})
+// AddJSON adds a data field that contains the given value's AddJSON representation.
+func (e *Event) AddJSON(v interface{}) *Event {
+	return e.AddField(field.JSON{Value: v})
 }
 
-func (e *Event) Base64(s []byte) *Event {
-	return e.Field(field.Base64{Payload: s})
+// AddBase64 adds a data field that contains the given bytes' AddBase64 representation.
+func (e *Event) AddBase64(s []byte) *Event {
+	return e.AddField(field.Base64{Payload: s})
 }
 
-func (e *Event) ID(id string) *Event {
-	return e.Field(field.ID{ID: id})
+// SetID sets the event's SetID.
+func (e *Event) SetID(id string) *Event {
+	return e.AddField(field.ID{ID: id})
 }
 
-func (e *Event) Retry(after time.Duration) *Event {
-	return e.Field(field.Retry{After: after})
+// SetRetry tells the client to reconnect after the given duration if the connection to the server is lost.
+func (e *Event) SetRetry(after time.Duration) *Event {
+	return e.AddField(field.Retry{After: after})
 }
 
-func (e *Event) Comment(message string) *Event {
-	return e.Field(field.Comment{Message: message})
+// AddComment adds comment lines to the event.
+func (e *Event) AddComment(message string) *Event {
+	return e.AddField(field.Comment{Message: message})
 }
 
 func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
@@ -67,6 +102,11 @@ func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
 	return n + m, err
 }
 
+// New returns a new event with the required default internal values set.
 func New() *Event {
-	return &Event{}
+	return &Event{
+		nameIndex:  -1,
+		retryIndex: -1,
+		idIndex:    -1,
+	}
 }
