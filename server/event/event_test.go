@@ -1,7 +1,6 @@
 package event
 
 import (
-	"encoding/base64"
 	"reflect"
 	"strings"
 	"testing"
@@ -57,20 +56,12 @@ func TestEvent_WriteTo(t *testing.T) {
 		ID("example_id"),
 		Retry(time.Second * 5),
 		Raw("raw bytes here"),
-		Base64{
-			Payload:  []byte("amazing testing experience"),
-			Encoding: base64.StdEncoding,
-		},
-		JSON{Value: testJSON{
-			Key:        "value",
-			AnotherKey: 5,
-		}},
 		Name("test_event"),
 		Comment("This test should pass"),
 		Text("Important data\nImportant again\r\rVery important\r\n"),
 	}
 
-	expected := escape("data:This is an example\ndata:Of an event\nid:example_id\nretry:5000\ndata:raw bytes here\ndata:YW1hemluZyB0ZXN0aW5nIGV4cGVyaWVuY2U=\ndata:{\"key\":\"value\",\"anotherKey\":5}\nevent:test_event\n:This test should pass\ndata:Important data\ndata:Important again\rdata:\rdata:Very important\r\n\n")
+	expected := escape("data:This is an example\ndata:Of an event\nid:example_id\nretry:5000\ndata:raw bytes here\nevent:test_event\n:This test should pass\ndata:Important data\ndata:Important again\rdata:\rdata:Very important\r\n\n")
 
 	e := NewEvent(input...)
 	w := &strings.Builder{}
