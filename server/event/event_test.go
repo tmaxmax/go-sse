@@ -43,11 +43,6 @@ func TestNewEvent(t *testing.T) {
 	}
 }
 
-type testJSON struct {
-	Key        string `json:"key"`
-	AnotherKey int    `json:"anotherKey"`
-}
-
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
