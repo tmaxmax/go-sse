@@ -59,12 +59,12 @@ func (e *Event) AddRaw(s []byte) *Event {
 	return e.AddField(field.Raw{Payload: s})
 }
 
-// AddJSON adds a data field that contains the given value's AddJSON representation.
+// AddJSON adds a data field that contains the given value's JSON representation.
 func (e *Event) AddJSON(v interface{}) *Event {
 	return e.AddField(field.JSON{Value: v})
 }
 
-// AddBase64 adds a data field that contains the given bytes' AddBase64 representation.
+// AddBase64 adds a data field that contains the given bytes' Base64 representation.
 func (e *Event) AddBase64(s []byte) *Event {
 	return e.AddField(field.Base64{Payload: s})
 }
