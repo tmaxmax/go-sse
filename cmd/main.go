@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/tmaxmax/go-sse/server"
@@ -17,15 +18,10 @@ import (
 var eventHandler = server.New()
 
 func main() {
-	eventHandler.Headers = map[string]string{
-		"Access-Control-Allow-Origin": "*",
-	}
-	eventHandler.CloseEvent = event.New(event.ID("LMAO PA"))
-
 	cancel := make(chan struct{})
 	cancelMetrics := make(chan struct{})
 	cancelSignal := make(chan os.Signal)
-	signal.Notify(cancelSignal, os.Interrupt)
+	signal.Notify(cancelSignal, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		select {
@@ -52,8 +48,8 @@ func main() {
 
 	go eventHandler.StartWithSignal(cancel)
 
-	go recordMetric("ops", time.Second*2, cancel)
-	go recordMetric("cycles", time.Millisecond*500, cancel)
+	//go recordMetric("ops", time.Second*2, cancel)
+	//go recordMetric("cycles", time.Millisecond*500, cancel)
 
 	go func() {
 		getDuration := func() time.Duration {
@@ -87,6 +83,8 @@ func main() {
 	if err := runServer(s, cancel); err != nil {
 		log.Println(err)
 	}
+
+	<-eventHandler.Done()
 }
 
 func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}) {
@@ -112,7 +110,6 @@ func runServer(s *http.Server, cancel <-chan struct{}) error {
 
 	go func() {
 		<-cancel
-
 		shutdownError <- s.Shutdown(context.Background())
 	}()
 
