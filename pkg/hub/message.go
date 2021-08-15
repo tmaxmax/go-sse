@@ -15,6 +15,5 @@ type connectionMessage struct {
 
 type attachment struct {
 	connection                        *Connection
-	information                       interface{}
 	supportsBroadcastsFromConnections chan<- bool
 }
