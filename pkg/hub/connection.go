@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type writer interface {
+type writeFlusher interface {
 	io.Writer
 	http.Flusher
 }
@@ -17,13 +17,22 @@ type writer interface {
 // It can attach to multiple Hub instances in order to receive from
 // or send broadcasts to.
 type Connection struct {
-	messages chan Messager
-	done     chan struct{}
-	writer   writer
-	hubs     map[*Hub]bool // true if the hub supports broadcasts from connections
+	messages        chan Messager
+	done            chan struct{}
+	hubs            map[*Hub]bool // true if the hub supports broadcasts from connections
+	deferredAttachs map[*Hub]struct{}
 
-	closed bool
-	mu     sync.RWMutex
+	receiving bool
+	mu        sync.RWMutex
+
+	// Additional data hubs use in their handlers.
+	Info interface{}
+	// Messages are written to this writer. If the passed concrete value
+	// also satisfies http.Flusher, Flush will be called too.
+	// The errors returned by Receive are only writing errors. If this writer
+	// doesn't error (for example bytes.Buffer), the value returned from Receive
+	// can safely be ignored.
+	Writer io.Writer
 }
 
 type noopFlusherWriter struct {
@@ -32,26 +41,40 @@ type noopFlusherWriter struct {
 
 func (n *noopFlusherWriter) Flush() {}
 
-func toConnectionWriter(w io.Writer) writer {
-	if cw, ok := w.(writer); ok {
+func toConnectionWriter(w io.Writer) writeFlusher {
+	if cw, ok := w.(writeFlusher); ok {
 		return cw
 	}
 
 	return &noopFlusherWriter{w}
 }
 
-// NewConnection creates a connection that writes to the given writer.
-// AttachTo it to a hub in order to Receive broadcasts.
-//
-// If the given writer also implements http.Flusher, Flush will be called
-// automatically after writes.
-func NewConnection(w io.Writer) *Connection {
-	return &Connection{
-		messages: make(chan Messager),
-		writer:   toConnectionWriter(w),
-		done:     make(chan struct{}),
-		hubs:     make(map[*Hub]bool),
+func (c *Connection) tryDeferAttach(h *Hub) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.receiving {
+		return false
 	}
+
+	if c.deferredAttachs == nil {
+		c.deferredAttachs = make(map[*Hub]struct{})
+	}
+	c.deferredAttachs[h] = struct{}{}
+
+	return true
+}
+
+func (c *Connection) sendAttachRequest(h *Hub) bool {
+	supportsBcs := make(chan bool, 1)
+
+	h.attach <- attachment{
+		connection:                        c,
+		supportsBroadcastsFromConnections: supportsBcs,
+	}
+
+	return <-supportsBcs
+
 }
 
 // AttachTo attaches the connection to a hub.
@@ -61,19 +84,18 @@ func NewConnection(w io.Writer) *Connection {
 // such as the time it has connected, its IP address or any other data deemed useful.
 // Access this field in any of Hub's lifecycle methods to implement powerful
 // custom logic.
-func (c *Connection) AttachTo(h *Hub, info interface{}) {
-	supportsBcs := make(chan bool, 1)
-
-	h.attach <- attachment{
-		connection:                        c,
-		information:                       info,
-		supportsBroadcastsFromConnections: supportsBcs,
+//
+// If AttachTo is called before Receive, the attachment itself is deferred to the
+// first Receive call.
+func (c *Connection) AttachTo(h *Hub) {
+	if c.tryDeferAttach(h) {
+		return
 	}
 
-	status := <-supportsBcs
+	supportsBroadcasts := c.sendAttachRequest(h)
 
 	c.mu.Lock()
-	c.hubs[h] = status
+	c.hubs[h] = supportsBroadcasts
 	c.mu.Unlock()
 }
 
@@ -91,16 +113,35 @@ func (c *Connection) detachFromUnsafe(h *Hub, requestFromHub bool) {
 
 	delete(c.hubs, h)
 
-	if len(c.hubs) == 0 {
+	if len(c.hubs) == 0 && c.receiving {
 		c.closeUnsafe()
 	}
+}
+
+func (c *Connection) tryRemoveDeferredDetach(h *Hub) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.receiving {
+		return false
+	}
+
+	delete(c.deferredAttachs, h)
+
+	return true
 }
 
 // DetachFrom detaches from a hub, if the connection is attached to it.
 // If after the detachment the connection is attached to no hubs,
 // it is closed completely. It does nothing if the connection isn't
 // attached to the given hub.
+// Calling DetachFrom before Receive attempt to remove the deferred attachments
+// of the given hub, if it exists.
 func (c *Connection) DetachFrom(h *Hub) {
+	if c.tryRemoveDeferredDetach(h) {
+		return
+	}
+
 	c.detachFromUnsafe(h, false)
 }
 
@@ -138,7 +179,7 @@ var (
 	ErrHubDoesNotSupportBcs = errors.New("hub does not support broadcasts from connections")
 )
 
-// BroadcastTo sends the given message to a hub, if the connection is attached
+// BroadcastTo tries to send the given message to a hub, if the connection is attached
 // to it and the hub supports broadcasts from connections. It returns an error otherwise.
 func (c *Connection) BroadcastTo(h *Hub, message Messager) error {
 	c.mu.RLock()
@@ -159,12 +200,12 @@ func (c *Connection) BroadcastTo(h *Hub, message Messager) error {
 
 // closeUnsafe closes the connection without locking or detaching from hubs.
 func (c *Connection) closeUnsafe() {
-	if c.closed {
+	if !c.receiving {
 		return
 	}
 
 	close(c.done)
-	c.closed = true
+	c.receiving = false
 }
 
 // Close closes the connection. It detaches from all the hubs it's attached to
@@ -183,22 +224,55 @@ func (c *Connection) Close() {
 	c.closeUnsafe()
 }
 
-// Closed returns a channel that blocks until the connection is closed.
-func (c *Connection) Closed() <-chan struct{} {
+// Done returns a channel that blocks until the connection is closed.
+func (c *Connection) Done() <-chan struct{} {
 	return c.done
 }
 
-// Receive starts accepting messages from
+func (c *Connection) Information() interface{} {
+	return c.Info
+}
+
+func (c *Connection) init() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.receiving {
+		return false
+	}
+
+	c.hubs = make(map[*Hub]bool)
+	c.messages = make(chan Messager)
+	c.done = make(chan struct{})
+	c.receiving = true
+
+	for h := range c.deferredAttachs {
+		c.hubs[h] = c.sendAttachRequest(h)
+
+		delete(c.deferredAttachs, h)
+	}
+
+	return true
+}
+
+// Receive starts accepting and processing messages. Calling it multiple times does nothing.
 func (c *Connection) Receive() error {
-	var err error
+	if !c.init() {
+		return nil
+	}
+
+	var (
+		err error
+		cw  = toConnectionWriter(c.Writer)
+	)
 
 	for {
 		select {
 		case message := <-c.messages:
-			if err = message.Message(c.writer); err != nil {
+			if err = message.Message(cw); err != nil {
 				c.Close()
 			} else {
-				c.writer.Flush()
+				cw.Flush()
 			}
 		case <-c.done:
 			close(c.messages)
