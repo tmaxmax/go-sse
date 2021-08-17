@@ -1,7 +1,9 @@
 package event
 
 import (
+	"bytes"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -39,6 +41,20 @@ func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
 	err = fw.Close()
 
 	return
+}
+
+func (e *Event) MarshalText() ([]byte, error) {
+	b := &bytes.Buffer{}
+	_, _ = e.WriteTo(b)
+
+	return b.Bytes(), nil
+}
+
+func (e *Event) String() string {
+	s := &strings.Builder{}
+	_, _ = e.WriteTo(s)
+
+	return s.String()
 }
 
 func (e *Event) Expired() bool {
