@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -18,24 +19,18 @@ import (
 var eventHandler = server.New()
 
 func main() {
-	cancel := make(chan struct{})
-	cancelMetrics := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	cancelSignal := make(chan os.Signal)
 	signal.Notify(cancelSignal, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		select {
-		case <-cancelMetrics:
-			close(cancel)
-		case <-cancelSignal:
-			close(cancel)
-		}
+		<-cancelSignal
+		cancel()
 	}()
 
 	mux := http.NewServeMux()
 	mux.Handle("/stop", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		close(cancelMetrics)
-
+		cancel()
 		w.WriteHeader(http.StatusOK)
 	}))
 	mux.Handle("/", SnapshotHTTPEndpoint)
@@ -46,24 +41,28 @@ func main() {
 		Handler: mux,
 	}
 
-	go eventHandler.StartWithSignal(cancel)
+	go eventHandler.Start(ctx)
 
-	//go recordMetric("ops", time.Second*2, cancel)
-	//go recordMetric("cycles", time.Millisecond*500, cancel)
+	go recordMetric(ctx, "ops", time.Second*2)
+	go recordMetric(ctx, "cycles", time.Millisecond*500)
 
 	go func() {
 		getDuration := func() time.Duration {
-			return time.Duration(100+rand.Int63n(1400)) * time.Millisecond
+			return time.Duration(2000+rand.Intn(1000)) * time.Millisecond
 		}
 
 		var duration time.Duration
+		var id int
 
 		for {
 			select {
 			case <-time.After(duration):
-				var opts []event.Option
+				id++
 
 				count := 1 + rand.Intn(5)
+				opts := []event.Option{
+					event.ID(strconv.Itoa(id)),
+				}
 
 				for i := 0; i < count; i += 1 {
 					opts = append(opts, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
@@ -72,44 +71,47 @@ func main() {
 				duration = getDuration()
 				opts = append(opts, event.TTL(duration))
 
-				eventHandler.Broadcast(event.New(opts...))
-			case <-cancel:
+				eventHandler.Broadcast(ctx, event.New(opts...))
+			case <-ctx.Done():
 				return
 			}
 
 		}
 	}()
 
-	if err := runServer(s, cancel); err != nil {
-		log.Println(err)
+	if err := runServer(ctx, s); err != nil {
+		log.Println("server closed", err)
 	}
-
-	<-eventHandler.Done()
 }
 
-func recordMetric(metric string, frequency time.Duration, cancel <-chan struct{}) {
+func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
+	var id int
+
 	for {
 		select {
 		case <-time.After(frequency):
+			id++
+
 			v := Inc(metric)
 			ev := event.New(
 				event.Name(metric),
+				event.ID(fmt.Sprintf("%s-%d", metric, id)),
 				event.Text(strconv.FormatInt(v, 10)),
 				event.TTL(frequency),
 			)
 
-			eventHandler.Broadcast(ev)
-		case <-cancel:
+			eventHandler.Broadcast(ctx, ev)
+		case <-ctx.Done():
 			break
 		}
 	}
 }
 
-func runServer(s *http.Server, cancel <-chan struct{}) error {
+func runServer(ctx context.Context, s *http.Server) error {
 	shutdownError := make(chan error)
 
 	go func() {
-		<-cancel
+		<-ctx.Done()
 		shutdownError <- s.Shutdown(context.Background())
 	}()
 
