@@ -23,8 +23,8 @@ func (r Retry) apply(e *Event) {
 	}
 }
 
-func (r Retry) Message(w io.Writer) error {
-	_, err := w.Write([]byte(strconv.FormatInt(time.Duration(r).Milliseconds(), 10)))
+func (r Retry) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write([]byte(strconv.FormatInt(time.Duration(r).Milliseconds(), 10)))
 
-	return err
+	return int64(n), err
 }

@@ -20,17 +20,16 @@ type singleFieldWriter struct {
 
 func newSingleFieldWriter(w io.Writer, f field) *singleFieldWriter {
 	return &singleFieldWriter{
-		w:                   w,
-		s:                   &ChunkScanner{},
-		name:                []byte(f.name() + ":"),
-		isNewLine:           true,
-		charsWrittenOnClose: -1,
+		w:         w,
+		s:         &ChunkScanner{},
+		name:      []byte(f.name() + ":"),
+		isNewLine: true,
 	}
 }
 
-func (s *singleFieldWriter) writeName() (err error) {
+func (s *singleFieldWriter) writeName() (n int, err error) {
 	if s.isNewLine {
-		_, err = s.w.Write(s.name)
+		n, err = s.w.Write(s.name)
 
 		s.isNewLine = false
 	}
@@ -38,8 +37,11 @@ func (s *singleFieldWriter) writeName() (err error) {
 	return
 }
 
+// Write here does not implement the io.Write interface correctly,
+// as on return n > len(p). Use cautiously!
 func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
-	if err = s.writeName(); err != nil {
+	n, err = s.writeName()
+	if err != nil {
 		return
 	}
 
@@ -51,7 +53,9 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 	s.s.Buffer = p
 
 	for s.s.Scan() {
-		if err = s.writeName(); err != nil {
+		m, err = s.writeName()
+		n += m
+		if err != nil {
 			return
 		}
 
@@ -75,16 +79,13 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (s *singleFieldWriter) Close() error {
+func (s *singleFieldWriter) Close() (err error) {
 	if !s.isNewLine {
 		s.isNewLine = true
-
-		_, err := s.w.Write(newline)
-
-		return err
+		s.charsWrittenOnClose, err = s.w.Write(newline)
 	}
 
-	return nil
+	return
 }
 
 // writer is a struct that is used to write event fields.
@@ -94,15 +95,21 @@ type writer struct {
 	closed bool
 }
 
-func (w *writer) WriteField(f field) error {
+func (w *writer) WriteField(f field) (n int64, err error) {
 	s := newSingleFieldWriter(w.Writer, f)
+	defer func() {
+		n += int64(s.charsWrittenOnClose)
+	}()
 	defer s.Close()
 
-	if err := f.Message(s); err != nil {
-		return err
+	n, err = f.WriteTo(s)
+	if err != nil {
+		return
 	}
 
-	return s.Close()
+	err = s.Close()
+
+	return
 }
 
 func (w *writer) Close() error {

@@ -14,8 +14,8 @@ func (c Comment) apply(e *Event) {
 	e.fields = append(e.fields, c)
 }
 
-func (c Comment) Message(w io.Writer) error {
-	_, err := w.Write([]byte(c))
+func (c Comment) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write([]byte(c))
 
-	return err
+	return int64(n), err
 }

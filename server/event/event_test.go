@@ -56,13 +56,20 @@ func TestEvent_WriteTo(t *testing.T) {
 		Text("Important data\nImportant again\r\rVery important\r\n"),
 	}
 
-	expected := escape("data:This is an example\ndata:Of an event\nid:example_id\nretry:5000\ndata:raw bytes here\nevent:test_event\n:This test should pass\ndata:Important data\ndata:Important again\rdata:\rdata:Very important\r\n\n")
+	output := "data:This is an example\ndata:Of an event\nid:example_id\nretry:5000\ndata:raw bytes here\nevent:test_event\n:This test should pass\ndata:Important data\ndata:Important again\rdata:\rdata:Very important\r\n\n"
+	expectedWritten := int64(len(output) - 1)
+	expected := escape(output)
 
 	e := New(input...)
 	w := &strings.Builder{}
 
-	if err := e.Message(w); err != nil {
+	written, err := e.WriteTo(w)
+	if err != nil {
 		t.Fatalf("Failed to write event: %v", err)
+	}
+
+	if written != expectedWritten {
+		t.Fatalf("Written byte count wrong: expected %d, got %d", expectedWritten, written)
 	}
 
 	got := escape(w.String())

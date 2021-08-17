@@ -16,10 +16,10 @@ func (r Raw) apply(e *Event) {
 	e.fields = append(e.fields, r)
 }
 
-func (r Raw) Message(w io.Writer) error {
-	_, err := w.Write(r)
+func (r Raw) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write(r)
 
-	return err
+	return int64(n), err
 }
 
 // Text is a data payload consisting of a UTF-8 encoded string.
@@ -33,8 +33,8 @@ func (t Text) apply(e *Event) {
 	e.fields = append(e.fields, t)
 }
 
-func (t Text) Message(w io.Writer) error {
-	_, err := w.Write([]byte(t))
+func (t Text) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write([]byte(t))
 
-	return err
+	return int64(n), err
 }

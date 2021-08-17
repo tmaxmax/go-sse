@@ -7,8 +7,8 @@ import (
 
 type field interface {
 	name() string
-	Message(io.Writer) error
 
+	io.WriterTo
 	Option
 }
 
@@ -23,17 +23,22 @@ type Event struct {
 	expiresAt time.Time
 }
 
-func (e *Event) Message(w io.Writer) error {
+func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
 	fw := &writer{Writer: w}
+	var m int64
 	defer fw.Close()
 
 	for _, f := range e.fields {
-		if err := fw.WriteField(f); err != nil {
-			return err
+		m, err = fw.WriteField(f)
+		n += m
+		if err != nil {
+			return n, err
 		}
 	}
 
-	return fw.Close()
+	err = fw.Close()
+
+	return
 }
 
 func (e *Event) Expired() bool {

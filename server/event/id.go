@@ -21,8 +21,8 @@ func (i ID) apply(e *Event) {
 	}
 }
 
-func (i ID) Message(w io.Writer) error {
-	_, err := w.Write([]byte(i))
+func (i ID) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write([]byte(i))
 
-	return err
+	return int64(n), err
 }
