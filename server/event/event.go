@@ -3,16 +3,13 @@ package event
 import (
 	"io"
 	"time"
-
-	"github.com/tmaxmax/go-sse/pkg/hub"
 )
 
 type field interface {
 	name() string
+	Message(io.Writer) error
 
 	Option
-
-	hub.Messager
 }
 
 // Event is the representation of a single message. Use the New constructor to create one.
