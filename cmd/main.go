@@ -113,7 +113,11 @@ func runServer(ctx context.Context, s *http.Server) error {
 
 	go func() {
 		<-ctx.Done()
-		shutdownError <- s.Shutdown(context.Background())
+
+		sctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+
+		shutdownError <- s.Shutdown(sctx)
 	}()
 
 	if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
