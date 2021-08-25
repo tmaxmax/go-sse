@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,7 +21,7 @@ var eventHandler = server.New()
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancelSignal := make(chan os.Signal)
+	cancelSignal := make(chan os.Signal, 1)
 	signal.Notify(cancelSignal, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
@@ -36,17 +37,26 @@ func main() {
 	mux.Handle("/", SnapshotHTTPEndpoint)
 	mux.Handle("/events", eventHandler)
 
+	wg := sync.WaitGroup{}
 	s := &http.Server{
 		Addr:    "0.0.0.0:8080",
 		Handler: mux,
 	}
+	s.RegisterOnShutdown(func() {
+		wg.Wait()
+		eventHandler.Stop()
+	})
 
-	go eventHandler.Start(ctx)
+	go eventHandler.Start()
 
-	go recordMetric(ctx, "ops", time.Second*2)
-	go recordMetric(ctx, "cycles", time.Millisecond*500)
+	wg.Add(3)
+
+	go recordMetric(ctx, &wg, "ops", time.Second*2)
+	go recordMetric(ctx, &wg, "cycles", time.Millisecond*500)
 
 	go func() {
+		defer wg.Done()
+
 		getDuration := func() time.Duration {
 			return time.Duration(2000+rand.Intn(1000)) * time.Millisecond
 		}
@@ -71,7 +81,7 @@ func main() {
 				duration = getDuration()
 				opts = append(opts, event.TTL(duration))
 
-				eventHandler.Broadcast(ctx, event.New(opts...))
+				eventHandler.Broadcast(event.New(opts...))
 			case <-ctx.Done():
 				return
 			}
@@ -84,7 +94,9 @@ func main() {
 	}
 }
 
-func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
+func recordMetric(ctx context.Context, wg *sync.WaitGroup, metric string, frequency time.Duration) {
+	defer wg.Done()
+
 	var id int
 
 	for {
@@ -100,9 +112,9 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 				event.TTL(frequency),
 			)
 
-			eventHandler.Broadcast(ctx, ev)
+			eventHandler.Broadcast(ev)
 		case <-ctx.Done():
-			break
+			return
 		}
 	}
 }

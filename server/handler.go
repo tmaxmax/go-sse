@@ -1,56 +1,50 @@
 package server
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 	"strconv"
+	"sync"
 	"time"
 
-	"github.com/tmaxmax/go-sse/pkg/hub"
+	"github.com/tmaxmax/hub"
 
 	"github.com/tmaxmax/go-sse/server/event"
 )
 
 type Handler struct {
-	hub *hub.Hub
+	hub    hub.Hub
+	closed bool
+	mu     sync.RWMutex
 }
 
 func New() *Handler {
 	return &Handler{
-		hub: &hub.Hub{
-			OnAttach: func(attached *hub.Conn, c *hub.Conn) {
-				name := attached.Context().Value("name").(string)
-				message := fmt.Sprintf("Hello there, %s!\nNice to see you.", name)
-				msg := event.New(event.Name("welcome"), event.Text(message))
-
-				_ = c.Send(attached.Context(), msg)
-			},
-			OnDetach: func(detached *hub.Conn, c *hub.Conn) {
-				name := detached.Context().Value("name").(string)
-				message := fmt.Sprintf("So sad %s left.\nThey will be missed!", name)
-				msg := event.New(event.Name("goodbye"), event.Text(message))
-
-				_ = c.Send(context.Background(), msg)
-			},
-			OnHubStop: func(c *hub.Conn) {
-				msg := event.New(event.Name("close"), event.Text("Goodbye!\nWe're done here"))
-
-				_ = c.Send(context.Background(), msg)
-			},
-			Log: log.New(os.Stderr, "HUB -> ", log.Ltime|log.Lmsgprefix),
-		},
+		hub: make(hub.Hub, 1),
 	}
 }
 
-func (h *Handler) Start(ctx context.Context) {
-	h.hub.Start(ctx)
+func (h *Handler) Start() {
+	h.hub.Start()
 }
 
-func (h *Handler) Broadcast(ctx context.Context, ev *event.Event) {
-	_ = h.hub.Broadcast(ctx, ev)
+func (h *Handler) Stop() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.closed = true
+	h.hub <- event.New(event.Name("close"), event.Text("Goodbye!\nWe're done here"))
+	close(h.hub)
+}
+
+func (h *Handler) Broadcast(ev *event.Event) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return
+	}
+	h.hub <- ev
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -73,13 +67,29 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	name := query.Get("name")
 	timeout, _ := strconv.Atoi(query.Get("timeout"))
+	attachMessage := event.New(
+		event.Name("welcome"),
+		event.Text(fmt.Sprintf("Hello there, %s!\nNice to see you.", name)),
+	)
 
-	c := &hub.Conn{Log: log.New(os.Stderr, name+": ", log.Lmsgprefix|log.Ltime)}
-	_ = c.AttachTo(h.hub)
-	messages, _ := c.Receive(context.WithValue(r.Context(), "name", name))
+	conn := make(hub.Conn)
 
-	for m := range messages {
-		if err := m.(*event.Event).Message(w); err != nil {
+	go func() {
+		<-r.Context().Done()
+
+		h.mu.RLock()
+		defer h.mu.RUnlock()
+
+		if !h.closed {
+			h.hub <- hub.DisconnectAll(conn)
+		}
+	}()
+
+	h.hub <- attachMessage
+	h.hub <- conn
+
+	for m := range conn {
+		if _, err := m.(*event.Event).WriteTo(w); err != nil {
 			break
 		}
 
@@ -87,4 +97,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		time.Sleep(time.Duration(timeout) * time.Second)
 	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.closed {
+		return
+	}
+
+	detachMessage := event.New(
+		event.Name("goodbye"),
+		event.Text(fmt.Sprintf("So sad %s left.\nThey will be missed!", name)),
+	)
+	h.hub <- detachMessage
 }
