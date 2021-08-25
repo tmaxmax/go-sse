@@ -29,10 +29,10 @@ func main() {
 	}()
 
 	mux := http.NewServeMux()
-	mux.Handle("/stop", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
 		cancel()
 		w.WriteHeader(http.StatusOK)
-	}))
+	})
 	mux.Handle("/", SnapshotHTTPEndpoint)
 	mux.Handle("/events", eventHandler)
 
