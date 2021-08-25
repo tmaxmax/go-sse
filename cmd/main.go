@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"time"
 
@@ -37,26 +36,18 @@ func main() {
 	mux.Handle("/", SnapshotHTTPEndpoint)
 	mux.Handle("/events", eventHandler)
 
-	wg := sync.WaitGroup{}
 	s := &http.Server{
 		Addr:    "0.0.0.0:8080",
 		Handler: mux,
 	}
-	s.RegisterOnShutdown(func() {
-		wg.Wait()
-		eventHandler.Stop()
-	})
+	s.RegisterOnShutdown(eventHandler.Stop)
 
 	go eventHandler.Start()
 
-	wg.Add(3)
-
-	go recordMetric(ctx, &wg, "ops", time.Second*2)
-	go recordMetric(ctx, &wg, "cycles", time.Millisecond*500)
+	go recordMetric(ctx, "ops", time.Second*2)
+	go recordMetric(ctx, "cycles", time.Millisecond*500)
 
 	go func() {
-		defer wg.Done()
-
 		getDuration := func() time.Duration {
 			return time.Duration(2000+rand.Intn(1000)) * time.Millisecond
 		}
@@ -94,9 +85,7 @@ func main() {
 	}
 }
 
-func recordMetric(ctx context.Context, wg *sync.WaitGroup, metric string, frequency time.Duration) {
-	defer wg.Done()
-
+func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 	var id int
 
 	for {
