@@ -1,11 +1,8 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
-	"strconv"
 	"sync"
-	"time"
 
 	"github.com/tmaxmax/hub"
 
@@ -33,7 +30,6 @@ func (h *Handler) Stop() {
 	defer h.mu.Unlock()
 
 	h.closed = true
-	h.hub <- event.New(event.Name("close"), event.Text("Goodbye!\nWe're done here"))
 	close(h.hub)
 }
 
@@ -47,9 +43,32 @@ func (h *Handler) Broadcast(ev *event.Event) {
 	h.hub <- ev
 }
 
+func (h *Handler) connect(_ *http.Request) hub.Conn {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return nil
+	}
+
+	conn := make(hub.Conn)
+	h.hub <- conn
+	return conn
+}
+
+func (h *Handler) watchDisconnect(c hub.Conn, r *http.Request) {
+	<-r.Context().Done()
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if !h.closed {
+		h.hub <- hub.DisconnectAll(c)
+	}
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	header := w.Header()
-	query := r.URL.Query()
 
 	header.Set("Access-Control-Allow-Origin", "*")
 	header.Set("Content-Type", "text/event-stream")
@@ -65,28 +84,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	flusher.Flush()
 
-	name := query.Get("name")
-	timeout, _ := strconv.Atoi(query.Get("timeout"))
-	attachMessage := event.New(
-		event.Name("welcome"),
-		event.Text(fmt.Sprintf("Hello there, %s!\nNice to see you.", name)),
-	)
-
-	conn := make(hub.Conn)
-
-	go func() {
-		<-r.Context().Done()
-
-		h.mu.RLock()
-		defer h.mu.RUnlock()
-
-		if !h.closed {
-			h.hub <- hub.DisconnectAll(conn)
-		}
-	}()
-
-	h.hub <- attachMessage
-	h.hub <- conn
+	conn := h.connect(r)
+	if conn == nil {
+		http.Error(w, "Server closed", http.StatusInternalServerError)
+		return
+	}
+	go h.watchDisconnect(conn, r)
 
 	for m := range conn {
 		if _, err := m.(*event.Event).WriteTo(w); err != nil {
@@ -94,19 +97,5 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		flusher.Flush()
-
-		time.Sleep(time.Duration(timeout) * time.Second)
 	}
-
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	if h.closed {
-		return
-	}
-
-	detachMessage := event.New(
-		event.Name("goodbye"),
-		event.Text(fmt.Sprintf("So sad %s left.\nThey will be missed!", name)),
-	)
-	h.hub <- detachMessage
 }
