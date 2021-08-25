@@ -68,35 +68,32 @@ func (h *Handler) watchDisconnect(c hub.Conn, r *http.Request) {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	header := w.Header()
-
-	header.Set("Access-Control-Allow-Origin", "*")
-	header.Set("Content-Type", "text/event-stream")
-	header.Set("Cache-Control", "no-cache")
-	header.Set("Connection", "keep-alive")
-	header.Set("Transfer-Encoding", "chunked")
-
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Server-sent events are not supported", http.StatusBadRequest)
 		return
 	}
 
-	flusher.Flush()
-
 	conn := h.connect(r)
 	if conn == nil {
 		http.Error(w, "Server closed", http.StatusInternalServerError)
-		flusher.Flush()
 		return
 	}
 	go h.watchDisconnect(conn, r)
 
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Transfer-Encoding", "chunked")
+
 	for m := range conn {
+		flusher.Flush()
+
 		if _, err := m.(*event.Event).WriteTo(w); err != nil {
 			break
 		}
-
-		flusher.Flush()
 	}
+
+	flusher.Flush()
 }
