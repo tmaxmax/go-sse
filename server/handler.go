@@ -87,6 +87,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn := h.connect(r)
 	if conn == nil {
 		http.Error(w, "Server closed", http.StatusInternalServerError)
+		flusher.Flush()
 		return
 	}
 	go h.watchDisconnect(conn, r)
