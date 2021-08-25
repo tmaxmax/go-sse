@@ -92,7 +92,8 @@ func (s *singleFieldWriter) Close() (err error) {
 type writer struct {
 	Writer io.Writer
 
-	closed bool
+	closed         bool
+	writtenOnClose int
 }
 
 func (w *writer) WriteField(f field) (n int64, err error) {
@@ -112,14 +113,14 @@ func (w *writer) WriteField(f field) (n int64, err error) {
 	return
 }
 
-func (w *writer) Close() error {
+func (w *writer) Close() (err error) {
 	if w.closed {
 		return nil
 	}
 
 	w.closed = true
 
-	_, err := w.Writer.Write(newline)
+	w.writtenOnClose, err = w.Writer.Write(newline)
 
-	return err
+	return
 }

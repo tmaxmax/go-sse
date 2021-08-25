@@ -28,13 +28,16 @@ type Event struct {
 func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
 	fw := &writer{Writer: w}
 	var m int64
+	defer func() {
+		n += int64(fw.writtenOnClose)
+	}()
 	defer fw.Close()
 
 	for _, f := range e.fields {
 		m, err = fw.WriteField(f)
 		n += m
 		if err != nil {
-			return n, err
+			return
 		}
 	}
 

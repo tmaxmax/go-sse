@@ -57,7 +57,7 @@ func TestEvent_WriteTo(t *testing.T) {
 	}
 
 	output := "data:This is an example\ndata:Of an event\nid:example_id\nretry:5000\ndata:raw bytes here\nevent:test_event\n:This test should pass\ndata:Important data\ndata:Important again\rdata:\rdata:Very important\r\n\n"
-	expectedWritten := int64(len(output) - 1)
+	expectedWritten := int64(len(output))
 	expected := escape(output)
 
 	e := New(input...)
