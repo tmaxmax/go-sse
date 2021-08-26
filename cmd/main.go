@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -40,14 +41,21 @@ func main() {
 		Addr:    "0.0.0.0:8080",
 		Handler: mux,
 	}
-	s.RegisterOnShutdown(eventHandler.Stop)
+	wg := sync.WaitGroup{}
+	wg.Add(3)
+	s.RegisterOnShutdown(func() {
+		wg.Wait()
+		eventHandler.Stop()
+	})
 
 	go eventHandler.Start()
 
-	go recordMetric(ctx, "ops", time.Second*2)
-	go recordMetric(ctx, "cycles", time.Millisecond*500)
+	go recordMetric(ctx, &wg, "ops", time.Second*2)
+	go recordMetric(ctx, &wg, "cycles", time.Millisecond*500)
 
 	go func() {
+		defer wg.Done()
+
 		getDuration := func() time.Duration {
 			return time.Duration(2000+rand.Intn(1000)) * time.Millisecond
 		}
@@ -85,7 +93,9 @@ func main() {
 	}
 }
 
-func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
+func recordMetric(ctx context.Context, wg *sync.WaitGroup, metric string, frequency time.Duration) {
+	defer wg.Done()
+
 	var id int
 
 	for {
