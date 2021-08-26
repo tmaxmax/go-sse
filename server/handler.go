@@ -1,8 +1,8 @@
 package server
 
 import (
+	"log"
 	"net/http"
-	"sync"
 
 	"github.com/tmaxmax/hub"
 
@@ -10,14 +10,18 @@ import (
 )
 
 type Handler struct {
-	hub    hub.Hub
-	closed bool
-	mu     sync.RWMutex
+	hub hub.Hub
+	// OnWriteError is a function that's called when writing an event to the connection fails.
+	// Defaults to log.Println, you can use it for custom logging or any other desired error handling.
+	OnWriteError func(error)
 }
 
 func New() *Handler {
 	return &Handler{
-		hub: make(hub.Hub, 1),
+		hub: make(hub.Hub),
+		OnWriteError: func(err error) {
+			log.Println("go-sse.server: write error to connection:", err)
+		},
 	}
 }
 
@@ -26,45 +30,27 @@ func (h *Handler) Start() {
 }
 
 func (h *Handler) Stop() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.closed = true
 	close(h.hub)
 }
 
 func (h *Handler) Broadcast(ev *event.Event) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	if h.closed {
-		return
-	}
 	h.hub <- ev
 }
 
-func (h *Handler) connect(_ *http.Request) hub.Conn {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	if h.closed {
-		return nil
-	}
-
+func (h *Handler) connect(r *http.Request) hub.Conn {
 	conn := make(hub.Conn)
+
+	go func() {
+		defer func() {
+			_ = recover()
+		}()
+
+		<-r.Context().Done()
+		h.hub <- hub.Disconnect{Conn: conn}
+	}()
+
 	h.hub <- conn
 	return conn
-}
-
-func (h *Handler) watchDisconnect(c hub.Conn, r *http.Request) {
-	<-r.Context().Done()
-
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	if !h.closed {
-		h.hub <- hub.DisconnectAll(c)
-	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -74,26 +60,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn := h.connect(r)
-	if conn == nil {
-		http.Error(w, "Server closed", http.StatusInternalServerError)
-		return
-	}
-	go h.watchDisconnect(conn, r)
-
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
+	flusher.Flush()
 
-	for m := range conn {
+	for m := range h.connect(r) {
+		_, err := m.(*event.Event).WriteTo(w)
 		flusher.Flush()
-
-		if _, err := m.(*event.Event).WriteTo(w); err != nil {
+		if err != nil {
+			h.OnWriteError(err)
 			break
 		}
 	}
-
-	flusher.Flush()
 }
