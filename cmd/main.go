@@ -2,22 +2,66 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/tmaxmax/go-sse/server"
 	"github.com/tmaxmax/go-sse/server/event"
+	"github.com/tmaxmax/go-sse/server/replay"
 )
 
-var eventHandler = server.New()
+var eventHandler *server.Handler
+
+func setLastEventID(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("lastEventID")
+		ctx := context.WithValue(r.Context(), server.ContextKeyLastEventID, id)
+
+		h.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func init() {
+	eventHandler = server.New(server.Config{
+		OnConnect: func(header http.Header, r *http.Request) {
+			header.Set("Access-Control-Allow-Origin", "*")
+
+			name := r.URL.Query().Get("name")
+			fields := []event.Option{
+				event.Name("connect"),
+			}
+
+			if name == "" {
+				fields = append(fields, event.Text("Someone unknown joined us!"))
+			} else {
+				fields = append(fields, event.Text(name+" joined us!"))
+			}
+
+			eventHandler.Broadcast(event.New(fields...))
+		},
+		OnDisconnect: func(r *http.Request) {
+			name := r.URL.Query().Get("name")
+			fields := []event.Option{
+				event.Name("disconnect"),
+			}
+
+			if name == "" {
+				fields = append(fields, event.Text("Someone unknown left us..."))
+			} else {
+				fields = append(fields, event.Text(name+" left us..."))
+			}
+
+			eventHandler.Broadcast(event.New(fields...))
+		},
+		ReplayProvider:   replay.NewFiniteProvider(50, true),
+		ReplayGCInterval: time.Minute,
+	})
+}
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -35,78 +79,61 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("/", SnapshotHTTPEndpoint)
-	mux.Handle("/events", eventHandler)
+	mux.Handle("/events", setLastEventID(eventHandler))
 
 	s := &http.Server{
 		Addr:    "0.0.0.0:8080",
 		Handler: mux,
 	}
-	wg := sync.WaitGroup{}
-	wg.Add(3)
-	s.RegisterOnShutdown(func() {
-		wg.Wait()
-		eventHandler.Stop()
-	})
+	s.RegisterOnShutdown(eventHandler.Stop)
 
 	go eventHandler.Start()
 
-	go recordMetric(ctx, &wg, "ops", time.Second*2)
-	go recordMetric(ctx, &wg, "cycles", time.Millisecond*500)
+	go recordMetric(ctx, "ops", time.Second*2)
+	go recordMetric(ctx, "cycles", time.Millisecond*500)
 
-	go func() {
-		defer wg.Done()
-
-		getDuration := func() time.Duration {
-			return time.Duration(2000+rand.Intn(1000)) * time.Millisecond
-		}
-
-		var duration time.Duration
-		var id int
-
-		for {
-			select {
-			case <-time.After(duration):
-				id++
-
-				count := 1 + rand.Intn(5)
-				opts := []event.Option{
-					event.ID(strconv.Itoa(id)),
-				}
-
-				for i := 0; i < count; i += 1 {
-					opts = append(opts, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
-				}
-
-				duration = getDuration()
-				opts = append(opts, event.TTL(duration))
-
-				eventHandler.Broadcast(event.New(opts...))
-			case <-ctx.Done():
-				return
-			}
-
-		}
-	}()
+	//go func() {
+	//	duration := func() time.Duration {
+	//		return time.Duration(2000+rand.Intn(1000)) * time.Millisecond
+	//	}
+	//
+	//	timer := time.NewTimer(duration())
+	//	defer timer.Stop()
+	//
+	//	for {
+	//		select {
+	//		case <-timer.C:
+	//			count := 1 + rand.Intn(5)
+	//			opts := []event.Option{event.TTL(time.Second * 30)}
+	//
+	//			for i := 0; i < count; i += 1 {
+	//				opts = append(opts, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
+	//			}
+	//
+	//			eventHandler.Broadcast(event.New(opts...))
+	//		case <-ctx.Done():
+	//			return
+	//		}
+	//
+	//		timer.Reset(duration())
+	//	}
+	//}()
 
 	if err := runServer(ctx, s); err != nil {
 		log.Println("server closed", err)
 	}
 }
 
-func recordMetric(ctx context.Context, wg *sync.WaitGroup, metric string, frequency time.Duration) {
-	defer wg.Done()
-
-	var id int
+func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
+	ticker := time.NewTicker(frequency)
+	defer ticker.Stop()
 
 	for {
 		select {
-		case <-time.After(frequency):
-			id++
-
+		case <-ticker.C:
 			v := Inc(metric)
 			ev := event.New(
 				event.Name(metric),
-				event.ID(fmt.Sprintf("%s-%d", metric, id)),
 				event.Text(strconv.FormatInt(v, 10)),
 				event.TTL(frequency),
 			)
