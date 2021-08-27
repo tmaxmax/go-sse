@@ -60,16 +60,46 @@ func (e *Event) String() string {
 	return s.String()
 }
 
-func (e *Event) Expired() bool {
-	return !e.expiresAt.IsZero() && e.expiresAt.Before(time.Now())
+// ID returns the event's ID. It returns an empty string if the event doesn't have an ID.
+func (e *Event) ID() ID {
+	if e.idIndex == -1 {
+		return ""
+	}
+	return e.fields[e.idIndex].(ID)
 }
 
+// ExpiresAt returns the timestamp when the event expires.
+func (e *Event) ExpiresAt() time.Time {
+	return e.expiresAt
+}
+
+// New creates a new event. It takes as parameters the event's desired fields and an expiry time configuration
+// (TTL or ExpiresAt). If no expiry time is specified, the event expires immediately.
 func New(options ...Option) *Event {
 	e := &Event{
 		nameIndex:  -1,
 		idIndex:    -1,
 		retryIndex: -1,
 	}
+
+	for _, option := range options {
+		option.apply(e)
+	}
+
+	return e
+}
+
+// From creates a new event using the provided one as a base. It does not modify the base event.
+func From(base *Event, options ...Option) *Event {
+	e := &Event{
+		nameIndex:  base.nameIndex,
+		idIndex:    base.idIndex,
+		retryIndex: base.retryIndex,
+		expiresAt:  base.expiresAt,
+		fields:     make([]field, 0, len(base.fields)),
+	}
+
+	e.fields = append(e.fields, base.fields...)
 
 	for _, option := range options {
 		option.apply(e)
