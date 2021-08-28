@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,51 +16,30 @@ import (
 	"github.com/tmaxmax/go-sse/server/replay"
 )
 
-var eventHandler *server.Handler
+var sse = server.New(server.Config{
+	ReplayProvider:   replay.NewValidProvider(true),
+	ReplayGCInterval: time.Minute,
+})
 
-func setLastEventID(h http.Handler) http.Handler {
+func configSSE(handler *server.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Query().Get("lastEventID")
-		ctx := context.WithValue(r.Context(), server.ContextKeyLastEventID, id)
+		ctx, q := r.Context(), r.URL.Query()
+		ctx = server.SetLastEventID(ctx, event.ID(q.Get("lastEventID")))
+		ctx = server.SetTopics(ctx, q["topic"])
 
-		h.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-func init() {
-	eventHandler = server.New(server.Config{
-		OnConnect: func(header http.Header, r *http.Request) {
-			header.Set("Access-Control-Allow-Origin", "*")
+		handler.Broadcast(event.New(
+			event.Name("connect"),
+			event.Text(q.Get("name")+" has joined us!"),
+		))
 
-			name := r.URL.Query().Get("name")
-			fields := []event.Option{
-				event.Name("connect"),
-			}
+		handler.ServeHTTP(w, r.WithContext(ctx))
 
-			if name == "" {
-				fields = append(fields, event.Text("Someone unknown joined us!"))
-			} else {
-				fields = append(fields, event.Text(name+" joined us!"))
-			}
-
-			eventHandler.Broadcast(event.New(fields...))
-		},
-		OnDisconnect: func(r *http.Request) {
-			name := r.URL.Query().Get("name")
-			fields := []event.Option{
-				event.Name("disconnect"),
-			}
-
-			if name == "" {
-				fields = append(fields, event.Text("Someone unknown left us..."))
-			} else {
-				fields = append(fields, event.Text(name+" left us..."))
-			}
-
-			eventHandler.Broadcast(event.New(fields...))
-		},
-		ReplayProvider:   replay.NewFiniteProvider(50, true),
-		ReplayGCInterval: time.Minute,
+		handler.Broadcast(event.New(
+			event.Name("disconnect"),
+			event.Text(q.Get("name")+" left..."),
+		))
 	})
 }
 
@@ -79,45 +59,49 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("/", SnapshotHTTPEndpoint)
-	mux.Handle("/events", setLastEventID(eventHandler))
+	mux.Handle("/events", configSSE(sse))
 
 	s := &http.Server{
 		Addr:    "0.0.0.0:8080",
 		Handler: mux,
 	}
-	s.RegisterOnShutdown(eventHandler.Stop)
+	s.RegisterOnShutdown(func() {
+		// Broadcast a close message so clients can gracefully disconnect.
+		sse.Broadcast(event.New(event.Name("close")))
+		sse.Stop()
+	})
 
-	go eventHandler.Start()
+	go sse.Start()
 
 	go recordMetric(ctx, "ops", time.Second*2)
 	go recordMetric(ctx, "cycles", time.Millisecond*500)
 
-	//go func() {
-	//	duration := func() time.Duration {
-	//		return time.Duration(2000+rand.Intn(1000)) * time.Millisecond
-	//	}
-	//
-	//	timer := time.NewTimer(duration())
-	//	defer timer.Stop()
-	//
-	//	for {
-	//		select {
-	//		case <-timer.C:
-	//			count := 1 + rand.Intn(5)
-	//			opts := []event.Option{event.TTL(time.Second * 30)}
-	//
-	//			for i := 0; i < count; i += 1 {
-	//				opts = append(opts, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
-	//			}
-	//
-	//			eventHandler.Broadcast(event.New(opts...))
-	//		case <-ctx.Done():
-	//			return
-	//		}
-	//
-	//		timer.Reset(duration())
-	//	}
-	//}()
+	go func() {
+		duration := func() time.Duration {
+			return time.Duration(2000+rand.Intn(1000)) * time.Millisecond
+		}
+
+		timer := time.NewTimer(duration())
+		defer timer.Stop()
+
+		for {
+			select {
+			case <-timer.C:
+				count := 1 + rand.Intn(5)
+				opts := []event.Option{event.TTL(time.Second * 30)}
+
+				for i := 0; i < count; i += 1 {
+					opts = append(opts, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
+				}
+
+				sse.Broadcast(event.New(opts...), "numbers", server.DefaultTopic)
+			case <-ctx.Done():
+				return
+			}
+
+			timer.Reset(duration())
+		}
+	}()
 
 	if err := runServer(ctx, s); err != nil {
 		log.Println("server closed", err)
@@ -138,7 +122,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 				event.TTL(frequency),
 			)
 
-			eventHandler.Broadcast(ev)
+			sse.Broadcast(ev, metric, server.DefaultTopic)
 		case <-ctx.Done():
 			return
 		}
