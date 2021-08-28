@@ -6,5 +6,3 @@ require (
 	github.com/go-test/deep v1.0.7
 	github.com/kylelemons/godebug v1.1.0
 )
-
-require github.com/tmaxmax/hub v0.1.0
