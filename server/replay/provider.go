@@ -14,30 +14,37 @@ import (
 // used with the respective provider.
 type Provider interface {
 	// Append puts the event in the replay buffer. If the provider also sets the event IDs
-	// it swaps the given event with one that also has the new ID. It runs in O(1) amortized time.
-	Append(**event.Event)
-	// GC triggers a buffer cleanup. It runs in O(N) worst time (if all values are expired).
+	// it swaps the given event with one that also has the new ID.
+	// The providers don't keep a reference to the initial topics slice.
+	Append(e **event.Event, topics []string)
+	// GC triggers a buffer cleanup (removes all expired events).
 	// For some providers this might be a no-op, see their documentations.
 	GC()
 	// Range loops over the events that need to be replayed starting from the event after
-	// the one with the specified ID.
+	// the one with the specified ID. It filters out all the events that weren't published
+	// under the given topics.
 	// It returns an error if the provided ID is invalid or doesn't exist.
-	Range(from event.ID, fn func(*event.Event)) error
+	// The callers must not modify or keep the topics slice.
+	Range(from event.ID, topics []string, fn func(*event.Event)) error
 }
 
 // Noop is a replay provider that does nothing. Use it when replaying events is not desired.
 type Noop struct{}
 
-func (Noop) Append(_ **event.Event)                       {}
-func (Noop) GC()                                          {}
-func (Noop) Range(_ event.ID, _ func(*event.Event)) error { return nil }
+func (Noop) Append(_ **event.Event, _ []string)                       {}
+func (Noop) GC()                                                      {}
+func (Noop) Range(_ event.ID, _ []string, _ func(*event.Event)) error { return nil }
+
+func isAutoIDsSet(input []bool) bool {
+	return len(input) > 0 && input[0]
+}
 
 // NewFiniteProvider creates a replay Provider that can replay at maximum count event.
 // The events' expiry times are not considered, as the oldest events are removed
 // anyway when the provider has buffered the maximum number of events.
 // The events must have an ID unless the provider is constructed with autoIDs flag as true.
-func NewFiniteProvider(count int, autoIDs bool) *Finite {
-	return &Finite{count: count, b: getBuffer(autoIDs, count)}
+func NewFiniteProvider(count int, autoIDs ...bool) *Finite {
+	return &Finite{count: count, b: getBuffer(isAutoIDsSet(autoIDs), count)}
 }
 
 // NewValidProvider creates a replay Provider that replays all the buffered non-expired events.
@@ -45,8 +52,8 @@ func NewFiniteProvider(count int, autoIDs bool) *Finite {
 // You can use this provider for replaying an infinite number of events, if the events never
 // expire.
 // The events must have an ID unless the provider is constructed with autoIDs flag as true.
-func NewValidProvider(autoIDs bool) *Valid {
-	return &Valid{b: getBuffer(autoIDs, 0)}
+func NewValidProvider(autoIDs ...bool) *Valid {
+	return &Valid{b: getBuffer(isAutoIDsSet(autoIDs), 0)}
 }
 
 // Finite is a replay provider that replays at maximum a certain number of events.
@@ -57,24 +64,26 @@ type Finite struct {
 	count int
 }
 
-func (f *Finite) Append(ep **event.Event) {
+func (f *Finite) Append(ep **event.Event, topics []string) {
 	if f.b.len() == f.count {
 		f.b.dequeue()
 	}
 
-	f.b.queue(ep)
+	f.b.queue(ep, topics)
 }
 
 func (f *Finite) GC() {}
 
-func (f *Finite) Range(from event.ID, fn func(*event.Event)) error {
+func (f *Finite) Range(from event.ID, topics []string, fn func(*event.Event)) error {
 	events, err := f.b.slice(from)
 	if err != nil {
 		return err
 	}
 
 	for _, e := range events[1:] {
-		fn(e)
+		if e.isInTopics(topics) {
+			fn(e.e)
+		}
 	}
 
 	return nil
@@ -85,8 +94,8 @@ type Valid struct {
 	b buffer
 }
 
-func (v *Valid) Append(ep **event.Event) {
-	v.b.queue(ep)
+func (v *Valid) Append(ep **event.Event, topics []string) {
+	v.b.queue(ep, topics)
 }
 
 func (v *Valid) GC() {
@@ -102,7 +111,7 @@ func (v *Valid) GC() {
 	}
 }
 
-func (v *Valid) Range(from event.ID, fn func(*event.Event)) error {
+func (v *Valid) Range(from event.ID, topics []string, fn func(*event.Event)) error {
 	events, err := v.b.slice(from)
 	if err != nil {
 		return err
@@ -110,8 +119,8 @@ func (v *Valid) Range(from event.ID, fn func(*event.Event)) error {
 
 	now := time.Now()
 	for _, e := range events[1:] {
-		if e.ExpiresAt().After(now) {
-			fn(e)
+		if e.e.ExpiresAt().After(now) && e.isInTopics(topics) {
+			fn(e.e)
 		}
 	}
 
