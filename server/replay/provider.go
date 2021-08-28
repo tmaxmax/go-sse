@@ -104,7 +104,7 @@ func (v *Valid) GC() {
 	var e *event.Event
 	for {
 		e = v.b.front()
-		if e == nil || e.ExpiresAt().Before(now) {
+		if e == nil || e.ExpiresAt().After(now) {
 			break
 		}
 		v.b.dequeue()
