@@ -2,7 +2,6 @@ package server
 
 import (
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/tmaxmax/go-sse/server/replay"
@@ -20,11 +19,6 @@ type Config struct {
 	// OnWriteError is a function that's called when writing an event to the connection fails.
 	// Defaults to log.Println, you can use it for custom logging or any other desired error handling.
 	OnWriteError func(error)
-	// OnConnect is a function that's called when a new request arrives. You can use this to write custom headers
-	// to the response, for example.
-	OnConnect func(http.Header, *http.Request)
-	// OnDisconnect is a function that's called after a request is closed and the client's not receiving messages.
-	OnDisconnect func(*http.Request)
 	// ReplayProvider is the desired replay implementation. See the replay package for documentation on
 	// each provider.
 	ReplayProvider replay.Provider
@@ -39,27 +33,19 @@ var defaultConfig = Config{
 	OnWriteError: func(err error) {
 		log.Println("go-sse.server.Handler: write error:", err)
 	},
-	OnConnect:        func(_ http.Header, _ *http.Request) {},
-	OnDisconnect:     func(_ *http.Request) {},
 	ReplayProvider:   replay.Noop{},
 	ReplayGCInterval: 0,
 }
 
 func mergeWithDefault(c *Config) {
 	if c.BroadcastBufferSize <= 0 {
-		c.ConnectionBufferSize = defaultConfig.BroadcastBufferSize
+		c.BroadcastBufferSize = defaultConfig.BroadcastBufferSize
 	}
 	if c.ConnectionBufferSize < 0 {
 		c.ConnectionBufferSize = defaultConfig.ConnectionBufferSize
 	}
 	if c.OnWriteError == nil {
 		c.OnWriteError = defaultConfig.OnWriteError
-	}
-	if c.OnConnect == nil {
-		c.OnConnect = defaultConfig.OnConnect
-	}
-	if c.OnDisconnect == nil {
-		c.OnDisconnect = defaultConfig.OnDisconnect
 	}
 	if c.ReplayProvider == nil {
 		c.ReplayProvider = defaultConfig.ReplayProvider
