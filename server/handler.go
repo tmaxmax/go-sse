@@ -122,6 +122,14 @@ func (h *Handler) Start() {
 	}
 }
 
+// Stop signals the handler to close all connections and abort all broadcasts.
+// Calling Stop does not abruptly end the HTTP request handlers, it only closes the
+// channels it sends the events on. Any ongoing writes to the connections will
+// complete and the handlers will return successfully. Calling Stop will not trigger
+// the OnDisconnect handler.
+//
+// Register Stop as a http.Server shutdown function, otherwise Shutdown will hang
+// indefinitely or close the connections abruptly (if a cancelable context is provided).
 func (h *Handler) Stop() {
 	close(h.done)
 }
@@ -129,8 +137,10 @@ func (h *Handler) Stop() {
 // Broadcast sends the given event to all the connections that are subscribed to the specified topics.
 // If no topic is specified, the event will be sent to the default topic.
 //
-// The connections will receive the event only once, regardless of the number of topics that the
-// message is sent to and the connection is subscribed to.
+// The connections will receive the event only once, even if it is subscribed to more than one of the
+// topics the event is sent to.
+//
+// The broadcast is aborted if Stop is called.
 func (h *Handler) Broadcast(e *event.Event, topics ...string) {
 	if len(topics) == 0 {
 		topics = defaultTopicSlice
@@ -141,67 +151,29 @@ func (h *Handler) Broadcast(e *event.Event, topics ...string) {
 	}
 }
 
-type contextKeyLastEventID struct{}
-type contextKeyTopics struct{}
-
-var (
-	// ContextKeyLastEventID is used to set the last received event's ID for the request
-	// from a custom source, if the Last-Event-ID header doesn't exist. You can use a
-	// middleware for this that's executed before the handler.
-	//
-	// Valid values are of type string or event.ID.
-	ContextKeyLastEventID = contextKeyLastEventID{}
-	// ContextKeyTopics is used to tell the handler to which topics the client is
-	// subscribed to. Set this in a middleware that's executed before the handler.
-	// If no topics are provided, the client will still be subscribed to a default
-	// topic (identified by the empty string).
-	//
-	// Valid values are of type string or []string. If a slice is provided, its
-	// elements will be copied in order to prevent data races.
-	ContextKeyTopics = contextKeyTopics{}
-)
-
 func (h *Handler) connect(r *http.Request) conn {
-	lastEventID := event.ID(r.Header.Get("Last-Event-ID"))
-	if lastEventID == "" {
-		switch v := r.Context().Value(ContextKeyLastEventID).(type) {
-		case string:
-			lastEventID = event.ID(v)
-		case event.ID:
-			lastEventID = v
-		}
-	}
-
-	topics := defaultTopicSlice
-	switch v := r.Context().Value(ContextKeyTopics).(type) {
-	case string:
-		topics = []string{v}
-	case []string:
-		if len(v) == 0 {
-			break
-		}
-		topics = make([]string, len(v))
-		copy(topics, v)
-	}
-
 	c := make(conn, h.cfg.ConnectionBufferSize)
-	h.connections <- connect{c, lastEventID, topics}
+	connRequest := connect{c, getLastEventID(r), getTopics(r)}
 
-	go func() {
-		select {
-		case <-r.Context().Done():
-		case <-h.done:
-			return
-		}
+	select {
+	case h.connections <- connRequest:
+		return c
+	case <-h.done:
+		return nil
+	}
+}
 
-		select {
-		case h.disconnects <- c:
-			h.cfg.OnDisconnect(r)
-		case <-h.done:
-		}
-	}()
+func (h *Handler) watchDisconnect(c conn, r *http.Request) {
+	select {
+	case <-r.Context().Done():
+	case <-h.done:
+		return
+	}
 
-	return c
+	select {
+	case h.disconnects <- c:
+	case <-h.done:
+	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -211,14 +183,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.cfg.OnConnect(w.Header(), r)
+	conn := h.connect(r)
+	if conn == nil {
+		http.Error(w, "Event stream closed", http.StatusInternalServerError)
+		return
+	}
+	go h.watchDisconnect(conn, r)
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
 	flusher.Flush()
 
-	for m := range h.connect(r) {
+	for m := range conn {
 		_, err := m.WriteTo(w)
 		flusher.Flush()
 		if err != nil {
@@ -226,5 +204,4 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-
 }
