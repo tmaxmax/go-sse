@@ -28,7 +28,7 @@ type Event struct {
 }
 
 func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
-	fw := writer{
+	fw := &writer{
 		fw: singleFieldWriter{
 			w: w,
 			s: parser.ChunkScanner{},
