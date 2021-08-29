@@ -83,7 +83,6 @@ func BenchmarkByteParser(b *testing.B) {
 
 	for n := 0; n < b.N; n++ {
 		p := parser.NewByteParser(data)
-
 		for p.Scan() {
 			f = p.Field()
 		}

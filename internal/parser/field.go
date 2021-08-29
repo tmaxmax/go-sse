@@ -3,7 +3,7 @@ package parser
 type FieldName string
 
 // A Field represents an unprocessed field of a single event. The Name is the field's identifier, which is used to
-// process the fields afterwards. The Value is owned by the Field struct itself.
+// process the fields afterwards. The Value is not owned by the Field struct.
 type Field struct {
 	Name  FieldName
 	Value []byte

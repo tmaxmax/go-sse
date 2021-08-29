@@ -56,7 +56,8 @@ func (r *ReaderParser) Scan() bool {
 	return true
 }
 
-// Field returns the last parsed field.
+// Field returns the last parsed field. The Field's Value byte slice isn't owned by the field, the underlying buffer
+// is owned by the bufio.Scanner that is used by the ReaderParser.
 func (r *ReaderParser) Field() Field {
 	return r.p.Field()
 }

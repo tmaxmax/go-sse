@@ -4,7 +4,7 @@ import "bytes"
 
 type ByteParser struct {
 	field Field
-	cs    *ChunkScanner
+	cs    ChunkScanner
 	chunk []byte
 }
 
@@ -49,7 +49,7 @@ func (b *ByteParser) Scan() bool {
 			continue
 		}
 
-		b.field = Field{Name: name, Value: clone(trimChunk(b.chunk))}
+		b.field = Field{Name: name, Value: trimChunk(b.chunk)}
 
 		return true
 	}
@@ -92,15 +92,6 @@ func trimChunk(c []byte) []byte {
 	return trimFirstSpace(trimNewline(c))
 }
 
-func clone(b []byte) []byte {
-	if len(b) == 0 {
-		return nil
-	}
-	c := make([]byte, len(b))
-	copy(c, b)
-	return c
-}
-
 func NewByteParser(b []byte) *ByteParser {
-	return &ByteParser{cs: &ChunkScanner{Buffer: b}}
+	return &ByteParser{cs: ChunkScanner{Buffer: b}}
 }
