@@ -6,13 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tmaxmax/go-sse/internal/util"
+
 	"github.com/go-test/deep"
 	"github.com/kylelemons/godebug/diff"
 )
-
-func escape(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", "\\n"), "\r", "\\r")
-}
 
 func TestNewEvent(t *testing.T) {
 	t.Parallel()
@@ -58,7 +56,7 @@ func TestEvent_WriteTo(t *testing.T) {
 
 	output := "data:This is an example\ndata:Of an event\nid:example_id\nretry:5000\ndata:raw bytes here\nevent:test_event\n:This test should pass\ndata:Important data\ndata:Important again\rdata:\rdata:Very important\r\n\n"
 	expectedWritten := int64(len(output))
-	expected := escape(output)
+	expected := util.EscapeNewlines(output)
 
 	e := New(input...)
 	w := &strings.Builder{}
@@ -72,7 +70,7 @@ func TestEvent_WriteTo(t *testing.T) {
 		t.Fatalf("Written byte count wrong: expected %d, got %d", expectedWritten, written)
 	}
 
-	got := escape(w.String())
+	got := util.EscapeNewlines(w.String())
 
 	if !reflect.DeepEqual(expected, got) {
 		t.Fatalf("Event written incorrectly:\n%v", diff.Diff(expected, got))
