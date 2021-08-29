@@ -50,6 +50,10 @@ data: still, here's some data: you deserve it`)
 		fields = append(fields, p.Field())
 	}
 
+	if p.Err() != nil {
+		t.Fatalf("unexpected error: %v", p.Err())
+	}
+
 	if !reflect.DeepEqual(expected, fields) {
 		t.Fatalf("parse failed:\nreceived: %#v\nexpected: %#v", fields, expected)
 	}
