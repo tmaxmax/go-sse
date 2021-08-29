@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
 type field interface {
@@ -26,7 +28,14 @@ type Event struct {
 }
 
 func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
-	fw := &writer{Writer: w}
+	fw := writer{
+		fw: singleFieldWriter{
+			w: w,
+			s: parser.ChunkScanner{},
+		},
+		closed:         false,
+		writtenOnClose: 0,
+	}
 	var m int64
 	defer func() {
 		n += int64(fw.writtenOnClose)

@@ -19,7 +19,7 @@ func (n Name) apply(e *Event) {
 }
 
 func (n Name) WriteTo(w io.Writer) (int64, error) {
-	m, err := w.Write([]byte(n))
+	m, err := io.WriteString(w, string(n))
 
 	return int64(m), err
 }

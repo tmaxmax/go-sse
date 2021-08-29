@@ -2,34 +2,44 @@ package event
 
 import (
 	"io"
+	"reflect"
+	"unsafe"
 
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
 var newline = []byte{'\n'}
+var colon = []byte{':'}
 
 type singleFieldWriter struct {
 	w io.Writer
-	s *parser.ChunkScanner
+	s parser.ChunkScanner
 
-	name      []byte // this also has the colon
-	isNewLine bool   // indicates if the next write will start a new line
+	name      string
+	isNewLine bool // indicates if the next write will start a new line
 
 	charsWrittenOnClose int
 }
 
-func newSingleFieldWriter(w io.Writer, f field) *singleFieldWriter {
-	return &singleFieldWriter{
-		w:         w,
-		s:         &parser.ChunkScanner{},
-		name:      []byte(f.name() + ":"),
-		isNewLine: true,
-	}
+func (s *singleFieldWriter) start(name string) {
+	s.name = name
+	s.isNewLine = true
+	s.charsWrittenOnClose = 0
 }
 
 func (s *singleFieldWriter) writeName() (n int, err error) {
 	if s.isNewLine {
-		n, err = s.w.Write(s.name)
+		var m int
+		m, err = io.WriteString(s.w, s.name)
+		n += m
+		if err != nil {
+			return
+		}
+		m, err = s.w.Write(colon)
+		n += m
+		if err != nil {
+			return
+		}
 
 		s.isNewLine = false
 	}
@@ -79,6 +89,16 @@ func (s *singleFieldWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
+func unsafeGetBytes(s string) []byte {
+	return (*[0x7fff0000]byte)(unsafe.Pointer(
+		(*reflect.StringHeader)(unsafe.Pointer(&s)).Data),
+	)[:len(s):len(s)]
+}
+
+func (s *singleFieldWriter) WriteString(v string) (int, error) {
+	return s.Write(unsafeGetBytes(v))
+}
+
 func (s *singleFieldWriter) Close() (err error) {
 	if !s.isNewLine {
 		s.isNewLine = true
@@ -90,25 +110,25 @@ func (s *singleFieldWriter) Close() (err error) {
 
 // writer is a struct that is used to write event fields.
 type writer struct {
-	Writer io.Writer
+	fw singleFieldWriter
 
 	closed         bool
 	writtenOnClose int
 }
 
 func (w *writer) WriteField(f field) (n int64, err error) {
-	s := newSingleFieldWriter(w.Writer, f)
+	w.fw.start(f.name())
 	defer func() {
-		n += int64(s.charsWrittenOnClose)
+		n += int64(w.fw.charsWrittenOnClose)
 	}()
-	defer s.Close()
+	defer w.fw.Close()
 
-	n, err = f.WriteTo(s)
+	n, err = f.WriteTo(&w.fw)
 	if err != nil {
 		return
 	}
 
-	err = s.Close()
+	err = w.fw.Close()
 
 	return
 }
@@ -120,7 +140,7 @@ func (w *writer) Close() (err error) {
 
 	w.closed = true
 
-	w.writtenOnClose, err = w.Writer.Write(newline)
+	w.writtenOnClose, err = w.fw.w.Write(newline)
 
 	return
 }

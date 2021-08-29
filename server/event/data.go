@@ -34,7 +34,7 @@ func (t Text) apply(e *Event) {
 }
 
 func (t Text) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write([]byte(t))
+	n, err := io.WriteString(w, string(t))
 
 	return int64(n), err
 }

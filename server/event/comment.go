@@ -15,7 +15,7 @@ func (c Comment) apply(e *Event) {
 }
 
 func (c Comment) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write([]byte(c))
+	n, err := io.WriteString(w, string(c))
 
 	return int64(n), err
 }

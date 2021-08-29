@@ -22,7 +22,7 @@ func (i ID) apply(e *Event) {
 }
 
 func (i ID) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write([]byte(i))
+	n, err := io.WriteString(w, string(i))
 
 	return int64(n), err
 }

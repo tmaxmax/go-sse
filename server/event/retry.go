@@ -24,7 +24,7 @@ func (r Retry) apply(e *Event) {
 }
 
 func (r Retry) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write([]byte(strconv.FormatInt(time.Duration(r).Milliseconds(), 10)))
+	n, err := w.Write(strconv.AppendInt(nil, time.Duration(r).Milliseconds(), 10))
 
 	return int64(n), err
 }

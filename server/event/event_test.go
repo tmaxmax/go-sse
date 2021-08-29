@@ -1,6 +1,7 @@
 package event
 
 import (
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -74,5 +75,21 @@ func TestEvent_WriteTo(t *testing.T) {
 
 	if !reflect.DeepEqual(expected, got) {
 		t.Fatalf("Event written incorrectly:\n%v", diff.Diff(expected, got))
+	}
+}
+
+var benchmarkEvent = New(
+	Text("Example data\nWith multiple rows\r\nThis is interesting"),
+	ID("example_id"),
+	Comment("An useless comment here that spans\non\n\nmultiple\nlines"),
+	Name("This is the event's name"),
+	Retry(time.Minute),
+)
+
+func BenchmarkEvent_WriteTo(b *testing.B) {
+	b.ReportAllocs()
+
+	for n := 0; n < b.N; n++ {
+		_, _ = benchmarkEvent.WriteTo(io.Discard)
 	}
 }
