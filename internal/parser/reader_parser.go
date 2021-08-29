@@ -17,7 +17,7 @@ var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []
 		advance += len(chunk)
 		chunkLen := len(trimNewline(chunk))
 		if chunkLen == 0 {
-			start++
+			start += len(chunk)
 		}
 		if len(remaining) == 0 || (isNewlineChar(remaining[0]) && chunkLen > 0) {
 			break
@@ -48,10 +48,9 @@ func (r *ReaderParser) Scan() bool {
 			return false
 		}
 
-		r.p.cs.Buffer = r.sc.Bytes()
-		if !r.p.Scan() {
-			return false
-		}
+		r.p.Reset(r.sc.Bytes())
+
+		return r.p.Scan()
 	}
 
 	return true
