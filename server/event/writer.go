@@ -3,14 +3,14 @@ package event
 import (
 	"io"
 
-	. "github.com/tmaxmax/go-sse/server/event/internal"
+	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
 var newline = []byte{'\n'}
 
 type singleFieldWriter struct {
 	w io.Writer
-	s *ChunkScanner
+	s *parser.ChunkScanner
 
 	name      []byte // this also has the colon
 	isNewLine bool   // indicates if the next write will start a new line
@@ -21,7 +21,7 @@ type singleFieldWriter struct {
 func newSingleFieldWriter(w io.Writer, f field) *singleFieldWriter {
 	return &singleFieldWriter{
 		w:         w,
-		s:         &ChunkScanner{},
+		s:         &parser.ChunkScanner{},
 		name:      []byte(f.name() + ":"),
 		isNewLine: true,
 	}

@@ -1,4 +1,8 @@
-package internal
+package parser
+
+func isNewlineChar(b byte) bool {
+	return b == '\n' || b == '\r'
+}
 
 // nextChunk returns the first chunk of data that ends in a newline sequence.
 // It includes the newline sequence. It also returns the remaining data after
@@ -7,7 +11,7 @@ package internal
 // chunk.data is nil only if s is nil. if there is no data left, remaining is
 // nil only if chunk does not end in a newline. It has length 0 otherwise.
 func nextChunk(s []byte) (chunk []byte, remaining []byte) {
-	// if no endline is found, chunk is s
+	// if no line ending is found, chunk is s
 	chunk = s
 
 	l := len(s)
@@ -18,7 +22,7 @@ func nextChunk(s []byte) (chunk []byte, remaining []byte) {
 
 		i += 1
 
-		if b == '\n' || b == '\r' {
+		if isNewlineChar(b) {
 			if b == '\r' && i < l && s[i] == '\n' {
 				i += 1
 			}
@@ -44,7 +48,7 @@ type ChunkScanner struct {
 	Buffer []byte
 }
 
-// Scan retrieves the next chunk from the buffer. It returns true if there data left in the buffer.
+// Scan retrieves the next chunk from the buffer. It returns true if there is data left in the buffer.
 // Calling Scan multiple times after there is no data will change the buffer!
 func (s *ChunkScanner) Scan() bool {
 	s.chunk, s.Buffer = nextChunk(s.Buffer)

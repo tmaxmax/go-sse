@@ -1,4 +1,4 @@
-package internal
+package parser
 
 import (
 	"bytes"
@@ -7,11 +7,15 @@ import (
 	"unsafe"
 )
 
-func getByteSliceDataAddress(b []byte) uintptr {
+func getByteSliceDataAddress(tb testing.TB, b []byte) uintptr {
+	tb.Helper()
+
 	return (*reflect.SliceHeader)(unsafe.Pointer(&b)).Data
 }
 
 func TestScanner(t *testing.T) {
+	t.Parallel()
+
 	buf := []byte("sarmale")
 	s := &ChunkScanner{Buffer: buf}
 
@@ -21,7 +25,7 @@ func TestScanner(t *testing.T) {
 
 	chunk, endsInNewline := s.Chunk()
 
-	if getByteSliceDataAddress(buf) != getByteSliceDataAddress(chunk) {
+	if getByteSliceDataAddress(t, buf) != getByteSliceDataAddress(t, chunk) {
 		t.Fatalf("First chunk should always have the same address as the given buffer")
 	}
 
