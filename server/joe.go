@@ -172,6 +172,7 @@ func (j *Joe) start() {
 			for _, topic := range sub.Topics {
 				j.topic(topic)[sub.Channel] = struct{}{}
 			}
+			j.subscribers[sub.Channel] = struct{}{}
 		case unsub := <-j.unsubscription:
 			for _, subs := range j.topics {
 				delete(subs, unsub)
@@ -185,6 +186,7 @@ func (j *Joe) start() {
 			for sub := range j.subscribers {
 				close(sub)
 			}
+			return
 		}
 	}
 }
