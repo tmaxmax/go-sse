@@ -13,37 +13,12 @@ import (
 
 	"github.com/tmaxmax/go-sse/server"
 	"github.com/tmaxmax/go-sse/server/event"
-	"github.com/tmaxmax/go-sse/server/replay"
 )
 
-var sse = server.New(server.Config{
-	ReplayProvider:   replay.NewValidProvider(true),
-	ReplayGCInterval: time.Minute,
-})
-
-func configSSE(handler *server.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, q := r.Context(), r.URL.Query()
-		ctx = server.SetLastEventID(ctx, event.ID(q.Get("lastEventID")))
-		ctx = server.SetTopics(ctx, q["topic"])
-
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
-		handler.Broadcast(event.New(
-			event.Name("connect"),
-			event.Text(q.Get("name")+" has joined us!"),
-		))
-
-		handler.ServeHTTP(w, r.WithContext(ctx))
-
-		handler.Broadcast(event.New(
-			event.Name("disconnect"),
-			event.Text(q.Get("name")+" left..."),
-		))
-	})
-}
+var sse = server.New()
 
 func main() {
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelSignal := make(chan os.Signal, 1)
 	signal.Notify(cancelSignal, os.Interrupt, syscall.SIGTERM)
@@ -59,7 +34,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("/", SnapshotHTTPEndpoint)
-	mux.Handle("/events", configSSE(sse))
+	mux.Handle("/events", sse)
 
 	s := &http.Server{
 		Addr:    "0.0.0.0:8080",
@@ -67,11 +42,9 @@ func main() {
 	}
 	s.RegisterOnShutdown(func() {
 		// Broadcast a close message so clients can gracefully disconnect.
-		sse.Broadcast(event.New(event.Name("close")))
-		sse.Stop()
+		_ = sse.Publish(event.New(event.Name("close")))
+		_ = sse.Shutdown()
 	})
-
-	go sse.Start()
 
 	go recordMetric(ctx, "ops", time.Second*2)
 	go recordMetric(ctx, "cycles", time.Millisecond*500)
@@ -94,7 +67,7 @@ func main() {
 					opts = append(opts, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
 				}
 
-				sse.Broadcast(event.New(opts...), "numbers", server.DefaultTopic)
+				_ = sse.Publish(event.New(opts...))
 			case <-ctx.Done():
 				return
 			}
@@ -122,7 +95,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 				event.TTL(frequency),
 			)
 
-			sse.Broadcast(ev, metric, server.DefaultTopic)
+			_ = sse.Publish(ev)
 		case <-ctx.Done():
 			return
 		}
