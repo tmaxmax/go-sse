@@ -3,6 +3,8 @@ package parser
 import (
 	"bufio"
 	"io"
+
+	"github.com/tmaxmax/go-sse/internal/util"
 )
 
 var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []byte, err error) {
@@ -19,7 +21,7 @@ var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []
 		if chunkLen == 0 {
 			start += len(chunk)
 		}
-		if len(remaining) == 0 || (isNewlineChar(remaining[0]) && chunkLen > 0) {
+		if len(remaining) == 0 || (util.IsNewlineChar(remaining[0]) && chunkLen > 0) {
 			break
 		}
 	}
