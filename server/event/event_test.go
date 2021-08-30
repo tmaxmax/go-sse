@@ -55,7 +55,7 @@ func TestEvent_WriteTo(t *testing.T) {
 		Text("Important data\nImportant again\r\rVery important\r\n"),
 	}
 
-	output := "data:This is an example\ndata:Of an event\nid:example_id\nretry:5000\ndata:raw bytes here\nevent:test_event\n:This test should pass\ndata:Important data\ndata:Important again\rdata:\rdata:Very important\r\n\n"
+	output := "data: This is an example\ndata: Of an event\nid: example_id\nretry: 5000\ndata: raw bytes here\nevent: test_event\n: This test should pass\ndata: Important data\ndata: Important again\rdata: \rdata: Very important\r\n\n"
 	expectedWritten := int64(len(output))
 	expected := util.EscapeNewlines(output)
 
@@ -83,7 +83,7 @@ var benchmarkEvent = New(
 	ID("example_id"),
 	Comment("An useless comment here that spans\non\n\nmultiple\nlines"),
 	Name("This is the event's name"),
-	Retry(time.Minute),
+	//Retry(time.Minute),
 )
 
 func BenchmarkEvent_WriteTo(b *testing.B) {

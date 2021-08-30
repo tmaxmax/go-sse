@@ -1,6 +1,9 @@
 package event
 
-import "io"
+import (
+	"github.com/tmaxmax/go-sse/internal/parser"
+	"github.com/tmaxmax/go-sse/internal/util"
+)
 
 // ID is an event field that sets the event's id.
 // It takes a string as its value, given that IDs can be of any value.
@@ -8,8 +11,8 @@ import "io"
 // Use strconv.Itoa if you want to use integer IDs.
 type ID string
 
-func (i ID) name() string {
-	return "id"
+func (i ID) name() parser.FieldName {
+	return parser.FieldNameID
 }
 
 func (i ID) apply(e *Event) {
@@ -21,8 +24,6 @@ func (i ID) apply(e *Event) {
 	}
 }
 
-func (i ID) WriteTo(w io.Writer) (int64, error) {
-	n, err := io.WriteString(w, string(i))
-
-	return int64(n), err
+func (i ID) repr() []byte {
+	return util.Bytes(string(i))
 }

@@ -1,12 +1,15 @@
 package event
 
-import "io"
+import (
+	"github.com/tmaxmax/go-sse/internal/parser"
+	"github.com/tmaxmax/go-sse/internal/util"
+)
 
 // Name is the event field that sets the event's type.
 type Name string
 
-func (n Name) name() string {
-	return "event"
+func (n Name) name() parser.FieldName {
+	return parser.FieldNameEvent
 }
 
 func (n Name) apply(e *Event) {
@@ -18,8 +21,6 @@ func (n Name) apply(e *Event) {
 	}
 }
 
-func (n Name) WriteTo(w io.Writer) (int64, error) {
-	m, err := io.WriteString(w, string(n))
-
-	return int64(m), err
+func (n Name) repr() []byte {
+	return util.Bytes(string(n))
 }

@@ -1,12 +1,15 @@
 package event
 
-import "io"
+import (
+	"github.com/tmaxmax/go-sse/internal/parser"
+	"github.com/tmaxmax/go-sse/internal/util"
+)
 
 // Comment is an event comment field. If it spans on multiple lines,
 // new comment lines are created.
 type Comment string
 
-func (c Comment) name() string {
+func (c Comment) name() parser.FieldName {
 	return ""
 }
 
@@ -14,8 +17,6 @@ func (c Comment) apply(e *Event) {
 	e.fields = append(e.fields, c)
 }
 
-func (c Comment) WriteTo(w io.Writer) (int64, error) {
-	n, err := io.WriteString(w, string(c))
-
-	return int64(n), err
+func (c Comment) repr() []byte {
+	return util.Bytes(string(c))
 }

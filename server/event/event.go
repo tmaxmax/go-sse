@@ -10,49 +10,42 @@ import (
 )
 
 type field interface {
-	name() string
+	name() parser.FieldName
+	repr() []byte
 
-	io.WriterTo
 	Option
 }
 
 // Event is the representation of a single message. Use the New constructor to create one.
 type Event struct {
-	fields []field
-
+	expiresAt  time.Time
+	fields     []field
 	nameIndex  int
 	idIndex    int
 	retryIndex int
-
-	expiresAt time.Time
 }
 
-func (e *Event) WriteTo(w io.Writer) (n int64, err error) {
-	fw := &writer{
-		fw: singleFieldWriter{
-			w: w,
-			s: parser.ChunkScanner{},
-		},
-		closed:         false,
-		writtenOnClose: 0,
+func (e *Event) WriteTo(w io.Writer) (int64, error) {
+	fw := &fieldWriter{
+		w: w,
+		s: parser.ChunkScanner{},
 	}
-	var m int64
-	defer func() {
-		n += int64(fw.writtenOnClose)
-	}()
-	defer fw.Close()
+
+	var m, n int
+	var err error
 
 	for _, f := range e.fields {
-		m, err = fw.WriteField(f)
+		m, err = fw.writeField(f)
 		n += m
 		if err != nil {
-			return
+			return int64(n), err
 		}
 	}
 
-	err = fw.Close()
+	m, err = w.Write(newline)
+	n += m
 
-	return
+	return int64(n), err
 }
 
 func (e *Event) MarshalText() ([]byte, error) {
