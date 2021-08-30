@@ -1,8 +1,6 @@
 package parser
 
-func isNewlineChar(b byte) bool {
-	return b == '\n' || b == '\r'
-}
+import "github.com/tmaxmax/go-sse/internal/util"
 
 // nextChunk returns the first chunk of data that ends in a newline sequence.
 // It includes the newline sequence. It also returns the remaining data after
@@ -22,7 +20,7 @@ func nextChunk(s []byte) (chunk []byte, remaining []byte) {
 
 		i += 1
 
-		if isNewlineChar(b) {
+		if util.IsNewlineChar(b) {
 			if b == '\r' && i < l && s[i] == '\n' {
 				i += 1
 			}
