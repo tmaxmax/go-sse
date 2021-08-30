@@ -83,7 +83,7 @@ var benchmarkEvent = New(
 	ID("example_id"),
 	Comment("An useless comment here that spans\non\n\nmultiple\nlines"),
 	Name("This is the event's name"),
-	//Retry(time.Minute),
+	Retry(time.Minute),
 )
 
 func BenchmarkEvent_WriteTo(b *testing.B) {
