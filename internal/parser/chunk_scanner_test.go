@@ -29,7 +29,7 @@ func TestScanner(t *testing.T) {
 		t.Fatalf("First chunk should always have the same address as the given buffer")
 	}
 
-	if bytes.Compare(buf, chunk) != 0 {
+	if !bytes.Equal(buf, chunk) {
 		t.Fatalf("Expected chunk %q, got %q", string(buf), string(chunk))
 	}
 

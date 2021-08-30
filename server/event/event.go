@@ -31,7 +31,8 @@ func (e *Event) WriteTo(w io.Writer) (int64, error) {
 		s: parser.ChunkScanner{},
 	}
 
-	n, m, err := 0, 0, error(nil)
+	var err error
+	n, m := 0, 0
 
 	for _, f := range e.fields {
 		m, err = fw.writeField(f)
