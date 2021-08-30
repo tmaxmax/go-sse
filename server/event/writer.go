@@ -4,7 +4,6 @@ import (
 	"io"
 
 	"github.com/tmaxmax/go-sse/internal/parser"
-	"github.com/tmaxmax/go-sse/internal/util"
 )
 
 var newline = []byte{'\n'}
@@ -17,71 +16,58 @@ type fieldWriter struct {
 	isNewLine bool // indicates if the next write will start a new line
 }
 
-func (s *fieldWriter) writeName(name parser.FieldName) (n int, err error) {
-	if s.isNewLine {
-		var m int
-		m, err = io.WriteString(s.w, string(name))
-		n += m
-		if err != nil {
-			return
-		}
-		m, err = s.w.Write(colon)
-		n += m
-		if err != nil {
-			return
-		}
-
-		s.isNewLine = false
+func panicWriteString(w io.Writer, s string) int {
+	n, err := io.WriteString(w, s)
+	if err != nil {
+		panic(err)
 	}
-
-	return
+	return n
 }
 
-func (s *fieldWriter) writeField(f field) (int, error) {
-	s.isNewLine = true
-
-	name := f.name()
-
-	n, err := s.writeName(name)
+func panicWrite(w io.Writer, p []byte) int {
+	n, err := w.Write(p)
 	if err != nil {
-		return n, err
+		panic(err)
+	}
+	return n
+}
+
+func (s *fieldWriter) writeName(name parser.FieldName) int {
+	if s.isNewLine {
+		s.isNewLine = false
+		return panicWriteString(s.w, string(name)) + panicWrite(s.w, colon)
 	}
 
-	var (
-		m     int
-		chunk []byte
-	)
+	return 0
+}
 
+func (s *fieldWriter) writeField(f field) (n int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if e, ok := r.(error); ok {
+				err = e
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
+	s.isNewLine = true
 	s.s.Buffer = f.repr()
+	name := f.name()
+	var chunk []byte
 
 	for s.s.Scan() {
-		m, err = s.writeName(name)
-		n += m
-		if err != nil {
-			return n, err
-		}
+		n += s.writeName(name)
 
 		chunk, s.isNewLine = s.s.Chunk()
 
-		m, err = s.w.Write(chunk)
-		n += m
-		if err != nil {
-			// Set isNewLine to true on incomplete writes so writeEnd tries to insert the field's endline
-			// even if the write errored here. If writeEnd succeeds it ensures that the output won't break
-			// the protocol, at least.
-			// We are checking for endline characters and not for difference in chunk length and written
-			// bytes count because an incomplete write of a chunk that ends in \r\n could have \r written,
-			// or all the bytes could be written in spite of the error.
-			s.isNewLine = m > 0 && util.IsNewlineChar(chunk[m-1])
-
-			return n, err
-		}
+		n += panicWrite(s.w, chunk)
 	}
 
 	if !s.isNewLine {
-		m, err = s.w.Write(newline)
-		n += m
+		n += panicWrite(s.w, newline)
 	}
 
-	return n, err
+	return
 }
