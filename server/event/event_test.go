@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/tmaxmax/go-sse/internal/util"
-
-	"github.com/go-test/deep"
 )
 
 func TestNewEvent(t *testing.T) {
@@ -36,8 +34,8 @@ func TestNewEvent(t *testing.T) {
 
 	e := New(input...)
 
-	if d := deep.Equal(expected, e.fields); d != nil {
-		t.Fatalf("Fields set incorrectly:\n%v", d)
+	if !reflect.DeepEqual(e.fields, expected) {
+		t.Fatalf("Fields set incorrectly:\nreceived: %v\nexpected: %v", e.fields, expected)
 	}
 }
 
