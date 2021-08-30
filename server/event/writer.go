@@ -2,6 +2,7 @@ package event
 
 import (
 	"io"
+	"log"
 
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
@@ -41,9 +42,17 @@ func (s *fieldWriter) writeName(name parser.FieldName) int {
 	return 0
 }
 
+func (s *fieldWriter) writeEnd() int {
+	if s.isNewLine {
+		return 0
+	}
+	return panicWrite(s.w, newline)
+}
+
 func (s *fieldWriter) writeField(f field) (n int, err error) {
 	defer func() {
 		if r := recover(); r != nil {
+			log.Println(r)
 			if e, ok := r.(error); ok {
 				err = e
 			} else {
@@ -53,8 +62,20 @@ func (s *fieldWriter) writeField(f field) (n int, err error) {
 	}()
 
 	s.isNewLine = true
-	s.s.Buffer = f.repr()
 	name := f.name()
+	repr, singleLine := f.repr()
+
+	if len(repr) == 0 {
+		return
+	}
+
+	if singleLine {
+		n = s.writeName(name) + panicWrite(s.w, repr) + s.writeEnd()
+		return
+	}
+
+	s.s.Buffer = repr
+
 	var chunk []byte
 
 	for s.s.Scan() {
@@ -65,9 +86,7 @@ func (s *fieldWriter) writeField(f field) (n int, err error) {
 		n += panicWrite(s.w, chunk)
 	}
 
-	if !s.isNewLine {
-		n += panicWrite(s.w, newline)
-	}
+	n += s.writeEnd()
 
 	return
 }

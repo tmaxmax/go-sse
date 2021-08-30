@@ -32,6 +32,6 @@ func (r RetryField) apply(e *Event) {
 	}
 }
 
-func (r RetryField) repr() []byte {
-	return r.buf
+func (r RetryField) repr() ([]byte, bool) {
+	return r.buf, true
 }

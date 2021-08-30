@@ -11,7 +11,7 @@ import (
 
 type field interface {
 	name() parser.FieldName
-	repr() []byte
+	repr() (p []byte, singleLine bool)
 
 	Option
 }

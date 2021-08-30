@@ -9,6 +9,9 @@ import (
 // It takes a string as its value, given that IDs can be of any value.
 //
 // Use strconv.Itoa if you want to use integer IDs.
+//
+// An ID cannot have multiple lines, ensure it does not contain any newline characters (\n or \r).
+// The library does not do any checks so if the condition is not met the protocol will be broken.
 type ID string
 
 func (i ID) name() parser.FieldName {
@@ -24,6 +27,6 @@ func (i ID) apply(e *Event) {
 	}
 }
 
-func (i ID) repr() []byte {
-	return util.Bytes(string(i))
+func (i ID) repr() ([]byte, bool) {
+	return util.Bytes(string(i)), true
 }

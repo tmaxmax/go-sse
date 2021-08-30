@@ -6,6 +6,8 @@ import (
 )
 
 // Name is the event field that sets the event's type.
+//
+// A Name cannot have multiple lines. Make sure this condition is met or the protocol will be broken.
 type Name string
 
 func (n Name) name() parser.FieldName {
@@ -21,6 +23,6 @@ func (n Name) apply(e *Event) {
 	}
 }
 
-func (n Name) repr() []byte {
-	return util.Bytes(string(n))
+func (n Name) repr() ([]byte, bool) {
+	return util.Bytes(string(n)), true
 }

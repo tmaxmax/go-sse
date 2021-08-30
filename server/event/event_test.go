@@ -10,7 +10,6 @@ import (
 	"github.com/tmaxmax/go-sse/internal/util"
 
 	"github.com/go-test/deep"
-	"github.com/kylelemons/godebug/diff"
 )
 
 func TestNewEvent(t *testing.T) {
@@ -49,7 +48,7 @@ func TestEvent_WriteTo(t *testing.T) {
 		Text("This is an example\nOf an event"),
 		ID("example_id"),
 		Retry(time.Second * 5),
-		Raw("raw bytes here"),
+		RawLine([]byte("raw bytes here")),
 		Name("test_event"),
 		Comment("This test should pass"),
 		Text("Important data\nImportant again\r\rVery important\r\n"),
@@ -74,7 +73,7 @@ func TestEvent_WriteTo(t *testing.T) {
 	got := util.EscapeNewlines(w.String())
 
 	if !reflect.DeepEqual(expected, got) {
-		t.Fatalf("Event written incorrectly:\n%v", diff.Diff(expected, got))
+		t.Fatalf("Event written incorrectly:\nexpected: %s\nreceived: %s", expected, got)
 	}
 }
 
@@ -91,5 +90,53 @@ func BenchmarkEvent_WriteTo(b *testing.B) {
 
 	for n := 0; n < b.N; n++ {
 		_, _ = benchmarkEvent.WriteTo(io.Discard)
+	}
+}
+
+var benchmarkText = []string{
+	"Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+	"Pellentesque at dui non quam faucibus ultricies.",
+	"Quisque non sem gravida, sodales lorem eget, lobortis est.",
+	"Quisque porttitor nunc eu mollis congue.",
+	"Vivamus sollicitudin tellus ut mi malesuada lacinia.",
+	"Aenean aliquet tortor non urna sodales dignissim.",
+	"Sed quis diam sed dui feugiat aliquam.",
+	"Etiam sit amet neque cursus, semper nibh non, ornare nunc.",
+	"Phasellus dignissim lacus vitae felis interdum, eget pharetra augue bibendum.",
+	"Sed euismod enim sed ante laoreet, non ullamcorper enim dapibus.",
+	"Ut accumsan arcu venenatis, egestas nisi consectetur, dignissim felis.",
+	"Praesent lacinia elit ut tristique molestie.",
+	"Mauris ut nibh id ante ultricies egestas.",
+	"Mauris porttitor augue quis maximus efficitur.",
+	"Fusce auctor enim viverra elit imperdiet, non dignissim dolor condimentum.",
+	"Fusce scelerisque quam vel erat tempor elementum.",
+	"Nullam ac velit in nisl hendrerit rhoncus sed ut dui.",
+	"Pellentesque laoreet arcu vitae commodo gravida.",
+	"Pellentesque sagittis enim quis sapien mollis tempor.",
+	"Phasellus fermentum leo vitae odio efficitur, eu lacinia enim elementum.",
+	"Morbi faucibus nisi a velit dictum eleifend.",
+}
+
+func BenchmarkEvent_WriteTo_text(b *testing.B) {
+	fields := make([]Option, 0, len(benchmarkText))
+	for _, t := range benchmarkText {
+		fields = append(fields, Text(t))
+	}
+	ev := New(fields...)
+
+	for n := 0; n < b.N; n++ {
+		_, _ = ev.WriteTo(io.Discard)
+	}
+}
+
+func BenchmarkEvent_WriteTo_line(b *testing.B) {
+	fields := make([]Option, 0, len(benchmarkText))
+	for _, t := range benchmarkText {
+		fields = append(fields, Line(t))
+	}
+	ev := New(fields...)
+
+	for n := 0; n < b.N; n++ {
+		_, _ = ev.WriteTo(io.Discard)
 	}
 }
