@@ -81,9 +81,34 @@ func New(provider ...Provider) *Server {
 	return s
 }
 
-// Handler is used to create a custom HTTP handler using the server's underlying provider.
-func (s *Server) Handler(f func(Provider) http.Handler) http.Handler {
-	return f(s.provider)
+type contextKey int
+
+const contextKeyProvider contextKey = iota
+
+// GetProvider tries to retrieve the provider stored in the given context, if any.
+// Use this function when implementing custom HTTP handlers.
+func GetProvider(ctx context.Context) Provider {
+	if p, ok := ctx.Value(contextKeyProvider).(Provider); ok {
+		return p
+	}
+	return nil
+}
+
+func setProvider(ctx context.Context, p Provider) context.Context {
+	return context.WithValue(ctx, contextKeyProvider, p)
+}
+
+// NewHandler is used to create a custom HTTP handler. It adds the server's underlying provider in
+// the request's context - retrieve it with GetProvider.
+func (s *Server) NewHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(setProvider(r.Context(), s.provider)))
+	})
+}
+
+// NewHandlerFunc is a convenience method that calls NewHandler with the given function.
+func (s *Server) NewHandlerFunc(h http.HandlerFunc) http.Handler {
+	return s.NewHandler(http.Handler(h))
 }
 
 // ServeHTTP implements a default HTTP handler for a server.
