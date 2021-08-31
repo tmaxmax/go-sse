@@ -7,7 +7,7 @@ import (
 )
 
 func EscapeNewlines(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, "\n", "\\n"), "\r", "\\r")
+	return strings.NewReplacer("\n", "\\n", "\r", "\\r").Replace(s)
 }
 
 func IsNewlineChar(b byte) bool {
