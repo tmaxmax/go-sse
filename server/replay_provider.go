@@ -35,22 +35,20 @@ type FiniteReplayProvider struct {
 	count int
 }
 
-func (f *FiniteReplayProvider) Put(message *Message) error {
+func (f *FiniteReplayProvider) Put(message *Message) {
 	if f.b.len() == f.count {
 		f.b.dequeue()
 	}
 
 	f.b.queue(message)
-
-	return nil
 }
 
 func (f *FiniteReplayProvider) GC() error { return nil }
 
-func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
+func (f *FiniteReplayProvider) Replay(subscription Subscription) {
 	events, err := f.b.slice(subscription.LastEventID)
 	if err != nil {
-		return err
+		return
 	}
 
 	for _, e := range events[1:] {
@@ -58,8 +56,6 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 			subscription.Channel <- e.Event
 		}
 	}
-
-	return nil
 }
 
 // ValidReplayProvider is a replay provider that replays all the valid (not expired) previous events.
@@ -67,10 +63,8 @@ type ValidReplayProvider struct {
 	b buffer
 }
 
-func (v *ValidReplayProvider) Put(message *Message) error {
+func (v *ValidReplayProvider) Put(message *Message) {
 	v.b.queue(message)
-
-	return nil
 }
 
 func (v *ValidReplayProvider) GC() error {
@@ -88,10 +82,10 @@ func (v *ValidReplayProvider) GC() error {
 	return nil
 }
 
-func (v *ValidReplayProvider) Replay(subscription Subscription) error {
+func (v *ValidReplayProvider) Replay(subscription Subscription) {
 	events, err := v.b.slice(subscription.LastEventID)
 	if err != nil {
-		return err
+		return
 	}
 
 	now := time.Now()
@@ -100,8 +94,6 @@ func (v *ValidReplayProvider) Replay(subscription Subscription) error {
 			subscription.Channel <- e.Event
 		}
 	}
-
-	return nil
 }
 
 var _ ReplayProvider = (*FiniteReplayProvider)(nil)
