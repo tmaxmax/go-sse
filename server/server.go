@@ -147,8 +147,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topic is optional - if none is specified, the event is published to the default topic.
-func (s *Server) Publish(e *event.Event, topic ...string) error {
-	msg := Message{Event: e}
+//
+// You can send any value that implements the event.Marshaler interface, for convenience. If marshalling
+// fails, the error is returned and nothing is sent.
+func (s *Server) Publish(m event.Marshaler, topic ...string) error {
+	msg := Message{Event: m.MarshalEvent()}
 	if len(topic) > 0 {
 		msg.Topic = topic[0]
 	}

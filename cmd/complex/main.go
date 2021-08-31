@@ -60,14 +60,7 @@ func main() {
 		for {
 			select {
 			case <-timer.C:
-				count := 1 + rand.Intn(5)
-				opts := []event.Option{event.TTL(time.Second * 30)}
-
-				for i := 0; i < count; i += 1 {
-					opts = append(opts, event.Text(strconv.FormatUint(rand.Uint64(), 10)))
-				}
-
-				_ = sse.Publish(event.New(opts...))
+				_ = sse.Publish(generateRandomNumbers())
 			case <-ctx.Done():
 				return
 			}
@@ -119,4 +112,32 @@ func runServer(ctx context.Context, s *http.Server) error {
 	}
 
 	return <-shutdownError
+}
+
+type randomNumbers struct {
+	numbers []uint64
+	ttl     time.Duration
+}
+
+func (r *randomNumbers) MarshalEvent() *event.Event {
+	var buf []byte
+
+	for _, n := range r.numbers {
+		buf = strconv.AppendUint(buf, n, 10)
+		buf = append(buf, '\n')
+	}
+
+	return event.New(event.Raw(buf), event.TTL(time.Second*30))
+}
+
+func generateRandomNumbers() *randomNumbers {
+	count := 1 + rand.Intn(5)
+
+	r := &randomNumbers{numbers: make([]uint64, 0, count)}
+
+	for i := 0; i < count; i++ {
+		r.numbers = append(r.numbers, rand.Uint64())
+	}
+
+	return r
 }
