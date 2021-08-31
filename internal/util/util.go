@@ -30,7 +30,11 @@ type unprefixedReader struct {
 // RemovePrefix returns a reader that removes the given prefix from the input.
 // If you want to remove a long prefix make sure you read using a buffer
 // sized equally to or greater than the prefix, otherwise an allocation will be made.
+// The function returns the given reader if the prefix is an empty string.
 func RemovePrefix(r io.Reader, prefix string) io.Reader {
+	if prefix == "" {
+		return r
+	}
 	return &unprefixedReader{
 		r:      r,
 		prefix: prefix,
