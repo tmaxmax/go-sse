@@ -45,13 +45,13 @@ func checkLine(p []byte) bool {
 
 // Line creates a data field that contains a single line of text.
 // Use it if you are sure your input doesn't span over multiple lines, as writing the field will be optimized.
-// If the input does not respect the rules (contains either \n or \r), a nil pointer is returned.
-func Line(s string) *LineField {
+// If the input does not respect the rules (contains either \n or \r),
+func Line(s string) (LineField, bool) {
 	if !checkLine(util.Bytes(s)) {
-		return nil
+		return LineField{}, false
 	}
 
-	return &LineField{s: s}
+	return LineField{s: s}, true
 }
 
 // LineField is a checked data field which contains a single line of text.
@@ -59,27 +59,27 @@ type LineField struct {
 	s string
 }
 
-func (s *LineField) name() parser.FieldName {
+func (s LineField) name() parser.FieldName {
 	return parser.FieldNameData
 }
 
-func (s *LineField) apply(e *Event) {
+func (s LineField) apply(e *Event) {
 	e.fields = append(e.fields, s)
 }
 
-func (s *LineField) repr() ([]byte, bool) {
+func (s LineField) repr() ([]byte, bool) {
 	return util.Bytes(s.s), true
 }
 
 // RawLine creates a data field that has a value without any newlines except possibly one at the end.
 // Use it if you are sure your input doesn't span over multiple lines, as writing the field will be optimized.
 // If the input does not respect the rules (contains either \n or \r), a nil pointer is returned.
-func RawLine(p []byte) *RawLineField {
+func RawLine(p []byte) (RawLineField, bool) {
 	if !checkLine(p) {
-		return nil
+		return RawLineField{}, false
 	}
 
-	return &RawLineField{buf: p}
+	return RawLineField{buf: p}, true
 }
 
 // RawLineField is a checked data field which contains a byte slice that can have only a single newline at the end.
@@ -87,14 +87,14 @@ type RawLineField struct {
 	buf []byte
 }
 
-func (r *RawLineField) name() parser.FieldName {
+func (r RawLineField) name() parser.FieldName {
 	return parser.FieldNameData
 }
 
-func (r *RawLineField) apply(e *Event) {
+func (r RawLineField) apply(e *Event) {
 	e.fields = append(e.fields, r)
 }
 
-func (r *RawLineField) repr() ([]byte, bool) {
+func (r RawLineField) repr() ([]byte, bool) {
 	return r.buf, true
 }

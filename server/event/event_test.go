@@ -1,6 +1,7 @@
 package event
 
 import (
+	"fmt"
 	"io"
 	"reflect"
 	"strings"
@@ -39,6 +40,24 @@ func TestNewEvent(t *testing.T) {
 	}
 }
 
+func mustRawLine(p []byte) RawLineField {
+	line, ok := RawLine(p)
+	if !ok {
+		panic(fmt.Sprintf("raw line field has multiple lines: %q", string(p)))
+	}
+
+	return line
+}
+
+func mustLine(s string) LineField {
+	line, ok := Line(s)
+	if !ok {
+		panic(fmt.Sprintf("line field has multiple lines: %q", s))
+	}
+
+	return line
+}
+
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
@@ -46,7 +65,7 @@ func TestEvent_WriteTo(t *testing.T) {
 		Text("This is an example\nOf an event"),
 		ID("example_id"),
 		Retry(time.Second * 5),
-		RawLine([]byte("raw bytes here")),
+		mustRawLine([]byte("raw bytes here")),
 		Name("test_event"),
 		Comment("This test should pass"),
 		Text("Important data\nImportant again\r\rVery important\r\n"),
@@ -130,7 +149,7 @@ func BenchmarkEvent_WriteTo_text(b *testing.B) {
 func BenchmarkEvent_WriteTo_line(b *testing.B) {
 	fields := make([]Option, 0, len(benchmarkText))
 	for _, t := range benchmarkText {
-		fields = append(fields, Line(t))
+		fields = append(fields, mustLine(t))
 	}
 	ev := New(fields...)
 

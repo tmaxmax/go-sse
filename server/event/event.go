@@ -123,7 +123,7 @@ loop:
 
 		switch f.Name {
 		case parser.FieldNameData:
-			pf = &LineField{s: string(f.Value)}
+			pf = LineField{s: string(f.Value)}
 		case parser.FieldNameEvent:
 			pf = Name(f.Value)
 		case parser.FieldNameID:
@@ -141,7 +141,7 @@ loop:
 				}
 			}
 
-			pf = &RetryField{buf: append(make([]byte, 0, len(f.Value)), f.Value...)}
+			pf = RetryField{buf: append(make([]byte, 0, len(f.Value)), f.Value...)}
 		default:
 			// event end
 			break loop
