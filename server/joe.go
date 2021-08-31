@@ -109,23 +109,30 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	sub.Topics = topics(sub.Topics)
 
 	go func() {
+		// We are also waiting on done here so if Joe is stopped but not the HTTP server that
+		// serves the request this goroutine isn't hanging.
 		select {
 		case <-ctx.Done():
 		case <-j.done:
 			return
 		}
 
+		// We are waiting on done here so the goroutine isn't blocked if Joe is stopped when
+		// this point is reached.
 		select {
 		case j.unsubscription <- sub.Channel:
 		case <-j.done:
 		}
 	}()
 
+	// Waiting on done ensures Subscribe behaves as required by the Provider interface
+	// if Stop was called. It also ensures Subscribe doesn't block if a new request arrives
+	// after Joe is stopped, which would otherwise result in a client waiting forever.
 	select {
 	case j.subscription <- sub:
 		return nil
 	case <-j.done:
-		return ErrJoeClosed
+		return ErrProviderClosed
 	}
 }
 
@@ -134,13 +141,19 @@ func (j *Joe) Publish(msg Message) error {
 	case j.message <- msg:
 		return nil
 	case <-j.done:
-		return ErrJoeClosed
+		return ErrProviderClosed
 	}
 }
 
 func (j *Joe) Stop() error {
-	close(j.done)
-	return nil
+	// Waiting on Stop here prevents double-closing and implements the required Provider behavior.
+	select {
+	case <-j.done:
+		return ErrProviderClosed
+	default:
+		close(j.done)
+		return nil
+	}
 }
 
 func (j *Joe) topic(identifier string) subscribers {
