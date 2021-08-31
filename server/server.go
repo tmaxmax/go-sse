@@ -116,11 +116,14 @@ func (s *Server) NewHandlerFunc(h http.HandlerFunc) http.Handler {
 // This handler upgrades the request, subscribes it to the server's provider and
 // starts sending incoming events to the client, while logging any write errors.
 //
-// If you need different behavior, use the Handler method.
+// If the request isn't upgradeable, it writes a message to the client along with
+// an 500 Internal Server Error response code.
+//
+// If you need different behavior, use the NewHandler or NewHandlerFunc methods.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn, err := NewConnection(w)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
 		return
 	}
 
