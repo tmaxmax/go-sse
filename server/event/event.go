@@ -189,6 +189,9 @@ func (e *Event) ExpiresAt() time.Time {
 
 // New creates a new event. It takes as parameters the event's desired fields and an expiry time configuration
 // (TTL or ExpiresAt). If no expiry time is specified, the event expires immediately.
+//
+// If multiple Retry, ID, or Name fields are passed, the value of the last one is set. Multiple Data fields
+// are all kept in the order they're passed.
 func New(options ...Option) *Event {
 	e := &Event{}
 	e.reset()
@@ -201,6 +204,10 @@ func New(options ...Option) *Event {
 }
 
 // From creates a new event using the provided one as a base. It does not modify the base event.
+// It is mostly intended to be used by replay providers that set IDs for events, but can serve
+// any other use case where adding or modifying event fields is necessary.
+//
+// Fields are added or set the same way New does.
 func From(base *Event, options ...Option) *Event {
 	e := &Event{
 		nameIndex:  base.nameIndex,
