@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 
@@ -15,6 +16,8 @@ type Subscription struct {
 	// method returned.
 	//
 	// Subsequent subscriptions that use the same channel are ignored by providers.
+	//
+	// Only the provider is allowed to close this channel. Closing it yourself may cause the program to panic!
 	Channel chan<- *event.Event
 	// The topics to receive message from. If no topic is specified, a default topic is implied.
 	Topics []string
@@ -35,8 +38,11 @@ type Message struct {
 // A Provider is a publish-subscribe system that can be used to implement a HTML5 server-sent events
 // protocol. A standard interface is required so HTTP request handlers are agnostic to the provider's implementation.
 //
-// Read the documentation for the provider implementation you are using to see the errors that the provider
-// can return, as they are implementation specific.
+// Providers are required to be thread-safe.
+//
+// After Stop is called, trying to call any method of the provider must return ErrProviderClosed. The providers
+// may return other implementation-specific errors too, but the close error is guaranteed to be the same across
+// providers.
 type Provider interface {
 	// Subscribe to the provider. The context is used to remove the subscription automatically
 	// when the subscriber stops receiving messages.
@@ -46,14 +52,19 @@ type Provider interface {
 	// Stop the provider. Calling Stop will clean up all the provider's resources and
 	// make Subscribe and Publish fail with an error. All the subscription channels will be
 	// closed and any ongoing publishes will be aborted.
+	//
+	// Calling Stop multiple times does nothing but return ErrProviderClosed.
 	Stop() error
 }
+
+var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 
 // DefaultTopic is the identifier for the topic that is implied when no topics are specified for a Subscription
 // or a Message. Providers are required to implement this behavior to ensure handlers don't break if providers
 // are changed.
 const DefaultTopic = ""
 
+// A Server is a convenience wrapper around a provider.
 type Server struct {
 	provider Provider
 }
