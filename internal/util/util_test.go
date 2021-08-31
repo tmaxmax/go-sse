@@ -197,6 +197,7 @@ func BenchmarkRemovePrefix(b *testing.B) {
 		{name: "No prefix, big buffer", prefix: benchmarkPrefixNotMatching},
 		{name: "With prefix, small buffer", prefix: benchmarkPrefixMatching, bufferSize: 64},
 		{name: "No prefix, small buffer", prefix: benchmarkPrefixNotMatching, bufferSize: 64},
+		{name: "No removal"},
 	}
 
 	for _, benchmark := range benchmarks {
