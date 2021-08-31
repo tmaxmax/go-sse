@@ -70,7 +70,7 @@ func (r *ReaderParser) Err() error {
 }
 
 func NewReaderParser(r io.Reader) *ReaderParser {
-	sc := bufio.NewScanner(r)
+	sc := bufio.NewScanner(util.RemovePrefix(r, "\xEF\xBB\xBF"))
 	sc.Split(splitFunc)
 
 	return &ReaderParser{sc: sc, p: NewByteParser(nil)}
