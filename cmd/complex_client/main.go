@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/big"
 	"net/http"
@@ -11,10 +12,12 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/tmaxmax/go-sse/cmd/common"
+
 	"github.com/tmaxmax/go-sse/client"
 )
 
-var p = log.New(os.Stdout, "", 0)
+var w = common.NewConcurrentWriter(os.Stdout)
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -29,7 +32,7 @@ func main() {
 
 		<-ch
 
-		p.Println("Server closed!")
+		fmt.Fprintln(w, "Server closed!")
 
 		cancel()
 	}()
@@ -47,14 +50,16 @@ func main() {
 				sum = sum.Add(sum, big.NewInt(v))
 			}
 
-			p.Printf("Sum of random numbers: %s\n", sum)
+			fmt.Fprintf(w, "Sum of random numbers: %s\n", sum)
 		}
 	}()
 
 	go receiveMetric(conn, "ops")
 	go receiveMetric(conn, "cycles")
 
-	log.Println(conn.Connect())
+	if err := conn.Connect(); err != nil && !common.IsContextError(err) {
+		log.Println(err)
+	}
 }
 
 func receiveMetric(c *client.Connection, metric string) {
@@ -64,6 +69,6 @@ func receiveMetric(c *client.Connection, metric string) {
 	for ev := range ch {
 		v, _ := strconv.ParseInt(ev.String(), 10, 64)
 
-		p.Printf("Metric %s: %d\n", metric, v)
+		fmt.Fprintf(w, "Metric %s: %d\n", metric, v)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/tmaxmax/go-sse/client"
+	"github.com/tmaxmax/go-sse/cmd/common"
 )
 
 func main() {
@@ -22,5 +23,7 @@ func main() {
 		}
 	}()
 
-	log.Println(conn.Connect())
+	if err := conn.Connect(); err != nil && !common.IsContextError(err) {
+		log.Println(err)
+	}
 }
