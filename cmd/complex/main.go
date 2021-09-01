@@ -109,7 +109,6 @@ func runServer(ctx context.Context, s *http.Server) error {
 
 type randomNumbers struct {
 	numbers []uint64
-	ttl     time.Duration
 }
 
 func (r *randomNumbers) MarshalEvent() *event.Event {
