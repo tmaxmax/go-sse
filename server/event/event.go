@@ -103,6 +103,10 @@ func (u *UnmarshalError) Error() string {
 	return fmt.Sprintf("unmarshal event error, %s field invalid: %s. contents: %s", u.FieldName, u.Reason.Error(), u.FieldValue)
 }
 
+func (u *UnmarshalError) Unwrap() error {
+	return u.Reason
+}
+
 // UnmarshalText extracts the first event found in the given byte slice into the
 // receiver. The receiver is always reset to the event's default value before unmarshaling,
 // so always use a new Event instance if you don't want to overwrite data.
