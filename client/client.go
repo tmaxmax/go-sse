@@ -24,11 +24,11 @@ func (c *Client) NewConnection(r *http.Request) *Connection {
 		c:                DefaultClient.HTTPClient,
 		r:                r,
 		subscribers:      map[eventName]map[subscriber]struct{}{},
+		subscribersAll:   map[subscriber]struct{}{},
 		event:            make(chan *Event, 1),
 		subscribe:        make(chan subscription),
 		unsubscribe:      make(chan subscription),
 		done:             make(chan struct{}),
-		runDone:          make(chan struct{}),
 		reconnectionTime: &eb.InitialInterval,
 		onRetry:          DefaultClient.OnRetry,
 	}

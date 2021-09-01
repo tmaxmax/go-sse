@@ -16,58 +16,49 @@ import (
 	"github.com/tmaxmax/go-sse/cmd/common"
 )
 
-var w = common.NewConcurrentWriter(os.Stdout)
-
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/events", nil)
 	conn := client.NewConnection(r)
+	done := make(chan struct{})
 
 	go func() {
-		ch := make(chan *client.Event)
-		conn.SubscribeEvent("close", ch)
-
-		<-ch
-
-		fmt.Fprintln(w, "Server closed!")
-
-		cancel()
-	}()
-
-	go func() {
-		ch := make(chan *client.Event)
-		conn.SubscribeMessages(ch)
+		ch := make(chan *client.Event, 1)
+		conn.SubscribeToAll(ch)
 
 		for ev := range ch {
-			numbers := strings.Split(ev.String(), "\n")
-			sum := big.NewInt(0)
+			switch ev.Name {
+			case "cycles", "ops":
+				handleMetric(ev.Name, ev.String())
+			case "close":
+				fmt.Println("Server closed!")
+				cancel()
+			default: // no event name
+				numbers := strings.Split(ev.String(), "\n")
+				sum := big.NewInt(0)
 
-			for _, n := range numbers {
-				v, _ := strconv.ParseInt(n, 10, 64)
-				sum = sum.Add(sum, big.NewInt(v))
+				for _, n := range numbers {
+					v, _ := strconv.ParseInt(n, 10, 64)
+					sum = sum.Add(sum, big.NewInt(v))
+				}
+
+				fmt.Printf("Sum of random numbers: %s\n", sum)
 			}
-
-			fmt.Fprintf(w, "Sum of random numbers: %s\n", sum)
 		}
-	}()
 
-	go receiveMetric(conn, "ops")
-	go receiveMetric(conn, "cycles")
+		close(done)
+	}()
 
 	if err := conn.Connect(); err != nil && !common.IsContextError(err) {
 		log.Println(err)
 	}
+
+	<-done
 }
 
-func receiveMetric(c *client.Connection, metric string) {
-	ch := make(chan *client.Event)
-	c.SubscribeEvent(metric, ch)
-
-	for ev := range ch {
-		v, _ := strconv.ParseInt(ev.String(), 10, 64)
-
-		fmt.Fprintf(w, "Metric %s: %d\n", metric, v)
-	}
+func handleMetric(metric string, value string) {
+	v, _ := strconv.ParseInt(value, 10, 64)
+	fmt.Printf("Metric %s: %d\n", metric, v)
 }

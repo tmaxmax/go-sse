@@ -19,6 +19,7 @@ type eventName = string
 type subscription struct {
 	event      eventName
 	subscriber subscriber
+	all        bool
 }
 
 type Connection struct {
@@ -28,24 +29,24 @@ type Connection struct {
 	backoff backoff.BackOff
 	onRetry backoff.Notify
 
-	subscribers map[eventName]map[subscriber]struct{}
+	subscribers    map[eventName]map[subscriber]struct{}
+	subscribersAll map[subscriber]struct{}
 
 	event       chan *Event
 	subscribe   chan subscription
 	unsubscribe chan subscription
 	done        chan struct{}
-	runDone     chan struct{}
 
 	lastEventID      string
 	reconnectionTime *time.Duration
 }
 
 func (c *Connection) SubscribeMessages(ch chan<- *Event) {
-	c.subscribe <- subscription{"", ch}
+	c.subscribe <- subscription{"", ch, false}
 }
 
 func (c *Connection) UnsubscribeMessages(ch chan<- *Event) {
-	c.unsubscribe <- subscription{"", ch}
+	c.unsubscribe <- subscription{"", ch, false}
 }
 
 func (c *Connection) SubscribeEvent(name string, ch chan<- *Event) {
@@ -53,7 +54,7 @@ func (c *Connection) SubscribeEvent(name string, ch chan<- *Event) {
 		panic("go-sse.client.SubscribeEvent: name cannot be empty")
 	}
 
-	c.subscribe <- subscription{name, ch}
+	c.subscribe <- subscription{name, ch, false}
 }
 
 func (c *Connection) UnsubscribeEvent(name string, ch chan<- *Event) {
@@ -61,7 +62,31 @@ func (c *Connection) UnsubscribeEvent(name string, ch chan<- *Event) {
 		panic("go-sse.client.UnsubscribeEvent: name cannot be empty")
 	}
 
-	c.unsubscribe <- subscription{name, ch}
+	c.unsubscribe <- subscription{name, ch, false}
+}
+
+func (c *Connection) SubscribeToAll(ch chan<- *Event) {
+	c.subscribe <- subscription{"", ch, true}
+}
+
+func (c *Connection) UnsubscribeFromAll(ch chan<- *Event) {
+	c.subscribe <- subscription{"", ch, true}
+}
+
+func (c *Connection) addSubscriberToAll(ch chan<- *Event) {
+	for _, subs := range c.subscribers {
+		delete(subs, ch)
+	}
+
+	c.subscribersAll[ch] = struct{}{}
+}
+
+func (c *Connection) removeSubscriberToAll(ch chan<- *Event) {
+	for _, subs := range c.subscribers {
+		delete(subs, ch)
+	}
+
+	delete(c.subscribersAll, ch)
 }
 
 func (c *Connection) addSubscriber(event string, ch chan<- *Event) {
@@ -109,8 +134,9 @@ func (c *Connection) closeSubscribers() {
 			closed[s] = struct{}{}
 		}
 	}
-
-	close(c.runDone)
+	for sub := range c.subscribersAll {
+		close(sub)
+	}
 }
 
 func (c *Connection) run() {
@@ -122,10 +148,21 @@ func (c *Connection) run() {
 			for s := range c.subscribers[e.Name] {
 				s <- e
 			}
+			for s := range c.subscribersAll {
+				s <- e
+			}
 		case s := <-c.subscribe:
-			c.addSubscriber(s.event, s.subscriber)
+			if s.all {
+				c.addSubscriberToAll(s.subscriber)
+			} else {
+				c.addSubscriber(s.event, s.subscriber)
+			}
 		case s := <-c.unsubscribe:
-			c.removeSubscriber(s.event, s.subscriber)
+			if s.all {
+				c.removeSubscriberToAll(s.subscriber)
+			} else {
+				c.removeSubscriber(s.event, s.subscriber)
+			}
 		case <-c.done:
 			return
 		}
@@ -208,8 +245,6 @@ loop:
 }
 
 func (c *Connection) Connect() error {
-	err := backoff.RetryNotify(c.read, c.backoff, c.onRetry)
-	close(c.done)
-	<-c.runDone
-	return err
+	defer close(c.done)
+	return backoff.RetryNotify(c.read, c.backoff, c.onRetry)
 }
