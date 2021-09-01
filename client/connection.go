@@ -34,6 +34,7 @@ type Connection struct {
 	subscribe   chan subscription
 	unsubscribe chan subscription
 	done        chan struct{}
+	runDone     chan struct{}
 
 	lastEventID      string
 	reconnectionTime *time.Duration
@@ -108,6 +109,8 @@ func (c *Connection) closeSubscribers() {
 			closed[s] = struct{}{}
 		}
 	}
+
+	close(c.runDone)
 }
 
 func (c *Connection) run() {
@@ -205,6 +208,8 @@ loop:
 }
 
 func (c *Connection) Connect() error {
-	defer close(c.done)
-	return backoff.RetryNotify(c.read, c.backoff, c.onRetry)
+	err := backoff.RetryNotify(c.read, c.backoff, c.onRetry)
+	close(c.done)
+	<-c.runDone
+	return err
 }

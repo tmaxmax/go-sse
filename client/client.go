@@ -28,6 +28,7 @@ func (c *Client) NewConnection(r *http.Request) *Connection {
 		subscribe:        make(chan subscription),
 		unsubscribe:      make(chan subscription),
 		done:             make(chan struct{}),
+		runDone:          make(chan struct{}),
 		reconnectionTime: &eb.InitialInterval,
 		onRetry:          DefaultClient.OnRetry,
 	}
