@@ -21,6 +21,10 @@ func Bytes(s string) []byte {
 	)[:len(s):len(s)]
 }
 
+func String(p []byte) string {
+	return *(*string)(unsafe.Pointer(&p))
+}
+
 type unprefixedReader struct {
 	r      io.Reader
 	prefix string
