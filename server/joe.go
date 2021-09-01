@@ -81,9 +81,9 @@ type subscriber = chan<- *event.Event
 type subscribers = map[subscriber]struct{}
 
 // Joe is a basic server provider that synchronously executes operations by queueing them in channels.
-// Events are also sent synchronously to subscribers, but Joe doesn't wait for the subscribers to have
-// received the events - if a subscriber's channel is not ready to receive, it skips that subscriber.
-// You can configure Joe to also wait for a fixed duration before skipping.
+// Events are also sent synchronously to subscribers, and Joe waits for them to be received - if a
+// subscriber is misbehaving Joe might wait forever! Make sure the subscription channels are always
+// open for receiving.
 //
 // Joe supports event replaying with the help of a replay provider. As operations are executed
 // synchronously, it is guaranteed that no new events will be omitted from sending to a new subscriber
@@ -101,7 +101,6 @@ type Joe struct {
 	done           chan struct{}
 	gc             <-chan time.Time
 	stopGC         func()
-	send           sendFunction
 	topics         map[string]subscribers
 	subscribers    subscribers
 	replay         ReplayProvider
@@ -120,10 +119,6 @@ type JoeConfig struct {
 	// An optional interval at which Joe triggers a cleanup of expired messages, if the replay provider supports it.
 	// See the desired provider's documentation to determine if periodic cleanup is necessary.
 	ReplayGCInterval time.Duration
-	// An optional value that represents the duration that Joe will wait for an event to be received by a connection.
-	// It is 0 by default. This shouldn't be a concern and if it is other providers might be suited better for your
-	// use-case.
-	SendTimeout time.Duration
 }
 
 // NewJoe creates and starts a Joe.
@@ -131,7 +126,6 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 	config := joeConfig(configuration)
 
 	gc, stopGCTicker := ticker(config.ReplayGCInterval)
-	send, stopSendTimer := sendFn(config.SendTimeout)
 
 	j := &Joe{
 		message:        make(chan Message, config.MessageChannelBuffer),
@@ -140,7 +134,6 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 		done:           make(chan struct{}),
 		gc:             gc,
 		stopGC:         stopGCTicker,
-		send:           send,
 		topics:         map[string]subscribers{},
 		subscribers:    subscribers{},
 		replay:         config.ReplayProvider,
@@ -148,7 +141,6 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 
 	go func() {
 		defer stopGCTicker()
-		defer stopSendTimer()
 
 		j.start()
 	}()
@@ -227,7 +219,7 @@ func (j *Joe) start() {
 			j.replay.Put(&msg)
 
 			for sub := range j.topics[msg.Topic] {
-				j.send(sub, msg.Event)
+				sub <- msg.Event
 			}
 		case sub := <-j.subscription:
 			if _, ok := j.subscribers[sub.Channel]; ok {

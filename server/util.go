@@ -2,8 +2,6 @@ package server
 
 import (
 	"time"
-
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 // topics returns a slice containing the default topic if no topics are given.
@@ -25,39 +23,6 @@ func ticker(duration time.Duration) (<-chan time.Time, func()) {
 	}
 	t := time.NewTicker(duration)
 	return t.C, t.Stop
-}
-
-type sendFunction = func(sub subscriber, event *event.Event)
-
-var defaultSendFn = func(sub subscriber, event *event.Event) {
-	select {
-	case sub <- event:
-	default:
-	}
-}
-
-func sendFn(timeout time.Duration) (sendFunction, func()) {
-	if timeout <= 0 {
-		return defaultSendFn, noop
-	}
-
-	timer := time.NewTimer(0)
-	send := func(sub subscriber, event *event.Event) {
-		if !timer.Stop() {
-			<-timer.C
-		}
-		timer.Reset(timeout)
-
-		select {
-		case sub <- event:
-		case <-timer.C:
-		}
-	}
-	stop := func() {
-		timer.Stop()
-	}
-
-	return send, stop
 }
 
 // joeConfig takes the NewJoe function's input and returns a valid configuration.
