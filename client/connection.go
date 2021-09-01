@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -23,8 +24,9 @@ type subscription struct {
 }
 
 type Connection struct {
-	c *http.Client
-	r *http.Request
+	c       *http.Client
+	r       *http.Request
+	isRetry bool
 
 	backoff backoff.BackOff
 	onRetry backoff.Notify
@@ -169,14 +171,53 @@ func (c *Connection) run() {
 	}
 }
 
-func (c *Connection) read() error {
-	r := c.r.Clone(c.r.Context())
-	r.Header.Set("Accept", "text/event-stream")
-	r.Header.Set("Cache-Control", "no-cache")
-	r.Header.Set("Connection", "keep-alive")
+var ErrNoGetBody = errors.New("go-sse.client: can't retry request, GetBody not present")
+
+func (c *Connection) req() (*http.Request, error) {
+	if !c.isRetry {
+		c.isRetry = true
+
+		h := c.r.Header.Clone()
+		h.Set("Accept", "text/event-stream")
+		h.Set("Cache-Control", "no-cache")
+		h.Set("Connection", "keep-alive")
+
+		r := *c.r
+		r.Header = h
+		c.r = &r
+
+		return c.r, nil
+	}
 
 	if c.lastEventID != "" {
-		r.Header.Set("Last-Event-ID", c.lastEventID)
+		c.r.Header.Set("Last-Event-ID", c.lastEventID)
+	} else if c.r.Header.Get("Last-Event-ID") != "" {
+		c.r.Header.Set("Last-Event-ID", "")
+	}
+
+	if c.r.Body == nil {
+		return c.r, nil
+	}
+
+	if c.r.GetBody == nil {
+		return nil, ErrNoGetBody
+	}
+
+	body, err := c.r.GetBody()
+	if err != nil {
+		return nil, err
+	}
+
+	r := *c.r
+	r.Body = body
+
+	return &r, nil
+}
+
+func (c *Connection) read() error {
+	r, err := c.req()
+	if err != nil {
+		return backoff.Permanent(err)
 	}
 
 	res, err := c.c.Do(r)
