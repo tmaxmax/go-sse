@@ -192,7 +192,7 @@ func (c *Connection) req() (*http.Request, error) {
 	if c.lastEventID != "" {
 		c.r.Header.Set("Last-Event-ID", c.lastEventID)
 	} else if c.r.Header.Get("Last-Event-ID") != "" {
-		c.r.Header.Set("Last-Event-ID", "")
+		c.r.Header.Del("Last-Event-ID")
 	}
 
 	if c.r.Body == nil {
