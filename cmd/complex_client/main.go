@@ -12,9 +12,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/tmaxmax/go-sse/cmd/common"
-
 	"github.com/tmaxmax/go-sse/client"
+	"github.com/tmaxmax/go-sse/cmd/common"
 )
 
 var w = common.NewConcurrentWriter(os.Stdout)
