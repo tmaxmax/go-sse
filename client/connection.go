@@ -2,9 +2,8 @@ package client
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -142,7 +141,11 @@ func (c *Connection) read() error {
 
 	res, err := c.c.Do(r)
 	if err != nil {
-		return err
+		ue := err.(*url.Error)
+		if ue.Temporary() {
+			return ue
+		}
+		return backoff.Permanent(ue)
 	}
 	defer res.Body.Close()
 
@@ -198,12 +201,7 @@ loop:
 		}
 	}
 
-	err = p.Err()
-
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return nil
-	}
-	return err
+	return p.Err()
 }
 
 func (c *Connection) Connect() error {
