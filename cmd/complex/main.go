@@ -18,15 +18,8 @@ import (
 var sse = server.New()
 
 func main() {
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancelSignal := make(chan os.Signal, 1)
-	signal.Notify(cancelSignal, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-cancelSignal
-		cancel()
-	}()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
