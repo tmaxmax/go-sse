@@ -7,8 +7,10 @@ import (
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
-var newline = []byte{'\n'}
-var colon = []byte{':', ' '}
+var (
+	newline = []byte{'\n'}
+	colon   = []byte{':', ' '}
+)
 
 type fieldWriter struct {
 	w io.Writer

@@ -41,7 +41,7 @@ func Snapshot() map[string]int64 {
 	return snapshot
 }
 
-var SnapshotHTTPEndpoint http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+var SnapshotHTTPEndpoint http.HandlerFunc = func(w http.ResponseWriter, _ *http.Request) {
 	payload, err := json.MarshalIndent(Snapshot(), "", "  ")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

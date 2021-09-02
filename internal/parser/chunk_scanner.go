@@ -8,7 +8,7 @@ import "github.com/tmaxmax/go-sse/internal/util"
 //
 // chunk.data is nil only if s is nil. if there is no data left, remaining is
 // nil only if chunk does not end in a newline. It has length 0 otherwise.
-func nextChunk(s []byte) (chunk []byte, remaining []byte) {
+func nextChunk(s []byte) (chunk, remaining []byte) {
 	// if no line ending is found, chunk is s
 	chunk = s
 
@@ -18,11 +18,11 @@ func nextChunk(s []byte) (chunk []byte, remaining []byte) {
 	for i < l {
 		b := s[i]
 
-		i += 1
+		i++
 
 		if util.IsNewlineChar(b) {
 			if b == '\r' && i < l && s[i] == '\n' {
-				i += 1
+				i++
 			}
 
 			chunk = s[:i]
