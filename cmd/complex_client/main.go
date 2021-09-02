@@ -58,7 +58,7 @@ func main() {
 	<-done
 }
 
-func handleMetric(metric string, value string) {
+func handleMetric(metric, value string) {
 	v, _ := strconv.ParseInt(value, 10, 64)
 	fmt.Printf("Metric %s: %d\n", metric, v)
 }

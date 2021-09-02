@@ -95,8 +95,8 @@ func (b *bufferAutoID) slice(at event.ID) ([]Message, error) {
 	return b.buf[index:], nil
 }
 
-func getBuffer(autoIDs bool, cap int) buffer {
-	base := bufferBase{buf: make([]Message, 0, cap)}
+func getBuffer(autoIDs bool, capacity int) buffer {
+	base := bufferBase{buf: make([]Message, 0, capacity)}
 	if autoIDs {
 		return &bufferAutoID{bufferBase: base}
 	}

@@ -27,7 +27,7 @@ func TestSplitFunc(t *testing.T) {
 	}
 
 	if s.Err() != nil {
-		t.Fatalf("an error occured: %v", s.Err())
+		t.Fatalf("an error occurred: %v", s.Err())
 	}
 
 	if !reflect.DeepEqual(tokens, expected) {

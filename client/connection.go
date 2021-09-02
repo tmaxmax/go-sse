@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-
 	"github.com/tmaxmax/go-sse/internal/parser"
 	"github.com/tmaxmax/go-sse/internal/util"
 )
 
-type subscriber = chan<- *Event
-type eventName = string
+type (
+	subscriber = chan<- *Event
+	eventName  = string
+)
 
 type subscription struct {
 	event      eventName
@@ -222,7 +223,7 @@ func (c *Connection) read() error {
 
 	res, err := c.c.Do(r)
 	if err != nil {
-		ue := err.(*url.Error)
+		ue := err.(*url.Error) //nolint:errorlint // it is guaranteed to have this type
 		if ue.Temporary() {
 			return ue
 		}

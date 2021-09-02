@@ -17,7 +17,7 @@ func noop() {}
 
 // ticker creates a time.Ticker, if duration is positive, and returns its channel and stop function.
 // If the duration is negative, it returns a nil channel and a noop function.
-func ticker(duration time.Duration) (<-chan time.Time, func()) {
+func ticker(duration time.Duration) (ticks <-chan time.Time, stop func()) {
 	if duration <= 0 {
 		return nil, noop
 	}

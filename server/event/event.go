@@ -113,7 +113,7 @@ func (u *UnmarshalError) Unwrap() error {
 // Unmarshaling ignores comments and fields with invalid names. If no valid fields are found,
 // an error is returned.
 //
-// All returned errors are of type UnmarshalError
+// All returned errors are of type UnmarshalError.
 func (e *Event) UnmarshalText(b []byte) error {
 	e.reset()
 

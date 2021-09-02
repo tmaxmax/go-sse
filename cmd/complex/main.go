@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"math/rand"
 	"net/http"
@@ -22,7 +23,7 @@ func main() {
 	defer cancel()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/stop", func(w http.ResponseWriter, _ *http.Request) {
 		cancel()
 		w.WriteHeader(http.StatusOK)
 	})
@@ -100,7 +101,7 @@ func runServer(ctx context.Context, s *http.Server) error {
 		shutdownError <- s.Shutdown(sctx)
 	}()
 
-	if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := s.ListenAndServe(); err != nil && errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 

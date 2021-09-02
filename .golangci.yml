@@ -1,0 +1,68 @@
+linters:
+  enable:
+    - deadcode
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - structcheck
+    - typecheck
+    - unused
+    - varcheck
+    # - cyclop
+    - dogsled
+    - dupl
+    - errcheck
+    - errorlint
+    - exhaustive
+    - gci
+    # - gocognit
+    - nestif
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gofmt
+    - gofumpt
+    - goheader
+    - goimports
+    - gomoddirectives
+    - gomodguard
+    - gosec
+    - gosimple
+    - govet
+    - depguard
+    - ifshort
+    - importas
+    - makezero
+    - misspell
+    # - prealloc
+    - promlinter
+    - predeclared
+    - nolintlint
+    - rowserrcheck
+    - revive
+    - staticcheck
+    - stylecheck
+    - tagliatelle
+    - thelper
+    - unparam
+    - unused
+    - whitespace
+    # - wrapcheck
+linters-settings:
+  gosec:
+    excludes:
+      - G404
+  gocritic:
+    disabled-checks:
+      - ifElseChain
+    enabled-tags:
+      - performance
+      - diagnostic
+      - experimental
+      - opinionated
+  nestif:
+    min-complexity: 8

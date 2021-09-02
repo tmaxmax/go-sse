@@ -96,5 +96,7 @@ func (v *ValidReplayProvider) Replay(subscription Subscription) {
 	}
 }
 
-var _ ReplayProvider = (*FiniteReplayProvider)(nil)
-var _ ReplayProvider = (*ValidReplayProvider)(nil)
+var (
+	_ ReplayProvider = (*FiniteReplayProvider)(nil)
+	_ ReplayProvider = (*ValidReplayProvider)(nil)
+)

@@ -18,7 +18,7 @@ type Connection struct {
 	w writeFlusher
 }
 
-// Send sends the given event to the client. It returns any errors that occurred while writing the event
+// Send sends the given event to the client. It returns any errors that occurred while writing the event.
 func (c *Connection) Send(e *event.Event) error {
 	_, err := e.WriteTo(c.w)
 	c.w.Flush()

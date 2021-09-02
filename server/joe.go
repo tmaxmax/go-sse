@@ -77,8 +77,10 @@ func (e *ReplayError) Error() string {
 	return fmt.Sprintf("server.replay.Provider: ID %q does not exist", e.id)
 }
 
-type subscriber = chan<- *event.Event
-type subscribers = map[subscriber]struct{}
+type (
+	subscriber  = chan<- *event.Event
+	subscribers = map[subscriber]struct{}
+)
 
 // Joe is a basic server provider that synchronously executes operations by queueing them in channels.
 // Events are also sent synchronously to subscribers, and Joe waits for them to be received - if a
