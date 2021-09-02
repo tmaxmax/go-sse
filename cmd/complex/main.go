@@ -101,7 +101,7 @@ func runServer(ctx context.Context, s *http.Server) error {
 		shutdownError <- s.Shutdown(sctx)
 	}()
 
-	if err := s.ListenAndServe(); err != nil && errors.Is(err, http.ErrServerClosed) {
+	if err := s.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 
