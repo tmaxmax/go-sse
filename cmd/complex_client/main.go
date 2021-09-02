@@ -21,27 +21,23 @@ func main() {
 	defer cancel()
 
 	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/events", nil)
-	conn := client.NewConnection(r)
-	done := make(chan struct{})
+	conn, done, events := client.NewConnection(r), make(chan struct{}), make(chan *client.Event, 1)
+
+	conn.SubscribeToAll(events)
 
 	go func() {
-		ch := make(chan *client.Event, 1)
-		conn.SubscribeToAll(ch)
-
-		for ev := range ch {
-			switch ev.Name {
+		for event := range events {
+			switch event.Name {
 			case "cycles", "ops":
-				handleMetric(ev.Name, ev.String())
+				fmt.Printf("Metric %s: %s\n", event.Name, event)
 			case "close":
 				fmt.Println("Server closed!")
 				cancel()
 			default: // no event name
-				numbers := strings.Split(ev.String(), "\n")
 				sum := big.NewInt(0)
-
-				for _, n := range numbers {
+				for _, n := range strings.Split(event.String(), "\n") {
 					v, _ := strconv.ParseInt(n, 10, 64)
-					sum = sum.Add(sum, big.NewInt(v))
+					sum.Add(sum, big.NewInt(v))
 				}
 
 				fmt.Printf("Sum of random numbers: %s\n", sum)
@@ -56,9 +52,4 @@ func main() {
 	}
 
 	<-done
-}
-
-func handleMetric(metric, value string) {
-	v, _ := strconv.ParseInt(value, 10, 64)
-	fmt.Printf("Metric %s: %d\n", metric, v)
 }
