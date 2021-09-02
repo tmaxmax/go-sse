@@ -44,31 +44,23 @@ import (
 // any newline characters (\n or \n) and create a data field using the Line or RawLine functions with the encoded output.
 type Raw []byte
 
-func (r Raw) name() parser.FieldName {
-	return parser.FieldNameData
-}
-
 func (r Raw) apply(e *Event) {
 	e.fields = append(e.fields, r)
 }
 
-func (r Raw) repr() ([]byte, bool) {
-	return r, false
+func (r Raw) repr() ([]byte, []byte, bool) {
+	return fieldBytesData, r, false
 }
 
 // Text is a data payload consisting of a UTF-8 encoded string.
 type Text string
 
-func (t Text) name() parser.FieldName {
-	return parser.FieldNameData
-}
-
 func (t Text) apply(e *Event) {
 	e.fields = append(e.fields, t)
 }
 
-func (t Text) repr() ([]byte, bool) {
-	return util.Bytes(string(t)), false
+func (t Text) repr() ([]byte, []byte, bool) {
+	return fieldBytesData, util.Bytes(string(t)), false
 }
 
 func checkLine(p []byte) bool {
@@ -108,16 +100,12 @@ type LineField struct {
 	s string
 }
 
-func (s LineField) name() parser.FieldName {
-	return parser.FieldNameData
-}
-
 func (s LineField) apply(e *Event) {
 	e.fields = append(e.fields, s)
 }
 
-func (s LineField) repr() ([]byte, bool) {
-	return util.Bytes(s.s), true
+func (s LineField) repr() ([]byte, []byte, bool) {
+	return fieldBytesData, util.Bytes(s.s), true
 }
 
 // RawLine creates a data field that is guaranteed to not have any newline sequences (\n, \r\n or \r).
@@ -150,14 +138,10 @@ type RawLineField struct {
 	buf []byte
 }
 
-func (r RawLineField) name() parser.FieldName {
-	return parser.FieldNameData
-}
-
 func (r RawLineField) apply(e *Event) {
 	e.fields = append(e.fields, r)
 }
 
-func (r RawLineField) repr() ([]byte, bool) {
-	return r.buf, true
+func (r RawLineField) repr() ([]byte, []byte, bool) {
+	return fieldBytesData, r.buf, true
 }

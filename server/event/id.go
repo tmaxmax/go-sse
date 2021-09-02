@@ -1,7 +1,6 @@
 package event
 
 import (
-	"github.com/tmaxmax/go-sse/internal/parser"
 	"github.com/tmaxmax/go-sse/internal/util"
 )
 
@@ -15,10 +14,6 @@ import (
 // The library does not do any checks so if the condition is not met the protocol will be broken.
 type ID string
 
-func (i ID) name() parser.FieldName {
-	return parser.FieldNameID
-}
-
 func (i ID) apply(e *Event) {
 	if e.idIndex == -1 {
 		e.idIndex = len(e.fields)
@@ -28,6 +23,6 @@ func (i ID) apply(e *Event) {
 	}
 }
 
-func (i ID) repr() ([]byte, bool) {
-	return util.Bytes(string(i)), true
+func (i ID) repr() ([]byte, []byte, bool) {
+	return fieldBytesID, util.Bytes(string(i)), true
 }

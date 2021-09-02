@@ -3,8 +3,6 @@ package event
 import (
 	"strconv"
 	"time"
-
-	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
 // Retry is a field that tells the client to set the event stream reconnection time to
@@ -19,10 +17,6 @@ type RetryField struct {
 	buf []byte
 }
 
-func (r RetryField) name() parser.FieldName {
-	return parser.FieldNameRetry
-}
-
 func (r RetryField) apply(e *Event) {
 	if e.retryIndex == -1 {
 		e.retryIndex = len(e.fields)
@@ -32,6 +26,6 @@ func (r RetryField) apply(e *Event) {
 	}
 }
 
-func (r RetryField) repr() ([]byte, bool) {
-	return r.buf, true
+func (r RetryField) repr() ([]byte, []byte, bool) {
+	return fieldBytesRetry, r.buf, true
 }

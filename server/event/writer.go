@@ -8,21 +8,12 @@ import (
 )
 
 var newline = []byte{'\n'}
-var colon = []byte{':', ' '}
 
 type fieldWriter struct {
 	w io.Writer
 	s parser.ChunkScanner
 
 	isNewLine bool // indicates if the next write will start a new line
-}
-
-func panicWriteString(w io.Writer, s string) int {
-	n, err := io.WriteString(w, s)
-	if err != nil {
-		panic(err)
-	}
-	return n
 }
 
 func panicWrite(w io.Writer, p []byte) int {
@@ -33,10 +24,10 @@ func panicWrite(w io.Writer, p []byte) int {
 	return n
 }
 
-func (s *fieldWriter) writeName(name parser.FieldName) int {
+func (s *fieldWriter) writeName(name []byte) int {
 	if s.isNewLine {
 		s.isNewLine = false
-		return panicWriteString(s.w, string(name)) + panicWrite(s.w, colon)
+		return panicWrite(s.w, name)
 	}
 
 	return 0
@@ -62,8 +53,7 @@ func (s *fieldWriter) writeField(f field) (n int, err error) {
 	}()
 
 	s.isNewLine = true
-	name := f.name()
-	repr, singleLine := f.repr()
+	name, repr, singleLine := f.repr()
 
 	if len(repr) == 0 {
 		return
@@ -90,3 +80,11 @@ func (s *fieldWriter) writeField(f field) (n int, err error) {
 
 	return
 }
+
+var (
+	fieldBytesData    = []byte(parser.FieldNameData + ": ")
+	fieldBytesEvent   = []byte(parser.FieldNameEvent + ": ")
+	fieldBytesRetry   = []byte(parser.FieldNameRetry + ": ")
+	fieldBytesID      = []byte(parser.FieldNameID + ": ")
+	fieldBytesComment = []byte{':', ' '}
+)
