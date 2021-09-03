@@ -35,16 +35,11 @@ func (e *Event) reset() {
 // This operation is heavily optimized and does zero allocations, so it is strongly preferred
 // over MarshalText or String.
 func (e *Event) WriteTo(w io.Writer) (int64, error) {
-	fw := &fieldWriter{
-		w: w,
-		s: parser.ChunkScanner{},
-	}
-
 	var err error
 	n, m := 0, 0
 
 	for i := range e.fields {
-		m, err = fw.writeField(&e.fields[i])
+		m, err = writeField(w, &e.fields[i])
 		n += m
 		if err != nil {
 			return int64(n), err
@@ -162,8 +157,8 @@ func (e *Event) String() string {
 // ID returns the event's ID. It returns an empty string if the event doesn't have an ID.
 func (e *Event) ID() string {
 	for i := len(e.fields) - 1; i >= 0; i-- {
-		if bytes.Equal(e.fields[i].nameBytes, fieldBytes[parser.FieldNameID]) {
-			return util.String(e.fields[i].data)
+		if f := &e.fields[i]; bytes.Equal(f.nameBytes, fieldBytes[parser.FieldNameID]) {
+			return util.String(f.data)
 		}
 	}
 	return ""
