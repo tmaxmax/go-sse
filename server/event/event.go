@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/tmaxmax/go-sse/internal/parser"
+	"github.com/tmaxmax/go-sse/internal/util"
 )
 
 type field interface {
@@ -89,10 +90,10 @@ func (e *Event) MarshalText() ([]byte, error) {
 // If no fields were found in the target text or any other errors occurred, only
 // a Reason will be provided. Reason is always present.
 type UnmarshalError struct {
+	Reason    error
 	FieldName string
 	// The value of the invalid field. This is a copy of the original value.
 	FieldValue string
-	Reason     error
 }
 
 func (u *UnmarshalError) Error() string {
@@ -126,7 +127,7 @@ loop:
 
 		switch f.Name {
 		case parser.FieldNameData:
-			pf = LineField{s: string(f.Value)}
+			pf = DataField{util.CloneBytes(f.Value), true}
 		case parser.FieldNameEvent:
 			pf = Name(f.Value)
 		case parser.FieldNameID:
@@ -144,7 +145,7 @@ loop:
 				}
 			}
 
-			pf = RetryField{buf: append(make([]byte, 0, len(f.Value)), f.Value...)}
+			pf = RetryField{util.CloneBytes(f.Value)}
 		default:
 			// event end
 			break loop

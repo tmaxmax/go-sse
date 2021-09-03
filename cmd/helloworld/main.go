@@ -14,7 +14,7 @@ func main() {
 
 	go func() {
 		for range time.Tick(time.Second) {
-			_ = sse.Publish(event.New(event.MustLine("Hello world")))
+			_ = sse.Publish(event.New(event.Text("Hello world")))
 		}
 	}()
 

@@ -18,7 +18,7 @@ func TestNewEvent(t *testing.T) {
 		ID("again"),
 		Text("input"),
 		Retry(30),
-		Raw("amazing"),
+		Raw([]byte("amazing")),
 		Retry(time.Second),
 		ID("lol"),
 		Name("x"),
@@ -29,7 +29,7 @@ func TestNewEvent(t *testing.T) {
 		ID("lol"),
 		Text("input"),
 		Retry(time.Second),
-		Raw("amazing"),
+		Raw([]byte("amazing")),
 	}
 
 	e := New(input...)
@@ -46,7 +46,7 @@ func TestEvent_WriteTo(t *testing.T) {
 		Text("This is an example\nOf an event"),
 		ID("example_id"),
 		Retry(time.Second * 5),
-		MustRawLine([]byte("raw bytes here")),
+		Raw([]byte("raw bytes here")),
 		Name("test_event"),
 		Comment("This test should pass"),
 		Text("Important data\nImportant again\r\rVery important\r\n"),
@@ -130,7 +130,7 @@ func BenchmarkEvent_WriteTo_text(b *testing.B) {
 func BenchmarkEvent_WriteTo_line(b *testing.B) {
 	fields := make([]Option, 0, len(benchmarkText))
 	for _, t := range benchmarkText {
-		fields = append(fields, MustLine(t))
+		fields = append(fields, Text(t))
 	}
 	ev := New(fields...)
 

@@ -25,6 +25,10 @@ func String(p []byte) string {
 	return *(*string)(unsafe.Pointer(&p))
 }
 
+func CloneBytes(p []byte) []byte {
+	return append(make([]byte, 0, len(p)), p...)
+}
+
 type unprefixedReader struct {
 	r      io.Reader
 	prefix string

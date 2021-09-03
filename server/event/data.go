@@ -1,13 +1,11 @@
 package event
 
 import (
-	"fmt"
-
 	"github.com/tmaxmax/go-sse/internal/parser"
 	"github.com/tmaxmax/go-sse/internal/util"
 )
 
-// Raw is a multiline data payload consisting of bytes that represent a UTF-8 encoded string.
+// The DataField contains data payload consisting of bytes that represent a UTF-8 encoded string.
 //
 // It is not suited for binary data. In general the server-sent events protocol is not suitable
 // for sending binary data: the event fields are delimited by newlines, where a newline can be
@@ -41,107 +39,36 @@ import (
 // https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream.
 //
 // Still, if you need to send binary data, you can use a Base64 encoder or any other encoder that does not output
-// any newline characters (\n or \n) and create a data field using the Line or RawLine functions with the encoded output.
-type Raw []byte
-
-func (r Raw) apply(e *Event) {
-	e.fields = append(e.fields, r)
+// any newline characters (\n or \n) and create a data field using the provided functions, Raw or Text.
+type DataField struct {
+	data       []byte
+	singleLine bool
 }
 
-func (r Raw) repr() ([]byte, []byte, bool) {
-	return fieldBytesData, r, false
+func (d DataField) apply(e *Event) {
+	e.fields = append(e.fields, d)
 }
 
-// Text is a data payload consisting of a UTF-8 encoded string.
-type Text string
-
-func (t Text) apply(e *Event) {
-	e.fields = append(e.fields, t)
+func (d DataField) repr() (field, data []byte, singleLine bool) {
+	return fieldBytesData, d.data, d.singleLine
 }
 
-func (t Text) repr() ([]byte, []byte, bool) {
-	return fieldBytesData, util.Bytes(string(t)), false
+// Raw creates a data field from a byte slice.
+func Raw(p []byte) DataField {
+	return DataField{data: p, singleLine: isSingleLine(p)}
 }
 
-func checkLine(p []byte) bool {
+// Text creates a data field from a string. It uses the unsafe package to convert the string to a byte slice,
+// so no allocations take place. If the string is a constant, the conversion may panic, so use the Raw function
+// to create a data field from a copy of the constant instead.
+func Text(s string) DataField {
+	p := util.Bytes(s)
+	return DataField{data: p, singleLine: isSingleLine(p)}
+}
+
+func isSingleLine(p []byte) bool {
 	s := parser.ChunkScanner{Buffer: p}
 	s.Scan()
 	_, endsInNewline := s.Chunk()
 	return !endsInNewline
-}
-
-// Line creates a data field that is guaranteed to not have any newline sequences (\n, \r\n or \r).
-// It checks the input beforehand, and if it's valid, it returns a value containing the data and a truthy boolean value.
-// If the data is not valid, it returns the zero value for the field type and a false boolean value.
-//
-// It is recommended to use this utility over using Text if your data doesn't have multiple lines,
-// as writing it will be heavily optimized.
-func Line(s string) (LineField, bool) {
-	if !checkLine(util.Bytes(s)) {
-		return LineField{}, false
-	}
-
-	return LineField{s: s}, true
-}
-
-// MustLine is a convenience wrapper for Line that panics if the input is not valid. Use it if you're sure
-// the input has only a single line.
-func MustLine(s string) LineField {
-	line, ok := Line(s)
-	if !ok {
-		panic(fmt.Sprintf("tried to create line field with multiline input: %q", s))
-	}
-
-	return line
-}
-
-// LineField is a checked data field which contains a single line of text.
-type LineField struct {
-	s string
-}
-
-func (s LineField) apply(e *Event) {
-	e.fields = append(e.fields, s)
-}
-
-func (s LineField) repr() ([]byte, []byte, bool) {
-	return fieldBytesData, util.Bytes(s.s), true
-}
-
-// RawLine creates a data field that is guaranteed to not have any newline sequences (\n, \r\n or \r).
-// It checks the input beforehand, and if it's valid, it returns a value containing the data and a truthy boolean value.
-// If the data is not valid, it returns the zero value for the field type and a false boolean value.
-//
-// It is recommended to use this utility over using Raw if your data doesn't have multiple lines,
-// as writing it will be heavily optimized.
-func RawLine(p []byte) (RawLineField, bool) {
-	if !checkLine(p) {
-		return RawLineField{}, false
-	}
-
-	return RawLineField{buf: p}, true
-}
-
-// MustRawLine is a convenience wrapper for RawLine that panics if the input is not valid. Use it if you're sure
-// the input has only a single line.
-func MustRawLine(p []byte) RawLineField {
-	line, ok := RawLine(p)
-	if !ok {
-		panic(fmt.Sprintf("tried to create raw line field with multiline input: %q", string(p)))
-	}
-
-	return line
-}
-
-// RawLineField is a checked data field which contains a byte slice that can have only a single newline at the end.
-type RawLineField struct {
-	buf []byte
-}
-
-func (r RawLineField) apply(e *Event) {
-	e.fields = append(e.fields, r)
-}
-
-func (r RawLineField) repr() ([]byte, []byte, bool) {
-	return fieldBytesData, r.buf, true
 }
