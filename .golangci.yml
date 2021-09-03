@@ -7,7 +7,7 @@ linters:
     - ineffassign
     - staticcheck
     - structcheck
-    - typecheck
+    # - typecheck
     - unused
     - varcheck
     # - cyclop
