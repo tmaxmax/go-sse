@@ -8,8 +8,8 @@ import (
 )
 
 type ConcurrentWriter struct {
-	w  io.Writer
 	mu sync.Mutex
+	w  io.Writer
 }
 
 func (m *ConcurrentWriter) Write(p []byte) (int, error) {
