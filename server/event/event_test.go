@@ -16,7 +16,7 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	input := []Option{
+	input := []Field{
 		Name("whatever"),
 		ID("again"),
 		Text("input"),
@@ -25,7 +25,6 @@ func TestNew(t *testing.T) {
 		Retry(time.Second),
 		ID("lol"),
 		Name("x"),
-		TTL(time.Second),
 	}
 
 	e := New(input...)
@@ -33,15 +32,12 @@ func TestNew(t *testing.T) {
 	if id := e.ID(); id != "lol" {
 		t.Fatalf("Invalid event ID: received %q, expected %q", id, "lol")
 	}
-	if !e.ExpiresAt().After(time.Now()) {
-		t.Fatalf("Invalid event expiry time")
-	}
 }
 
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
-	input := []Option{
+	input := []Field{
 		Text("This is an example\nOf an event"),
 		Text(""), // empty fields should not produce any output
 		ID("example_id"),
@@ -79,7 +75,7 @@ func TestFrom(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	e := New(ExpiresAt(now), Text("A field"))
+	e := New( /*ExpiresAt(now), Text("A field")*/ )
 	derivate := From(e, Text("Another field"), ExpiresAt(time.Now())) //nolint
 	expected := []Field{Text("A field"), Text("Another field")}
 
@@ -183,14 +179,55 @@ var benchmarkText = []string{
 	"Morbi faucibus nisi a velit dictum eleifend.",
 }
 
-func BenchmarkEvent_WriteTo_text(b *testing.B) {
-	fields := make([]Option, 0, len(benchmarkText))
-	for _, t := range benchmarkText {
-		fields = append(fields, Text(t))
+func getBuffer(tb testing.TB, text []string) []Field {
+	tb.Helper()
+
+	return make([]Field, 0, len(text))
+}
+
+func getOpts(buf []Field, text []string) []Field {
+	for _, t := range text {
+		buf = append(buf, Text(t))
 	}
-	ev := New(fields...)
+	return buf
+}
+
+func createEvent(tb testing.TB, text []string) *Event {
+	return New(getOpts(getBuffer(tb, text), text)...)
+}
+
+func BenchmarkEvent_WriteTo_text(b *testing.B) {
+	ev := createEvent(b, benchmarkText)
 
 	for n := 0; n < b.N; n++ {
 		_, _ = ev.WriteTo(io.Discard)
+	}
+}
+
+func BenchmarkNew(b *testing.B) {
+	type benchmark struct {
+		name string
+		text []string
+	}
+
+	benchmarks := []benchmark{
+		{
+			name: "Single-line text",
+			text: benchmarkText,
+		},
+	}
+
+	for _, bench := range benchmarks {
+		buf := getBuffer(b, bench.text)
+
+		b.Run(bench.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			var e *Event
+			for n := 0; n < b.N; n++ {
+				e = New(getOpts(buf, bench.text)...)
+			}
+			_ = e
+		})
 	}
 }

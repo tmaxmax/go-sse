@@ -170,19 +170,21 @@ func (e *Event) ExpiresAt() time.Time {
 	return e.expiresAt
 }
 
+func (e *Event) SetExpiry(time time.Time) {
+	e.expiresAt = time
+}
+
+func (e *Event) SetTTL(duration time.Duration) {
+	e.SetExpiry(time.Now().Add(duration))
+}
+
 // New creates a new event. It takes as parameters the event's desired fields and an expiry time configuration
 // (TTL or ExpiresAt). If no expiry time is specified, the event expires immediately.
 //
 // If multiple Retry, ID, or Name fields are passed, the value of the last one is set. Multiple Data fields
 // are all kept in the order they're passed.
-func New(options ...Option) *Event {
-	e := &Event{}
-
-	for _, option := range options {
-		option.apply(e)
-	}
-
-	return e
+func New(fields ...Field) *Event {
+	return &Event{fields: append(make([]Field, 0, len(fields)), fields...)}
 }
 
 // From creates a new event using the provided one as a base. It does not modify the base event.
@@ -190,15 +192,13 @@ func New(options ...Option) *Event {
 // any other use case where adding or modifying event fields is necessary.
 //
 // Fields are added or set the same way New does.
-func From(base *Event, options ...Option) *Event {
+func From(base *Event, fields ...Field) *Event {
 	e := &Event{
 		expiresAt: base.expiresAt,
-		fields:    append(make([]Field, 0, len(base.fields)), base.fields...),
+		fields:    make([]Field, 0, len(base.fields)+len(fields)),
 	}
-
-	for _, option := range options {
-		option.apply(e)
-	}
+	e.fields = append(e.fields, base.fields...)
+	e.fields = append(e.fields, fields...)
 
 	return e
 }
