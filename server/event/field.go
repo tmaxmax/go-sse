@@ -88,10 +88,7 @@ func Raw(p []byte) Field {
 }
 
 // Text creates a data field from a string. It uses the unsafe package to convert the string to a byte slice,
-// so no allocations take place. If the string is a constant, the conversion may panic, so use the Raw function
-// to create a data field from a copy of the constant instead.
-//
-// See the Raw function's documentation for details about the data field type.
+// so no allocations take place. See the Raw function's documentation for details about the data field type.
 func Text(s string) Field {
 	return Raw(util.Bytes(s))
 }
