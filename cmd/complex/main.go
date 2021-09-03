@@ -79,8 +79,8 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 			ev := event.New(
 				event.Name(metric),
 				event.Text(strconv.FormatInt(v, 10)),
-				event.TTL(frequency),
 			)
+			ev.SetTTL(frequency)
 
 			_ = sse.Publish(ev)
 		case <-ctx.Done():
@@ -120,7 +120,9 @@ func (r *randomNumbers) MarshalEvent() *event.Event {
 		buf = append(buf, '\n')
 	}
 
-	return event.New(event.Raw(buf), event.TTL(time.Second*30))
+	e := event.New(event.Raw(buf))
+	e.SetTTL(time.Second * 30)
+	return e
 }
 
 func generateRandomNumbers() *randomNumbers {

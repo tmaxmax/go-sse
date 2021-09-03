@@ -71,16 +71,30 @@ func TestEvent_WriteTo(t *testing.T) {
 	}
 }
 
+func TestEvent_SetExpiry(t *testing.T) {
+	t.Parallel()
+
+	e := New()
+	now := time.Now()
+
+	e.SetExpiry(now)
+
+	if e.expiresAt != now {
+		t.Fatalf("Failed to set expiry time: got %v, want %v", e.expiresAt, now)
+	}
+}
+
 func TestFrom(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	e := New( /*ExpiresAt(now), Text("A field")*/ )
-	derivate := From(e, Text("Another field"), ExpiresAt(time.Now())) //nolint
+	e := New(Text("A field"))
+	e.SetExpiry(now)
+	derivate := From(e, Text("Another field")) //nolint
 	expected := []Field{Text("A field"), Text("Another field")}
 
-	if derivate.ExpiresAt() == now {
-		t.Fatalf("Expiry date was not set")
+	if derivate.ExpiresAt() != now {
+		t.Fatalf("Expiry date not set correctly: expected %v, got %v", now, derivate.ExpiresAt())
 	}
 	if !reflect.DeepEqual(derivate.fields, expected) {
 		t.Fatalf("Fields not set correctly:\nreceived %v\nexpected %v", derivate.fields, expected)

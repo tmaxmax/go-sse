@@ -125,7 +125,7 @@ loop:
 			fallthrough
 		case parser.FieldNameData, parser.FieldNameEvent, parser.FieldNameID:
 			f := Field{nameBytes: fieldBytes[f.Name], data: util.CloneBytes(f.Value), singleLine: true}
-			f.apply(e)
+			e.fields = append(e.fields, f)
 		default: // event end
 			break loop
 		}
