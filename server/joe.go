@@ -67,7 +67,7 @@ type ReplayProvider interface {
 // the replay failed.
 type ReplayError struct {
 	err error
-	id  event.ID
+	id  string
 }
 
 func (e *ReplayError) Error() string {
@@ -110,17 +110,17 @@ type Joe struct {
 
 // JoeConfig is used to tune Joe to preference.
 type JoeConfig struct {
+	// An optional replay provider that Joe uses to resend older messages to new subscribers.
+	ReplayProvider ReplayProvider
+	// An optional interval at which Joe triggers a cleanup of expired messages, if the replay provider supports it.
+	// See the desired provider's documentation to determine if periodic cleanup is necessary.
+	ReplayGCInterval time.Duration
 	// Joe receives published events on a dedicated channel. If the publisher's goroutine is blocked
 	// because Joe can't keep up with the load, use a bigger buffer. This shouldn't be a concern
 	// and if it is other providers might be suited better for your use-case.
 	//
 	// The buffer size defaults to 1.
 	MessageChannelBuffer int
-	// An optional replay provider that Joe uses to resend older messages to new subscribers.
-	ReplayProvider ReplayProvider
-	// An optional interval at which Joe triggers a cleanup of expired messages, if the replay provider supports it.
-	// See the desired provider's documentation to determine if periodic cleanup is necessary.
-	ReplayGCInterval time.Duration
 }
 
 // NewJoe creates and starts a Joe.

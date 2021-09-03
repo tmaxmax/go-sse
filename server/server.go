@@ -24,7 +24,7 @@ type Subscription struct {
 	// An optional last event ID indicating the event to resume the stream from.
 	// The events will replay starting from the first valid event sent after the one with the given ID.
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
-	LastEventID event.ID
+	LastEventID string
 }
 
 // The Message struct is used to publish a message to a given provider.
@@ -130,7 +130,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	events := make(chan *event.Event)
 	err = s.provider.Subscribe(r.Context(), Subscription{
 		Channel:     events,
-		LastEventID: event.ID(r.Header.Get("Last-Event-ID")),
+		LastEventID: r.Header.Get("Last-Event-ID"),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -13,12 +13,6 @@ import (
 	"github.com/tmaxmax/go-sse/internal/util"
 )
 
-type field interface {
-	repr() (nameWithColon, value []byte, singleLine bool)
-
-	Option
-}
-
 // A Marshaler is the interface types that can be represented as an Event implement.
 type Marshaler interface {
 	MarshalEvent() *Event
@@ -27,20 +21,14 @@ type Marshaler interface {
 // Event is the representation of a single message. Use the New constructor to create one.
 // This representation is used only for sending events - there is another event type for the client.
 type Event struct {
-	expiresAt  time.Time
-	fields     []field
-	nameIndex  int
-	idIndex    int
-	retryIndex int
+	expiresAt time.Time
+	fields    []Field
 }
 
 // reset sets all the event's internal fields to their default values.
 func (e *Event) reset() {
 	e.expiresAt = time.Time{}
 	e.fields = nil
-	e.nameIndex = -1
-	e.idIndex = -1
-	e.retryIndex = -1
 }
 
 // WriteTo writes the standard textual representation of an event to an io.Writer.
@@ -55,8 +43,8 @@ func (e *Event) WriteTo(w io.Writer) (int64, error) {
 	var err error
 	n, m := 0, 0
 
-	for _, f := range e.fields {
-		m, err = fw.writeField(f)
+	for i := range e.fields {
+		m, err = fw.writeField(&e.fields[i])
 		n += m
 		if err != nil {
 			return int64(n), err
@@ -123,15 +111,8 @@ func (e *Event) UnmarshalText(b []byte) error {
 loop:
 	for s.Scan() {
 		f := s.Field()
-		var pf field
 
 		switch f.Name {
-		case parser.FieldNameData:
-			pf = DataField{util.CloneBytes(f.Value), true}
-		case parser.FieldNameEvent:
-			pf = Name(f.Value)
-		case parser.FieldNameID:
-			pf = ID(f.Value)
 		case parser.FieldNameRetry:
 			if i := bytes.IndexFunc(f.Value, func(r rune) bool {
 				return r < '0' || r > '9'
@@ -145,13 +126,13 @@ loop:
 				}
 			}
 
-			pf = RetryField{util.CloneBytes(f.Value)}
-		default:
-			// event end
+			fallthrough
+		case parser.FieldNameData, parser.FieldNameEvent, parser.FieldNameID:
+			f := Field{nameBytes: fieldBytes[f.Name], data: util.CloneBytes(f.Value), singleLine: true}
+			f.apply(e)
+		default: // event end
 			break loop
 		}
-
-		pf.apply(e)
 	}
 
 	if len(e.fields) == 0 {
@@ -179,11 +160,13 @@ func (e *Event) String() string {
 }
 
 // ID returns the event's ID. It returns an empty string if the event doesn't have an ID.
-func (e *Event) ID() ID {
-	if e.idIndex == -1 {
-		return ""
+func (e *Event) ID() string {
+	for i := len(e.fields) - 1; i >= 0; i-- {
+		if bytes.Equal(e.fields[i].nameBytes, fieldBytes[parser.FieldNameID]) {
+			return util.String(e.fields[i].data)
+		}
 	}
-	return e.fields[e.idIndex].(ID)
+	return ""
 }
 
 // ExpiresAt returns the timestamp when the event expires.
@@ -198,7 +181,6 @@ func (e *Event) ExpiresAt() time.Time {
 // are all kept in the order they're passed.
 func New(options ...Option) *Event {
 	e := &Event{}
-	e.reset()
 
 	for _, option := range options {
 		option.apply(e)
@@ -214,14 +196,9 @@ func New(options ...Option) *Event {
 // Fields are added or set the same way New does.
 func From(base *Event, options ...Option) *Event {
 	e := &Event{
-		nameIndex:  base.nameIndex,
-		idIndex:    base.idIndex,
-		retryIndex: base.retryIndex,
-		expiresAt:  base.expiresAt,
-		fields:     make([]field, 0, len(base.fields)),
+		expiresAt: base.expiresAt,
+		fields:    append(make([]Field, 0, len(base.fields)), base.fields...),
 	}
-
-	e.fields = append(e.fields, base.fields...)
 
 	for _, option := range options {
 		option.apply(e)

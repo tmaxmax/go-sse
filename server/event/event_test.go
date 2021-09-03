@@ -22,20 +22,16 @@ func TestNewEvent(t *testing.T) {
 		Retry(time.Second),
 		ID("lol"),
 		Name("x"),
-	}
-
-	expected := []field{
-		Name("x"),
-		ID("lol"),
-		Text("input"),
-		Retry(time.Second),
-		Raw([]byte("amazing")),
+		TTL(time.Second),
 	}
 
 	e := New(input...)
 
-	if !reflect.DeepEqual(e.fields, expected) {
-		t.Fatalf("Fields set incorrectly:\nreceived: %v\nexpected: %v", e.fields, expected)
+	if id := e.ID(); id != "lol" {
+		t.Fatalf("Invalid event ID: received %q, expected %q", id, "lol")
+	}
+	if !e.ExpiresAt().After(time.Now()) {
+		t.Fatalf("Invalid event expiry time")
 	}
 }
 
@@ -116,18 +112,6 @@ var benchmarkText = []string{
 }
 
 func BenchmarkEvent_WriteTo_text(b *testing.B) {
-	fields := make([]Option, 0, len(benchmarkText))
-	for _, t := range benchmarkText {
-		fields = append(fields, Text(t))
-	}
-	ev := New(fields...)
-
-	for n := 0; n < b.N; n++ {
-		_, _ = ev.WriteTo(io.Discard)
-	}
-}
-
-func BenchmarkEvent_WriteTo_line(b *testing.B) {
 	fields := make([]Option, 0, len(benchmarkText))
 	for _, t := range benchmarkText {
 		fields = append(fields, Text(t))

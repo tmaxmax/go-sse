@@ -13,7 +13,7 @@ type buffer interface {
 	dequeue()
 	front() *event.Event
 	len() int
-	slice(event.ID) ([]Message, error)
+	slice(string) ([]Message, error)
 }
 
 type bufferBase struct {
@@ -32,8 +32,8 @@ func (b *bufferBase) front() *event.Event {
 }
 
 type bufferNoID struct {
+	lastRemovedID string
 	bufferBase
-	lastRemoved event.ID
 }
 
 func (b *bufferNoID) queue(message *Message) {
@@ -43,23 +43,23 @@ func (b *bufferNoID) queue(message *Message) {
 }
 
 func (b *bufferNoID) dequeue() {
-	b.lastRemoved = b.buf[0].Event.ID()
+	b.lastRemovedID = b.buf[0].Event.ID()
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferNoID) slice(at event.ID) ([]Message, error) {
-	if at == b.lastRemoved && len(b.buf) != 0 {
+func (b *bufferNoID) slice(atID string) ([]Message, error) {
+	if atID == b.lastRemovedID && len(b.buf) != 0 {
 		return b.buf, nil
 	}
 	index := -1
 	for i := range b.buf {
-		if at == b.buf[i].Event.ID() {
+		if atID == b.buf[i].Event.ID() {
 			index = i
 			break
 		}
 	}
 	if index == -1 {
-		return nil, &ReplayError{id: at}
+		return nil, &ReplayError{id: atID}
 	}
 	return b.buf[index:], nil
 }
@@ -83,14 +83,14 @@ func (b *bufferAutoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferAutoID) slice(at event.ID) ([]Message, error) {
-	id, err := strconv.ParseInt(string(at), autoIDBase, 64)
+func (b *bufferAutoID) slice(atID string) ([]Message, error) {
+	id, err := strconv.ParseInt(string(atID), autoIDBase, 64)
 	if err != nil {
-		return nil, &ReplayError{id: at, err: err}
+		return nil, &ReplayError{id: atID, err: err}
 	}
 	index := id - b.firstID
 	if index < 0 || index >= int64(len(b.buf)) {
-		return nil, &ReplayError{id: at}
+		return nil, &ReplayError{id: atID}
 	}
 	return b.buf[index:], nil
 }

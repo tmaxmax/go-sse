@@ -40,7 +40,7 @@ func (s *fieldWriter) writeEnd() int {
 	return panicWrite(s.w, newline)
 }
 
-func (s *fieldWriter) writeField(f field) (n int, err error) {
+func (s *fieldWriter) writeField(f *Field) (n int, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println(r)
@@ -53,23 +53,22 @@ func (s *fieldWriter) writeField(f field) (n int, err error) {
 	}()
 
 	s.isNewLine = true
-	name, repr, singleLine := f.repr()
 
-	if len(repr) == 0 {
+	if len(f.data) == 0 {
 		return
 	}
 
-	if singleLine {
-		n = s.writeName(name) + panicWrite(s.w, repr) + s.writeEnd()
+	if f.singleLine {
+		n = s.writeName(f.nameBytes) + panicWrite(s.w, f.data) + s.writeEnd()
 		return
 	}
 
-	s.s.Buffer = repr
+	s.s.Buffer = f.data
 
 	var chunk []byte
 
 	for s.s.Scan() {
-		n += s.writeName(name)
+		n += s.writeName(f.nameBytes)
 
 		chunk, s.isNewLine = s.s.Chunk()
 
@@ -80,11 +79,3 @@ func (s *fieldWriter) writeField(f field) (n int, err error) {
 
 	return
 }
-
-var (
-	fieldBytesData    = []byte(parser.FieldNameData + ": ")
-	fieldBytesEvent   = []byte(parser.FieldNameEvent + ": ")
-	fieldBytesRetry   = []byte(parser.FieldNameRetry + ": ")
-	fieldBytesID      = []byte(parser.FieldNameID + ": ")
-	fieldBytesComment = []byte{':', ' '}
-)
