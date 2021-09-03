@@ -18,6 +18,6 @@ func (n Name) apply(e *Event) {
 	}
 }
 
-func (n Name) repr() ([]byte, []byte, bool) {
+func (n Name) repr() (field, data []byte, singleLine bool) {
 	return fieldBytesEvent, util.Bytes(string(n)), true
 }

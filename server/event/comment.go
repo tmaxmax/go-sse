@@ -12,6 +12,6 @@ func (c Comment) apply(e *Event) {
 	e.fields = append(e.fields, c)
 }
 
-func (c Comment) repr() ([]byte, []byte, bool) {
+func (c Comment) repr() (field, data []byte, singleLine bool) {
 	return fieldBytesComment, util.Bytes(string(c)), false
 }

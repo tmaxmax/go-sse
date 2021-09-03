@@ -23,6 +23,6 @@ func (i ID) apply(e *Event) {
 	}
 }
 
-func (i ID) repr() ([]byte, []byte, bool) {
+func (i ID) repr() (field, data []byte, singleLine bool) {
 	return fieldBytesID, util.Bytes(string(i)), true
 }
