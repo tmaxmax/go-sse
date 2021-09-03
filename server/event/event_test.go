@@ -1,16 +1,19 @@
 package event
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/tmaxmax/go-sse/internal/parser"
 	"github.com/tmaxmax/go-sse/internal/util"
 )
 
-func TestNewEvent(t *testing.T) {
+func TestNew(t *testing.T) {
 	t.Parallel()
 
 	input := []Option{
@@ -40,6 +43,7 @@ func TestEvent_WriteTo(t *testing.T) {
 
 	input := []Option{
 		Text("This is an example\nOf an event"),
+		Text(""), // empty fields should not produce any output
 		ID("example_id"),
 		Retry(time.Second * 5),
 		Raw([]byte("raw bytes here")),
@@ -68,6 +72,74 @@ func TestEvent_WriteTo(t *testing.T) {
 
 	if !reflect.DeepEqual(expected, got) {
 		t.Fatalf("Event written incorrectly:\nexpected: %s\nreceived: %s", expected, got)
+	}
+}
+
+func TestFrom(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	e := New(ExpiresAt(now), Text("A field"))
+	derivate := From(e, Text("Another field"), ExpiresAt(time.Now())) //nolint
+	expected := []Field{Text("A field"), Text("Another field")}
+
+	if derivate.ExpiresAt() == now {
+		t.Fatalf("Expiry date was not set")
+	}
+	if !reflect.DeepEqual(derivate.fields, expected) {
+		t.Fatalf("Fields not set correctly:\nreceived %v\nexpected %v", derivate.fields, expected)
+	}
+}
+
+func TestEvent_UnmarshalText(t *testing.T) {
+	t.Parallel()
+
+	type test struct {
+		name        string
+		input       string
+		expectedErr error
+		expected    []Field
+	}
+
+	tests := []test{
+		{
+			name:        "No input",
+			expectedErr: &UnmarshalError{Reason: errors.New("unexpected end of input")},
+		},
+		{
+			name:  "Invalid retry field",
+			input: "retry: sigma male",
+			expectedErr: &UnmarshalError{
+				FieldName:  string(parser.FieldNameRetry),
+				FieldValue: "sigma male",
+				Reason:     fmt.Errorf("contains character %q, which is not an ASCII digit", 's'),
+			},
+		},
+		{
+			name:  "Valid input",
+			input: "data: raw bytes here\nretry: 1000\nid: 2000\n: no comments\ndata: again raw bytes\ndata: from multiple lines\nevent: my name here\n\ndata: I should be ignored",
+			expected: []Field{
+				Raw([]byte("raw bytes here")),
+				Retry(time.Second),
+				ID("2000"),
+				Raw([]byte("again raw bytes")),
+				Raw([]byte("from multiple lines")),
+				Name("my name here"),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			e := &Event{}
+
+			if err := e.UnmarshalText([]byte(test.input)); (test.expectedErr != nil && err.Error() != test.expectedErr.Error()) || (test.expectedErr == nil && err != nil) {
+				t.Fatalf("Invalid unmarshal error: got %q, want %q", err, test.expectedErr)
+			}
+			if !reflect.DeepEqual(e.fields, test.expected) {
+				t.Fatalf("Invalid unmarshal fields:\nreceived %v\nexpected %v", e.fields, test.expected)
+			}
+		})
 	}
 }
 
