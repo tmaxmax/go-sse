@@ -12,15 +12,15 @@ type writeError struct {
 	error
 }
 
-func panicWrite(w io.Writer, p []byte) int {
+func panicWrite(w io.Writer, p []byte) int64 {
 	n, err := w.Write(p)
 	if err != nil {
 		panic(writeError{err})
 	}
-	return n
+	return int64(n)
 }
 
-func writeField(w io.Writer, f *Field) (n int, err error) {
+func (f *Field) WriteTo(w io.Writer) (n int64, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if e, ok := r.(writeError); ok {

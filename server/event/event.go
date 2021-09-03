@@ -35,21 +35,22 @@ func (e *Event) reset() {
 // This operation is heavily optimized and does zero allocations, so it is strongly preferred
 // over MarshalText or String.
 func (e *Event) WriteTo(w io.Writer) (int64, error) {
+	var m, n int64
+	var o int
 	var err error
-	n, m := 0, 0
 
 	for i := range e.fields {
-		m, err = writeField(w, &e.fields[i])
+		m, err = e.fields[i].WriteTo(w)
 		n += m
 		if err != nil {
 			return int64(n), err
 		}
 	}
 
-	m, err = w.Write(newline)
-	n += m
+	o, err = w.Write(newline)
+	n += int64(o)
 
-	return int64(n), err
+	return n, err
 }
 
 // MarshalText writes the standard textual representation of the event. Marshalling and unmarshalling will not
