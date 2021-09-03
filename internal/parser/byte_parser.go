@@ -4,8 +4,8 @@ import "bytes"
 
 type ByteParser struct {
 	field Field
-	cs    ChunkScanner
 	chunk []byte
+	cs    ChunkScanner
 }
 
 func min(a, b int) int {
