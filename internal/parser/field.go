@@ -4,14 +4,13 @@ type FieldName string
 
 // A Field represents an unprocessed field of a single event. The Name is the field's identifier, which is used to
 // process the fields afterwards. The Value is not owned by the Field struct.
+//
+// As a special case, if a parser (ByteParser or ReaderParser) returns a field without a name,
+// it means that a whole event was parsed. In other words, all the fields before the one without a name
+// and after another such field are part of the same event.
 type Field struct {
 	Name  FieldName
 	Value []byte
-}
-
-// IsEventEnd returns true if the field is EventEnd.
-func (f *Field) IsEventEnd() bool {
-	return f.Name == EventEnd.Name
 }
 
 const (
@@ -22,12 +21,6 @@ const (
 
 	maxFieldNameLength = 5
 )
-
-// EventEnd is not an actual field. If a parser's Field method returns an EventEnd
-// field it means that all the fields parsed before this one are part of a single event.
-//
-// The EventEnd field has no meaning outside parsing.
-var EventEnd = Field{}
 
 func getFieldName(b []byte) (FieldName, bool) {
 	if len(b) == 0 {

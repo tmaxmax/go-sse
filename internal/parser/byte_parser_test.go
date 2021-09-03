@@ -24,7 +24,7 @@ func TestByteParser(t *testing.T) {
 				newEventField(t, "sarmale"),
 				newDataField(t, "doresc sarmale"),
 				newDataField(t, " multe sarmale  "),
-				parser.EventEnd,
+				{},
 			},
 		},
 		{
@@ -41,7 +41,7 @@ func TestByteParser(t *testing.T) {
 				newDataField(t, ""),
 				newDataField(t, ""),
 				newDataField(t, "some data"),
-				parser.EventEnd,
+				{},
 			},
 		},
 		{
@@ -50,7 +50,7 @@ func TestByteParser(t *testing.T) {
 			expected: []parser.Field{
 				newRetryField(t, "120"),
 				newIDField(t, "5"),
-				parser.EventEnd,
+				{},
 			},
 		},
 	}
