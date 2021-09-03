@@ -17,7 +17,7 @@ func TestScanner(t *testing.T) {
 	t.Parallel()
 
 	buf := []byte("sarmale")
-	s := &ChunkScanner{Buffer: buf}
+	s := NewChunkScanner(buf)
 
 	if !s.Scan() {
 		t.Fatalf("Scan should return true")
@@ -42,7 +42,7 @@ func TestScanner(t *testing.T) {
 		endsInNewline bool
 	}
 
-	s.Buffer = []byte("sarmale cu\nghimbir\r\nsunt\rsuper\n\ngenial sincer")
+	s.Reset([]byte("sarmale cu\nghimbir\r\nsunt\rsuper\n\ngenial sincer"))
 
 	expected := []result{
 		{"sarmale cu\n", true},
@@ -62,6 +62,6 @@ func TestScanner(t *testing.T) {
 	}
 
 	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("Bad result:\n\texpected %#v\n\tgot %#v", expected, got)
+		t.Fatalf("Bad result:\n\texpected %#v\n\treceived %#v", expected, got)
 	}
 }

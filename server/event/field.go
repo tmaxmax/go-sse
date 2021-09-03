@@ -16,15 +16,9 @@ type Field struct {
 	singleLine bool
 }
 
-func (f Field) apply(e *Event) {
-	e.fields = append(e.fields, f)
-}
-
 func isSingleLine(p []byte) bool {
-	s := parser.ChunkScanner{Buffer: p}
-	s.Scan()
-	_, endsInNewline := s.Chunk()
-	return !endsInNewline
+	_, remaining := parser.NewlineIndex(p)
+	return remaining == 0
 }
 
 func assertSingleLine(s, function string, fieldName parser.FieldName) []byte {

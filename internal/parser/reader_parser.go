@@ -12,23 +12,21 @@ var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []
 		return
 	}
 
-	var chunk []byte
-	remaining, start := data, 0
+	var start, index, endlineLen int
 	for {
-		chunk, remaining = nextChunk(remaining)
-		advance += len(chunk)
-		chunkLen := len(trimNewline(chunk))
-		if chunkLen == 0 {
-			start += len(chunk)
+		index, endlineLen = NewlineIndex(data[advance:])
+		advance += index + endlineLen
+		if index == 0 {
+			start += endlineLen
 		}
-		if len(remaining) == 0 || (util.IsNewlineChar(remaining[0]) && chunkLen > 0) {
+		if advance == len(data) || (util.IsNewlineChar(data[advance]) && index > 0) {
 			break
 		}
 	}
 
-	if rl := len(remaining); rl > 0 {
+	if l := len(data); advance < l {
 		advance++
-		if rl > 1 && remaining[0] == '\r' && remaining[1] == '\n' {
+		if advance < l && data[advance-1] == '\r' && data[advance] == '\n' {
 			advance++
 		}
 	}

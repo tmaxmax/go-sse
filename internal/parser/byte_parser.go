@@ -62,7 +62,7 @@ func (b *ByteParser) Field() Field {
 
 // Reset changes the buffer ByteParser parses fields from.
 func (b *ByteParser) Reset(p []byte) {
-	b.cs.Buffer = p
+	b.cs.Reset(p)
 }
 
 func trimNewline(c []byte) []byte {
@@ -93,5 +93,5 @@ func trimChunk(c []byte) []byte {
 }
 
 func NewByteParser(b []byte) *ByteParser {
-	return &ByteParser{cs: ChunkScanner{Buffer: b}}
+	return &ByteParser{cs: NewChunkScanner(b)}
 }
