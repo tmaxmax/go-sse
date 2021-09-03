@@ -8,50 +8,50 @@ import (
 
 var newline = []byte{'\n'}
 
-type writeError struct {
-	error
-}
-
-func panicWrite(w io.Writer, p []byte) int64 {
-	n, err := w.Write(p)
-	if err != nil {
-		panic(writeError{err})
-	}
-	return int64(n)
-}
-
 func (f *Field) WriteTo(w io.Writer) (n int64, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if e, ok := r.(writeError); ok {
-				err = e.error
-			} else {
-				panic(r)
-			}
-		}
-	}()
-
 	if len(f.data) == 0 {
-		return
+		return 0, nil
 	}
+
+	var m int
 
 	if f.singleLine {
-		n = panicWrite(w, f.nameBytes) + panicWrite(w, f.data) + panicWrite(w, newline)
+		m, err = w.Write(f.nameBytes)
+		n += int64(m)
+		if err != nil {
+			return
+		}
+		m, err = w.Write(f.data)
+		n += int64(m)
+		if err != nil {
+			return
+		}
+		m, err = w.Write(newline)
+		n += int64(m)
 		return
 	}
 
-	s := parser.ChunkScanner{Buffer: f.data}
+	s := parser.NewChunkScanner(f.data)
 	var chunk []byte
 	var isNewLine bool
 
 	for s.Scan() {
-		n += panicWrite(w, f.nameBytes)
+		m, err = w.Write(f.nameBytes)
+		n += int64(m)
+		if err != nil {
+			return
+		}
 		chunk, isNewLine = s.Chunk()
-		n += panicWrite(w, chunk)
+		m, err = w.Write(chunk)
+		n += int64(m)
+		if err != nil {
+			return
+		}
 	}
 
 	if !isNewLine {
-		n += panicWrite(w, newline)
+		m, err = w.Write(newline)
+		n += int64(m)
 	}
 
 	return
