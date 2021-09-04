@@ -43,7 +43,7 @@ func (e *Event) WriteTo(w io.Writer) (int64, error) {
 		m, err = e.fields[i].WriteTo(w)
 		n += m
 		if err != nil {
-			return int64(n), err
+			return n, err
 		}
 	}
 
