@@ -7,7 +7,7 @@ linters:
     - ineffassign
     - staticcheck
     - structcheck
-    # - typecheck
+    - typecheck
     - unused
     - varcheck
     # - cyclop
@@ -66,3 +66,9 @@ linters-settings:
       - opinionated
   nestif:
     min-complexity: 8
+  typecheck:
+    go: '1.17'
+  stylecheck:
+    go: '1.17'
+  staticcheck:
+    go: '1.17'
