@@ -42,7 +42,7 @@ func TestScanner(t *testing.T) {
 		endsInNewline bool
 	}
 
-	s.Reset([]byte("sarmale cu\nghimbir\r\nsunt\rsuper\n\ngenial sincer"))
+	s.Reset([]byte("sarmale cu\nghimbir\r\nsunt\rsuper\n\ngenial sincer\r\n"))
 
 	expected := []result{
 		{"sarmale cu\n", true},
@@ -50,7 +50,7 @@ func TestScanner(t *testing.T) {
 		{"sunt\r", true},
 		{"super\n", true},
 		{"\n", true},
-		{"genial sincer", false},
+		{"genial sincer\r\n", true},
 	}
 
 	var got []result

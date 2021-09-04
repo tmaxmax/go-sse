@@ -36,7 +36,7 @@ type ChunkScanner struct {
 // Scan retrieves the next chunk from the buffer. It returns true if there is data left in the buffer.
 // Calling Scan multiple times after there is no data will change the buffer!
 func (s *ChunkScanner) Scan() bool {
-	if s.index == len(s.buffer) {
+	if s.index+s.length == len(s.buffer) {
 		return false
 	}
 
