@@ -2,9 +2,10 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -14,66 +15,70 @@ import (
 )
 
 type (
-	subscriber = chan<- *Event
-	eventName  = string
+	subscriber chan<- *Event
+	eventName  string
 )
 
 type subscription struct {
-	event      eventName
 	subscriber subscriber
+	event      eventName
 	all        bool
 }
 
 type Connection struct {
-	c       *http.Client
-	r       *http.Request
-	isRetry bool
+	request *http.Request
 
-	backoff backoff.BackOff
-	onRetry backoff.Notify
-
+	subscribe      chan subscription
+	event          chan *Event
+	unsubscribe    chan subscription
+	done           chan struct{}
 	subscribers    map[eventName]map[subscriber]struct{}
 	subscribersAll map[subscriber]struct{}
 
-	event       chan *Event
-	subscribe   chan subscription
-	unsubscribe chan subscription
-	done        chan struct{}
-
-	lastEventID      string
 	reconnectionTime *time.Duration
+	lastEventID      string
+	client           Client
+	isRetry          bool
+	lastEventIDSet   bool
 }
 
+// SubscribeMessages subscribes the given channel to all events that are unnamed (no event field is present).
 func (c *Connection) SubscribeMessages(ch chan<- *Event) {
-	c.subscribe <- subscription{"", ch, false}
+	c.SubscribeEvent("", ch)
 }
 
+// UnsubscribeMessages unsubscribes an already subscribed channel from unnamed events.
+// If the channel is not subscribed to any other events, it will be closed.
+// Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
 func (c *Connection) UnsubscribeMessages(ch chan<- *Event) {
-	c.unsubscribe <- subscription{"", ch, false}
+	c.UnsubscribeEvent("", ch)
 }
 
+// SubscribeEvent subscribes the given channel to all the events with the provided name
+// (the event field has the value given here).
 func (c *Connection) SubscribeEvent(name string, ch chan<- *Event) {
-	if name == "" {
-		panic("go-sse.client.SubscribeEvent: name cannot be empty")
-	}
-
-	c.subscribe <- subscription{name, ch, false}
+	c.subscribe <- subscription{event: eventName(name), subscriber: ch}
 }
 
+// UnsubscribeEvent unsubscribes al already subscribed channel from the events with the provided name.
+// If the channel is not subscribed to any other events, it will be closed.
+// Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
 func (c *Connection) UnsubscribeEvent(name string, ch chan<- *Event) {
-	if name == "" {
-		panic("go-sse.client.UnsubscribeEvent: name cannot be empty")
-	}
-
-	c.unsubscribe <- subscription{name, ch, false}
+	c.unsubscribe <- subscription{event: eventName(name), subscriber: ch}
 }
 
+// SubscribeToAll subscribes the given channel to all events, named and unnamed. If the channel is already subscribed
+// to some events it won't receive those events twice.
 func (c *Connection) SubscribeToAll(ch chan<- *Event) {
-	c.subscribe <- subscription{"", ch, true}
+	c.subscribe <- subscription{subscriber: ch, all: true}
 }
 
+// UnsubscribeFromAll unsubscribes an already subscribed channel from all the events it is subscribed to.
+// After unsubscription the channel will be closed. The channel doesn't have to be subscribed using
+// the SubscribeToAll method in order for this method to unsubscribe it.
+// Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
 func (c *Connection) UnsubscribeFromAll(ch chan<- *Event) {
-	c.subscribe <- subscription{"", ch, true}
+	c.unsubscribe <- subscription{subscriber: ch, all: true}
 }
 
 func (c *Connection) addSubscriberToAll(ch chan<- *Event) {
@@ -84,17 +89,21 @@ func (c *Connection) addSubscriberToAll(ch chan<- *Event) {
 	c.subscribersAll[ch] = struct{}{}
 }
 
-func (c *Connection) removeSubscriberToAll(ch chan<- *Event) {
-	for _, subs := range c.subscribers {
+func (c *Connection) removeSubscriberFromAll(ch chan<- *Event) {
+	for event, subs := range c.subscribers {
 		delete(subs, ch)
+		if len(subs) == 0 {
+			delete(c.subscribers, event)
+		}
 	}
 
 	delete(c.subscribersAll, ch)
+	close(ch)
 }
 
-func (c *Connection) addSubscriber(event string, ch chan<- *Event) {
+func (c *Connection) addSubscriber(event eventName, ch chan<- *Event) {
 	if _, ok := c.subscribers[event]; !ok {
-		c.subscribers[event] = map[chan<- *Event]struct{}{}
+		c.subscribers[event] = map[subscriber]struct{}{}
 	}
 	if _, ok := c.subscribers[event][ch]; ok {
 		return
@@ -102,7 +111,7 @@ func (c *Connection) addSubscriber(event string, ch chan<- *Event) {
 	c.subscribers[event][ch] = struct{}{}
 }
 
-func (c *Connection) removeSubscriber(name string, ch chan<- *Event) {
+func (c *Connection) removeSubscriber(name eventName, ch chan<- *Event) {
 	if _, ok := c.subscribers[name]; !ok {
 		return
 	}
@@ -148,7 +157,7 @@ func (c *Connection) run() {
 	for {
 		select {
 		case e := <-c.event:
-			for s := range c.subscribers[e.Name] {
+			for s := range c.subscribers[eventName(e.Name)] {
 				s <- e
 			}
 			for s := range c.subscribersAll {
@@ -162,7 +171,7 @@ func (c *Connection) run() {
 			}
 		case s := <-c.unsubscribe:
 			if s.all {
-				c.removeSubscriberToAll(s.subscriber)
+				c.removeSubscriberFromAll(s.subscriber)
 			} else {
 				c.removeSubscriber(s.event, s.subscriber)
 			}
@@ -172,121 +181,130 @@ func (c *Connection) run() {
 	}
 }
 
-var ErrNoGetBody = errors.New("go-sse.client: can't retry request, GetBody not present")
-
-func (c *Connection) req() (*http.Request, error) {
+func (c *Connection) resetRequest() error {
 	if !c.isRetry {
 		c.isRetry = true
-
-		h := c.r.Header.Clone()
-		h.Set("Accept", "text/event-stream")
-		h.Set("Cache-Control", "no-cache")
-		h.Set("Connection", "keep-alive")
-
-		r := *c.r
-		r.Header = h
-		c.r = &r
-
-		return c.r, nil
+		return nil
 	}
-
-	if c.lastEventID != "" {
-		c.r.Header.Set("Last-Event-ID", c.lastEventID)
-	} else if c.r.Header.Get("Last-Event-ID") != "" {
-		c.r.Header.Del("Last-Event-ID")
+	if err := resetRequestBody(c.request); err != nil {
+		return &Error{Req: c.request, Reason: "unable to reset request body", Err: err}
 	}
-
-	if c.r.Body == nil {
-		return c.r, nil
+	if c.lastEventIDSet {
+		c.request.Header.Set("Last-Event-ID", c.lastEventID)
 	}
-
-	if c.r.GetBody == nil {
-		return nil, ErrNoGetBody
-	}
-
-	body, err := c.r.GetBody()
-	if err != nil {
-		return nil, err
-	}
-
-	r := *c.r
-	r.Body = body
-
-	return &r, nil
+	return nil
 }
 
-func (c *Connection) read() error {
-	r, err := c.req()
-	if err != nil {
-		return backoff.Permanent(err)
-	}
+func (c *Connection) read(r io.Reader) error {
+	p := parser.NewReaderParser(r)
+	ev := &Event{}
 
-	res, err := c.c.Do(r)
-	if err != nil {
-		ue := err.(*url.Error) //nolint:errorlint // it is guaranteed to have this type
-		if ue.Temporary() {
-			return ue
-		}
-		return backoff.Permanent(ue)
-	}
-	defer res.Body.Close()
+	for p.Scan() {
+		f := p.Field()
 
-	c.backoff.Reset()
-
-	p := parser.NewReaderParser(res.Body)
-
-loop:
-	for {
-		ev, firstDataField := &Event{}, true
-
-	event:
-		for {
-			if !p.Scan() {
-				break loop
+		switch f.Name {
+		case parser.FieldNameData:
+			ev.Data = append(ev.Data, f.Value...)
+			ev.Data = append(ev.Data, '\n')
+		case parser.FieldNameEvent:
+			ev.Name = string(f.Value)
+		case parser.FieldNameID:
+			// empty IDs are valid, only IDs that contain the null byte must be ignored:
+			// https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
+			if bytes.IndexByte(f.Value, 0) != -1 {
+				break
 			}
 
-			f := p.Field()
-			switch f.Name {
-			case parser.FieldNameData:
-				if firstDataField {
-					firstDataField = false
-				} else {
-					ev.Data = append(ev.Data, '\n')
-				}
-
-				ev.Data = append(ev.Data, f.Value...)
-			case parser.FieldNameEvent:
-				ev.Name = string(f.Value)
-			case parser.FieldNameID:
-				if len(f.Value) == 0 || bytes.IndexByte(f.Value, 0) != -1 {
-					break
-				}
-
-				ev.ID = string(f.Value)
-				c.lastEventID = ev.ID
-			case parser.FieldNameRetry:
-				n, err := strconv.ParseInt(util.String(f.Value), 10, 64)
-				if err != nil {
-					break
-				}
-				if n > 0 {
-					*c.reconnectionTime = time.Duration(n) * time.Millisecond
-				}
-			default:
-				select {
-				case c.event <- ev:
-					break event
-				case <-c.r.Context().Done():
-					return nil
-				}
+			ev.ID = string(f.Value)
+			c.lastEventID = ev.ID
+			c.lastEventIDSet = true
+		case parser.FieldNameRetry:
+			n, err := strconv.ParseInt(util.String(f.Value), 10, 64)
+			if err != nil {
+				break
+			}
+			if n > 0 {
+				*c.reconnectionTime = time.Duration(n) * time.Millisecond
+			}
+		default:
+			if l := len(ev.Data); l > 0 {
+				ev.Data = ev.Data[:l-1]
+			}
+			select {
+			case c.event <- ev:
+				ev = &Event{}
+			case <-c.request.Context().Done():
+				return nil
 			}
 		}
 	}
 
-	return p.Err()
+	if p.Err() == nil || p.Err() == context.Canceled || p.Err() == context.DeadlineExceeded {
+		return nil
+	}
+	return &Error{Req: c.request, Reason: "reading response body failed", Err: p.Err()}
 }
 
+// Connect sends the request the connection was created with to the server
+// and, if successful, it starts receiving events. The caller goroutine
+// is blocked until the request's context is done or an error occurs.
+//
+// Connect returns a nil error on success. On non-nil errors, the connection
+// is reattempted for the number of times the Client is configured with,
+// using an exponential backoff that has the initial time set to either the
+// client's default value or to the retry value received from the server.
+// If an error is permanent (e.g. no internet connection), no retries are done.
+// All errors returned are of type *client.Error.
+//
+// After Connect returns, all subscriptions will be closed. Make sure to wait
+// for the subscribers' goroutines to exit, as they may still be running after
+// Connect has returned. Connect cannot be called twice for the same connection.
 func (c *Connection) Connect() error {
 	defer close(c.done)
-	return backoff.RetryNotify(c.read, c.backoff, c.onRetry)
+
+	b, interval := c.client.newBackoff(c.request.Context())
+
+	c.reconnectionTime = interval
+	c.request.Header.Set("Accept", "text/event-stream")
+	c.request.Header.Set("Connection", "keep-alive")
+	c.request.Header.Set("Cache", "no-cache")
+
+	op := func() error {
+		if err := c.resetRequest(); err != nil {
+			return backoff.Permanent(err)
+		}
+
+		res, err := c.client.do(c.request)
+		if err != nil {
+			e := &Error{Req: c.request, Reason: "unable to execute request", Err: err}
+			return e.toPermanent()
+		}
+		defer res.Body.Close()
+
+		if err := c.client.ResponseValidator(res); err != nil {
+			e := &Error{Req: c.request, Reason: "response validation failed", Err: err}
+			return e.toPermanent()
+		}
+
+		b.Reset()
+
+		return c.read(res.Body)
+	}
+
+	return backoff.RetryNotify(op, b, c.client.OnRetry)
+}
+
+func resetRequestBody(r *http.Request) error {
+	if r.Body == nil {
+		return nil
+	}
+	if r.GetBody == nil {
+		return errors.New("the GetBody function doesn't exist on the request")
+	}
+	body, err := r.GetBody()
+	if err != nil {
+		return err
+	}
+	r.Body = body
+	return nil
 }
