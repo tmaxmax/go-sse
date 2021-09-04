@@ -16,7 +16,7 @@ func IsNewlineChar(b byte) bool {
 }
 
 func Bytes(s string) []byte {
-	return unsafe.Slice((*byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)).Data)), len(s))
+	return unsafe.Slice((*byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)).Data)), len(s)) //nolint
 }
 
 func String(p []byte) string {
