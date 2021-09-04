@@ -180,11 +180,8 @@ func (e *Event) SetTTL(duration time.Duration) {
 
 // New creates a new event. It takes as parameters the event's desired fields and an expiry time configuration
 // (TTL or ExpiresAt). If no expiry time is specified, the event expires immediately.
-//
-// If multiple Retry, ID, or Name fields are passed, the value of the last one is set. Multiple Data fields
-// are all kept in the order they're passed.
 func New(fields ...Field) *Event {
-	return &Event{fields: append(make([]Field, 0, len(fields)), fields...)}
+	return &Event{fields: fields}
 }
 
 // From creates a new event using the provided one as a base. It does not modify the base event.
