@@ -60,15 +60,16 @@ func TestEvent_WriteTo(t *testing.T) {
 		t.Fatalf("Failed to write event: %v", err)
 	}
 
-	if written != expectedWritten {
-		t.Fatalf("Written byte count wrong: expected %d, got %d", expectedWritten, written)
-	}
-
 	got := util.EscapeNewlines(w.String())
 
 	if !reflect.DeepEqual(expected, got) {
 		t.Fatalf("Event written incorrectly:\nexpected: %s\nreceived: %s", expected, got)
 	}
+
+	if written != expectedWritten {
+		t.Fatalf("Written byte count wrong: expected %d, got %d", expectedWritten, written)
+	}
+
 }
 
 func TestEvent_SetExpiry(t *testing.T) {
