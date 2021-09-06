@@ -303,12 +303,14 @@ func (c *Connection) Connect() error {
 	return backoff.RetryNotify(op, b, c.client.OnRetry)
 }
 
+var ErrNoGetBody = errors.New("the GetBody function doesn't exist on the request")
+
 func resetRequestBody(r *http.Request) error {
 	if r.Body == nil {
 		return nil
 	}
 	if r.GetBody == nil {
-		return errors.New("the GetBody function doesn't exist on the request")
+		return ErrNoGetBody
 	}
 	body, err := r.GetBody()
 	if err != nil {
