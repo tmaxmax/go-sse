@@ -47,8 +47,8 @@ func joeConfig(input []JoeConfig) JoeConfig {
 
 // hasTopic returns true if the given topic is inside the given topics slice.
 func hasTopic(topics []string, topic string) bool {
-	for _, t := range topics {
-		if topic == t {
+	for i := 0; i < len(topics); i++ {
+		if topics[i] == topic {
 			return true
 		}
 	}
