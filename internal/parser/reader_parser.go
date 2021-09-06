@@ -7,7 +7,7 @@ import (
 	"github.com/tmaxmax/go-sse/internal/util"
 )
 
-var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []byte, err error) {
+var splitFunc bufio.SplitFunc = func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if len(data) == 0 {
 		return
 	}
@@ -64,7 +64,10 @@ func (r *ReaderParser) Field() Field {
 
 // Err returns the last read error.
 func (r *ReaderParser) Err() error {
-	return r.sc.Err()
+	if r.sc.Err() != nil {
+		return r.sc.Err()
+	}
+	return r.p.Err()
 }
 
 func NewReaderParser(r io.Reader) *ReaderParser {

@@ -1,11 +1,15 @@
 package parser
 
-import "bytes"
+import (
+	"bytes"
+	"errors"
+)
 
 type ByteParser struct {
 	field Field
 	chunk []byte
 	cs    ChunkScanner
+	err   error
 }
 
 func min(a, b int) int {
@@ -33,6 +37,8 @@ func (b *ByteParser) scanSegmentName() (FieldName, bool) {
 	return name, false
 }
 
+var ErrUnexpectedEOF = errors.New("go-sse: unexpected end of input")
+
 // Scan parses the next available filed in the remaining buffer.
 // It returns false if there are no fields to parse.
 func (b *ByteParser) Scan() bool {
@@ -41,7 +47,15 @@ func (b *ByteParser) Scan() bool {
 			return false
 		}
 
-		b.chunk, _ = b.cs.Chunk()
+		var endsInNewline bool
+		b.chunk, endsInNewline = b.cs.Chunk()
+		if !endsInNewline {
+			// If the chunk doesn't end in a newline we have reached EOF.
+			// Fields should always end in a newline, so we return false, as this is not a complete field.
+			b.err = ErrUnexpectedEOF
+			return false
+		}
+
 		name, ok := b.scanSegmentName()
 
 		if !ok {
@@ -63,6 +77,10 @@ func (b *ByteParser) Field() Field {
 // Reset changes the buffer ByteParser parses fields from.
 func (b *ByteParser) Reset(p []byte) {
 	b.cs.Reset(p)
+}
+
+func (b *ByteParser) Err() error {
+	return b.err
 }
 
 func trimNewline(c []byte) []byte {

@@ -239,10 +239,11 @@ func (c *Connection) read(r io.Reader) error {
 		}
 	}
 
-	if p.Err() == nil || p.Err() == context.Canceled || p.Err() == context.DeadlineExceeded {
+	err := p.Err()
+	if err == nil || err == context.Canceled || err == context.DeadlineExceeded || err == parser.ErrUnexpectedEOF {
 		return nil
 	}
-	return &Error{Req: c.request, Reason: "reading response body failed", Err: p.Err()}
+	return &Error{Req: c.request, Reason: "reading response body failed", Err: err}
 }
 
 // Connect sends the request the connection was created with to the server

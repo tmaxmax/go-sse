@@ -14,6 +14,7 @@ func TestByteParser(t *testing.T) {
 		name     string
 		data     string
 		expected []parser.Field
+		err      error
 	}
 
 	tests := []testCase{
@@ -28,11 +29,9 @@ func TestByteParser(t *testing.T) {
 			},
 		},
 		{
-			name: "Normal data with comments",
+			name: "Normal data but no newline at the end",
 			data: ":comment\r: another comment\ndata: whatever",
-			expected: []parser.Field{
-				newDataField(t, "whatever"),
-			},
+			err:  parser.ErrUnexpectedEOF,
 		},
 		{
 			name: "Fields without colon",
@@ -53,6 +52,14 @@ func TestByteParser(t *testing.T) {
 				{},
 			},
 		},
+		{
+			name: "Normal data, only one newline at the end",
+			data: "data: first chunk\ndata: second chunk\r\n",
+			expected: []parser.Field{
+				newDataField(t, "first chunk"),
+				newDataField(t, "second chunk"),
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -68,6 +75,9 @@ func TestByteParser(t *testing.T) {
 				segments = append(segments, p.Field())
 			}
 
+			if p.Err() != test.err {
+				t.Fatalf("invalid error: received %v, expected %v", p.Err(), test.err)
+			}
 			if !reflect.DeepEqual(test.expected, segments) {
 				t.Fatalf("invalid segments for test %q:\nreceived %#v\nexpected %#v", test.name, segments, test.expected)
 			}

@@ -2,7 +2,6 @@ package event
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -91,12 +90,15 @@ func (u *UnmarshalError) Unwrap() error {
 	return u.Reason
 }
 
+var ErrUnexpectedEOF = parser.ErrUnexpectedEOF
+
 // UnmarshalText extracts the first event found in the given byte slice into the
 // receiver. The receiver is always reset to the event's default value before unmarshaling,
 // so always use a new Event instance if you don't want to overwrite data.
 //
 // Unmarshaling ignores comments and fields with invalid names. If no valid fields are found,
-// an error is returned.
+// an error is returned. For a field to be valid it must end in a newline - if the last
+// field of the event doesn't end in one, an error is returned.
 //
 // All returned errors are of type UnmarshalError.
 func (e *Event) UnmarshalText(b []byte) error {
@@ -131,10 +133,10 @@ loop:
 		}
 	}
 
-	if len(e.fields) == 0 {
-		return &UnmarshalError{Reason: errors.New("unexpected end of input")}
+	if len(e.fields) == 0 || s.Err() != nil {
+		e.reset()
+		return &UnmarshalError{Reason: ErrUnexpectedEOF}
 	}
-
 	return nil
 }
 
