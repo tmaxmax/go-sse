@@ -196,7 +196,9 @@ func (c *Connection) resetRequest() error {
 	if err := resetRequestBody(c.request); err != nil {
 		return &Error{Req: c.request, Reason: "unable to reset request body", Err: err}
 	}
-	if c.lastEventIDSet {
+	if c.lastEventID == "" {
+		c.request.Header.Del("Last-Event-ID")
+	} else {
 		c.request.Header.Set("Last-Event-ID", c.lastEventID)
 	}
 	return nil
@@ -224,7 +226,6 @@ func (c *Connection) read(r io.Reader) error {
 
 			ev.ID = string(f.Value)
 			c.lastEventID = ev.ID
-			c.lastEventIDSet = true
 		case parser.FieldNameRetry:
 			n, err := strconv.ParseInt(util.String(f.Value), 10, 64)
 			if err != nil {
