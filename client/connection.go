@@ -29,7 +29,7 @@ type Connection struct {
 	request *http.Request
 
 	subscribe      chan subscription
-	event          chan *Event
+	event          chan Event
 	unsubscribe    chan subscription
 	done           chan struct{}
 	subscribers    map[eventName]map[subscriber]struct{}
@@ -42,46 +42,53 @@ type Connection struct {
 	lastEventIDSet   bool
 }
 
+func (c *Connection) send(ch chan<- subscription, s subscription) {
+	select {
+	case ch <- s:
+	case <-c.done:
+	}
+}
+
 // SubscribeMessages subscribes the given channel to all events that are unnamed (no event field is present).
-func (c *Connection) SubscribeMessages(ch chan<- *Event) {
+func (c *Connection) SubscribeMessages(ch chan<- Event) {
 	c.SubscribeEvent("", ch)
 }
 
 // UnsubscribeMessages unsubscribes an already subscribed channel from unnamed events.
 // If the channel is not subscribed to any other events, it will be closed.
 // Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
-func (c *Connection) UnsubscribeMessages(ch chan<- *Event) {
+func (c *Connection) UnsubscribeMessages(ch chan<- Event) {
 	c.UnsubscribeEvent("", ch)
 }
 
 // SubscribeEvent subscribes the given channel to all the events with the provided name
 // (the event field has the value given here).
-func (c *Connection) SubscribeEvent(name string, ch chan<- *Event) {
-	c.subscribe <- subscription{event: eventName(name), subscriber: ch}
+func (c *Connection) SubscribeEvent(name string, ch chan<- Event) {
+	c.send(c.subscribe, subscription{event: eventName(name), subscriber: ch})
 }
 
 // UnsubscribeEvent unsubscribes al already subscribed channel from the events with the provided name.
 // If the channel is not subscribed to any other events, it will be closed.
 // Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
-func (c *Connection) UnsubscribeEvent(name string, ch chan<- *Event) {
-	c.unsubscribe <- subscription{event: eventName(name), subscriber: ch}
+func (c *Connection) UnsubscribeEvent(name string, ch chan<- Event) {
+	c.send(c.unsubscribe, subscription{event: eventName(name), subscriber: ch})
 }
 
 // SubscribeToAll subscribes the given channel to all events, named and unnamed. If the channel is already subscribed
 // to some events it won't receive those events twice.
-func (c *Connection) SubscribeToAll(ch chan<- *Event) {
-	c.subscribe <- subscription{subscriber: ch, all: true}
+func (c *Connection) SubscribeToAll(ch chan<- Event) {
+	c.send(c.subscribe, subscription{subscriber: ch, all: true})
 }
 
 // UnsubscribeFromAll unsubscribes an already subscribed channel from all the events it is subscribed to.
 // After unsubscription the channel will be closed. The channel doesn't have to be subscribed using
 // the SubscribeToAll method in order for this method to unsubscribe it.
 // Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
-func (c *Connection) UnsubscribeFromAll(ch chan<- *Event) {
-	c.unsubscribe <- subscription{subscriber: ch, all: true}
+func (c *Connection) UnsubscribeFromAll(ch chan<- Event) {
+	c.send(c.unsubscribe, subscription{subscriber: ch, all: true})
 }
 
-func (c *Connection) addSubscriberToAll(ch chan<- *Event) {
+func (c *Connection) addSubscriberToAll(ch chan<- Event) {
 	for _, subs := range c.subscribers {
 		delete(subs, ch)
 	}
@@ -89,7 +96,7 @@ func (c *Connection) addSubscriberToAll(ch chan<- *Event) {
 	c.subscribersAll[ch] = struct{}{}
 }
 
-func (c *Connection) removeSubscriberFromAll(ch chan<- *Event) {
+func (c *Connection) removeSubscriberFromAll(ch chan<- Event) {
 	for event, subs := range c.subscribers {
 		delete(subs, ch)
 		if len(subs) == 0 {
@@ -101,7 +108,7 @@ func (c *Connection) removeSubscriberFromAll(ch chan<- *Event) {
 	close(ch)
 }
 
-func (c *Connection) addSubscriber(event eventName, ch chan<- *Event) {
+func (c *Connection) addSubscriber(event eventName, ch chan<- Event) {
 	if _, ok := c.subscribers[event]; !ok {
 		c.subscribers[event] = map[subscriber]struct{}{}
 	}
@@ -111,7 +118,7 @@ func (c *Connection) addSubscriber(event eventName, ch chan<- *Event) {
 	c.subscribers[event][ch] = struct{}{}
 }
 
-func (c *Connection) removeSubscriber(name eventName, ch chan<- *Event) {
+func (c *Connection) removeSubscriber(name eventName, ch chan<- Event) {
 	if _, ok := c.subscribers[name]; !ok {
 		return
 	}
@@ -197,7 +204,7 @@ func (c *Connection) resetRequest() error {
 
 func (c *Connection) read(r io.Reader) error {
 	p := parser.NewReaderParser(r)
-	ev := &Event{}
+	ev := Event{}
 
 	for p.Scan() {
 		f := p.Field()
@@ -232,7 +239,7 @@ func (c *Connection) read(r io.Reader) error {
 			}
 			select {
 			case c.event <- ev:
-				ev = &Event{}
+				ev = Event{}
 			case <-c.request.Context().Done():
 				return nil
 			}

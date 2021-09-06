@@ -57,7 +57,7 @@ func (c *Client) NewConnection(r *http.Request) *Connection {
 		request:        r.Clone(r.Context()), // we clone the request so its fields cannot be modified from outside
 		subscribers:    map[eventName]map[subscriber]struct{}{},
 		subscribersAll: map[subscriber]struct{}{},
-		event:          make(chan *Event, 1),
+		event:          make(chan Event, 1),
 		subscribe:      make(chan subscription),
 		unsubscribe:    make(chan subscription),
 		done:           make(chan struct{}),
