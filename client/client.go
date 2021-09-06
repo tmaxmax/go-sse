@@ -74,6 +74,7 @@ func (c *Client) do(r *http.Request) (*http.Response, error) {
 
 func (c *Client) newBackoff(ctx context.Context) (backoff.BackOff, *time.Duration) {
 	base := backoff.NewExponentialBackOff()
+	base.InitialInterval = c.DefaultReconnectionTime
 	initialReconnectionTime := &base.InitialInterval
 	b := backoff.WithContext(base, ctx)
 	if c.MaxRetries >= 0 {
