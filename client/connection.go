@@ -15,7 +15,7 @@ import (
 )
 
 type (
-	subscriber chan<- *Event
+	subscriber chan<- Event
 	eventName  string
 )
 
