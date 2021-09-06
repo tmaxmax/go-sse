@@ -57,7 +57,6 @@ func (b *ByteParser) Scan() bool {
 		}
 
 		name, ok := b.scanSegmentName()
-
 		if !ok {
 			// Ignore the field
 			continue
