@@ -528,7 +528,6 @@ func TestConnection_reconnect(t *testing.T) {
 		ResponseValidator: client.NoopValidator,
 		MaxRetries:        -1,
 		OnRetry: func(err error, duration time.Duration) {
-			t.Log(err, duration)
 			retries = append(retries, duration)
 		},
 	}
@@ -536,7 +535,6 @@ func TestConnection_reconnect(t *testing.T) {
 
 	require.Error(t, conn.Connect(), "expected Connect error")
 	require.Equal(t, expectedIDs, lastEventIDs, "invalid last event IDs")
-	t.Log(expectedRetries, retries)
 	for i := range expectedRetries {
 		require.InEpsilon(t, expectedRetries[i], retries[i], backoff.DefaultRandomizationFactor, "invalid retries")
 	}
