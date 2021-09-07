@@ -20,7 +20,7 @@ func main() {
 	defer cancel()
 
 	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/events", nil)
-	conn, done, events := client.NewConnection(r), make(chan struct{}), make(chan *client.Event, 1)
+	conn, done, events := client.NewConnection(r), make(chan struct{}), make(chan client.Event, 1)
 
 	conn.SubscribeToAll(events)
 

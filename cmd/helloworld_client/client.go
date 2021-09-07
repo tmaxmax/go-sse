@@ -11,7 +11,7 @@ import (
 func main() {
 	r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", nil)
 	conn := client.NewConnection(r)
-	ch := make(chan *client.Event)
+	ch := make(chan client.Event)
 
 	conn.SubscribeMessages(ch)
 
