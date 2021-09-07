@@ -1,7 +1,7 @@
 package client
 
 import (
-	"unsafe"
+	"github.com/tmaxmax/go-sse/internal/util"
 )
 
 // The Event struct represents an event sent to the helloworld_client by the server.
@@ -15,6 +15,6 @@ type Event struct {
 }
 
 // String returns the data buffer as a string. It does no allocations.
-func (e *Event) String() string {
-	return *(*string)(unsafe.Pointer(&e.Data))
+func (e Event) String() string {
+	return util.String(e.Data)
 }
