@@ -18,6 +18,13 @@ import (
 
 var sse = server.New()
 
+func cors(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		h.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -32,7 +39,7 @@ func main() {
 
 	s := &http.Server{
 		Addr:    "0.0.0.0:8080",
-		Handler: mux,
+		Handler: cors(mux),
 	}
 	s.RegisterOnShutdown(func() {
 		// Broadcast a close message so clients can gracefully disconnect.
