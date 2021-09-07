@@ -204,7 +204,7 @@ func (c *Connection) resetRequest() error {
 	return nil
 }
 
-func (c *Connection) read(r io.Reader) error {
+func (c *Connection) read(r io.Reader, reset func()) error {
 	p := parser.NewReaderParser(r)
 	ev := Event{}
 
@@ -233,6 +233,7 @@ func (c *Connection) read(r io.Reader) error {
 			}
 			if n > 0 {
 				*c.reconnectionTime = time.Duration(n) * time.Millisecond
+				reset()
 			}
 		default:
 			if l := len(ev.Data); l > 0 {
@@ -251,7 +252,8 @@ func (c *Connection) read(r io.Reader) error {
 	if err == nil || err == context.Canceled || err == context.DeadlineExceeded || err == parser.ErrUnexpectedEOF {
 		return nil
 	}
-	return &Error{Req: c.request, Reason: "reading response body failed", Err: err}
+	e := &Error{Req: c.request, Reason: "reading response body failed", Err: err}
+	return e.toPermanent()
 }
 
 // Connect sends the request the connection was created with to the server
@@ -297,7 +299,7 @@ func (c *Connection) Connect() error {
 
 		b.Reset()
 
-		return c.read(res.Body)
+		return c.read(res.Body, b.Reset)
 	}
 
 	return backoff.RetryNotify(op, b, c.client.OnRetry)
