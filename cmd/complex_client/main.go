@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -33,13 +32,13 @@ func main() {
 				fmt.Println("Server closed!")
 				cancel()
 			default: // no event name
-				sum := big.NewInt(0)
+				var sum, num big.Int
 				for _, n := range strings.Split(event.String(), "\n") {
-					v, _ := strconv.ParseInt(n, 10, 64)
-					sum.Add(sum, big.NewInt(v))
+					_, _ = num.SetString(n, 10)
+					sum.Add(&sum, &num)
 				}
 
-				fmt.Printf("Sum of random numbers: %s\n", sum)
+				fmt.Printf("Sum of random numbers: %s\n", &sum)
 			}
 		}
 
