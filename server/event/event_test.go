@@ -1,7 +1,6 @@
 package event
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -115,16 +114,21 @@ func TestEvent_UnmarshalText(t *testing.T) {
 	tests := []test{
 		{
 			name:        "No input",
-			expectedErr: &UnmarshalError{Reason: errors.New("unexpected end of input")},
+			expectedErr: &UnmarshalError{Reason: ErrUnexpectedEOF},
 		},
 		{
 			name:  "Invalid retry field",
-			input: "retry: sigma male",
+			input: "retry: sigma male\n",
 			expectedErr: &UnmarshalError{
 				FieldName:  string(parser.FieldNameRetry),
 				FieldValue: "sigma male",
 				Reason:     fmt.Errorf("contains character %q, which is not an ASCII digit", 's'),
 			},
+		},
+		{
+			name:        "Valid input, no final newline",
+			input:       "data: first\ndata:second\ndata:third",
+			expectedErr: &UnmarshalError{Reason: ErrUnexpectedEOF},
 		},
 		{
 			name:  "Valid input",
