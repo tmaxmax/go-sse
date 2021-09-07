@@ -3,6 +3,7 @@ package client_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -75,6 +76,20 @@ func toEv(tb testing.TB, s string) (ev client.Event) {
 	require.NoError(tb, p.Err(), "unexpected toEv fail")
 
 	return
+}
+
+func TestClient_NewConnection(t *testing.T) {
+	t.Parallel()
+
+	require.Panics(t, func() {
+		client.NewConnection(nil)
+	})
+
+	c := client.Client{}
+	r := req(t, "", "", nil)
+	_ = c.NewConnection(r)
+
+	require.Equal(t, c.HTTPClient, http.DefaultClient)
 }
 
 func TestConnection_Connect_retry(t *testing.T) {
@@ -379,13 +394,9 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
 	all, unsubAll := events(t, conn)
-	defer unsubAll()
 	some, unsubSome := events(t, conn, "a", "b")
-	defer unsubSome()
 	one, unsubOne := events(t, conn, "a")
-	defer unsubOne()
 	messages, unsubMessages := events(t, conn, "")
-	defer unsubMessages()
 
 	type action struct {
 		message string
@@ -430,4 +441,103 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 	require.Equal(t, expectedSome, <-some, "unexpected events for some")
 	require.Equal(t, expectedOne, <-one, "unexpected events for one")
 	require.Equal(t, expectedMessages, <-messages, "unexpected events for messages")
+}
+
+func TestConnection_serverError(t *testing.T) {
+	t.Parallel()
+
+	type action struct {
+		message string
+		cancel  bool
+	}
+	evs := make(chan action)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			panic(http.ErrAbortHandler)
+		}
+		for ev := range evs {
+			if ev.cancel {
+				panic(http.ErrAbortHandler)
+			}
+			_, _ = io.WriteString(w, ev.message)
+			flusher.Flush()
+		}
+	}))
+	defer ts.Close()
+
+	c := client.Client{
+		HTTPClient:        ts.Client(),
+		ResponseValidator: client.NoopValidator,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	conn := c.NewConnection(reqCtx(t, ctx, "", ts.URL, nil))
+
+	all, _ := events(t, conn)
+
+	actions := []action{
+		{message: "data: first\n"},
+		{message: "data: second\n\n", cancel: true},
+		{message: "data: third\n\n"},
+	}
+	expected := []client.Event(nil)
+
+	go func() {
+		defer close(evs)
+		for _, action := range actions {
+			evs <- action
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	require.Error(t, conn.Connect(), "expected Connect error")
+	require.Equal(t, expected, <-all, "unexpected values for all")
+}
+
+func TestConnection_reconnect(t *testing.T) {
+	t.Parallel()
+
+	var retries []time.Duration
+	var lastEventIDs []string
+
+	sleep := time.Millisecond
+	attempt := -1
+	idsToSet := [...]string{"1", "\000mama", "", ""}
+	retriesToSet := [...]string{"1", "mama", "3", ""}
+	expectedRetries := []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond * 3}
+	expectedIDs := []string{"", "1", "1", ""}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempt++
+		lastEventIDs = append(lastEventIDs, r.Header.Get("Last-Event-ID"))
+		flusher := w.(http.Flusher)
+
+		_, _ = fmt.Fprintf(w, "id: %s\nretry: %s\n\n", idsToSet[attempt], retriesToSet[attempt])
+		flusher.Flush()
+		if attempt == 3 {
+			panic(http.ErrAbortHandler)
+		}
+		time.Sleep(sleep * 2)
+	}))
+	defer ts.Close()
+	ts.Client().Timeout = sleep
+
+	c := client.Client{
+		HTTPClient:        ts.Client(),
+		ResponseValidator: client.NoopValidator,
+		MaxRetries:        -1,
+		OnRetry: func(err error, duration time.Duration) {
+			t.Log(err, duration)
+			retries = append(retries, duration)
+		},
+	}
+	conn := c.NewConnection(req(t, "", ts.URL, nil))
+
+	require.Error(t, conn.Connect(), "expected Connect error")
+	require.Equal(t, expectedIDs, lastEventIDs, "invalid last event IDs")
+	t.Log(expectedRetries, retries)
+	for i := range expectedRetries {
+		require.InEpsilon(t, expectedRetries[i], retries[i], backoff.DefaultRandomizationFactor, "invalid retries")
+	}
 }
