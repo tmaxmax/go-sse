@@ -100,12 +100,6 @@ type JoeConfig struct {
 	// An optional interval at which Joe triggers a cleanup of expired messages, if the replay provider supports it.
 	// See the desired provider's documentation to determine if periodic cleanup is necessary.
 	ReplayGCInterval time.Duration
-	// Joe receives published events on a dedicated channel. If the publisher's goroutine is blocked
-	// because Joe can't keep up with the load, use a bigger buffer. This shouldn't be a concern
-	// and if it is other providers might be suited better for your use-case.
-	//
-	// The buffer size defaults to 1.
-	MessageChannelBuffer int
 }
 
 // NewJoe creates and starts a Joe.
@@ -115,7 +109,7 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 	gc, stopGCTicker := ticker(config.ReplayGCInterval)
 
 	j := &Joe{
-		message:        make(chan Message, config.MessageChannelBuffer),
+		message:        make(chan Message),
 		subscription:   make(chan Subscription),
 		unsubscription: make(chan subscriber),
 		done:           make(chan struct{}),

@@ -32,9 +32,6 @@ func joeConfig(input []JoeConfig) JoeConfig {
 		cfg = input[0]
 	}
 
-	if cfg.MessageChannelBuffer <= 0 {
-		cfg.MessageChannelBuffer = 1
-	}
 	if cfg.ReplayProvider == nil {
 		if cfg.ReplayGCInterval > 0 {
 			cfg.ReplayGCInterval = 0
