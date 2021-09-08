@@ -29,10 +29,10 @@ type Subscription struct {
 
 // The Message struct is used to publish a message to a given provider.
 type Message struct {
-	// The topic to publish the event to. If no topic is specified the default topic is implied.
-	Topic string
 	// The event to publish.
 	Event *event.Event
+	// The topic to publish the event to. If no topic is specified the default topic is implied.
+	Topic string
 }
 
 // A Provider is a publish-subscribe system that can be used to implement a HTML5 server-sent events
