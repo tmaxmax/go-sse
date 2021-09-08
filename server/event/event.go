@@ -19,13 +19,13 @@ func isSingleLine(p []byte) bool {
 }
 
 // fieldBytes holds the byte representation of each field type along with a colon at the end.
-var fieldBytes = map[parser.FieldName][]byte{
-	parser.FieldNameData:  []byte(parser.FieldNameData + ": "),
-	parser.FieldNameEvent: []byte(parser.FieldNameEvent + ": "),
-	parser.FieldNameRetry: []byte(parser.FieldNameRetry + ": "),
-	parser.FieldNameID:    []byte(parser.FieldNameID + ": "),
-	"":                    {':', ' '},
-}
+var (
+	fieldBytesData    = []byte(parser.FieldNameData + ": ")
+	fieldBytesEvent   = []byte(parser.FieldNameEvent + ": ")
+	fieldBytesRetry   = []byte(parser.FieldNameRetry + ": ")
+	fieldBytesID      = []byte(parser.FieldNameID + ": ")
+	fieldBytesComment = []byte{':', ' '}
+)
 
 // The ID struct represents any valid event ID value.
 type ID struct {
@@ -72,11 +72,11 @@ type chunk struct {
 var newline = []byte{'\n'}
 
 func (c *chunk) WriteTo(w io.Writer) (int64, error) {
-	var name parser.FieldName
-	if !c.isComment {
-		name = parser.FieldNameData
+	name := fieldBytesData
+	if c.isComment {
+		name = fieldBytesComment
 	}
-	n, err := w.Write(fieldBytes[name])
+	n, err := w.Write(name)
 	if err != nil {
 		return int64(n), err
 	}
@@ -238,7 +238,7 @@ func (e *Event) writeID(w io.Writer) (int64, error) {
 		return 0, nil
 	}
 
-	n, err := w.Write(fieldBytes[parser.FieldNameID])
+	n, err := w.Write(fieldBytesID)
 	if err != nil {
 		return int64(n), err
 	}
@@ -256,7 +256,7 @@ func (e *Event) writeName(w io.Writer) (int64, error) {
 		return 0, nil
 	}
 
-	n, err := w.Write(fieldBytes[parser.FieldNameEvent])
+	n, err := w.Write(fieldBytesEvent)
 	if err != nil {
 		return int64(n), err
 	}
@@ -274,7 +274,7 @@ func (e *Event) writeRetry(w io.Writer) (int64, error) {
 		return 0, nil
 	}
 
-	n, err := w.Write(fieldBytes[parser.FieldNameRetry])
+	n, err := w.Write(fieldBytesRetry)
 	if err != nil {
 		return int64(n), err
 	}
