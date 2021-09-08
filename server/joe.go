@@ -211,6 +211,9 @@ func (j *Joe) start() {
 			}
 			j.subscribers[sub.Channel] = struct{}{}
 		case unsub := <-j.unsubscription:
+			if _, ok := j.subscribers[unsub]; !ok {
+				continue
+			}
 			for _, subs := range j.topics {
 				delete(subs, unsub)
 			}
