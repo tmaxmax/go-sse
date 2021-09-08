@@ -14,12 +14,12 @@ import (
 )
 
 type mockProvider struct {
+	SubError   error
+	Pub        Message
+	Sub        Subscription
 	Subscribed bool
 	Stopped    bool
 	Published  bool
-	SubError   error
-	Sub        Subscription
-	Pub        Message
 }
 
 func (m *mockProvider) Subscribe(ctx context.Context, sub Subscription) error {
