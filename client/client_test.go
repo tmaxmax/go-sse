@@ -509,15 +509,15 @@ func TestConnection_reconnect(t *testing.T) {
 	expectedRetries := []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond * 3}
 	expectedIDs := []string{"", "1", "1", ""}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if attempt >= 3 {
+			panic(http.ErrAbortHandler)
+		}
 		attempt++
 		lastEventIDs = append(lastEventIDs, r.Header.Get("Last-Event-ID"))
 		flusher := w.(http.Flusher)
 
 		_, _ = fmt.Fprintf(w, "id: %s\nretry: %s\n\n", idsToSet[attempt], retriesToSet[attempt])
 		flusher.Flush()
-		if attempt == 3 {
-			panic(http.ErrAbortHandler)
-		}
 		time.Sleep(sleep * 2)
 	}))
 	defer ts.Close()
