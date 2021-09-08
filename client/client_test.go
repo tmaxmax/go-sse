@@ -79,8 +79,6 @@ func toEv(tb testing.TB, s string) (ev client.Event) {
 }
 
 func TestClient_NewConnection(t *testing.T) {
-	t.Parallel()
-
 	require.Panics(t, func() {
 		client.NewConnection(nil)
 	})
@@ -93,8 +91,6 @@ func TestClient_NewConnection(t *testing.T) {
 }
 
 func TestConnection_Connect_retry(t *testing.T) {
-	t.Parallel()
-
 	var firstReconnectionTime time.Duration
 	var retryAttempts int
 
@@ -129,8 +125,6 @@ type readerWrapper struct {
 }
 
 func TestConnection_Connect_resetBody(t *testing.T) {
-	t.Parallel()
-
 	type test struct {
 		name    string
 		body    io.Reader
@@ -199,8 +193,6 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 }
 
 func TestConnection_Connect_validator(t *testing.T) {
-	t.Parallel()
-
 	validatorErr := errors.New("invalid")
 
 	type test struct {
@@ -241,8 +233,6 @@ func TestConnection_Connect_validator(t *testing.T) {
 }
 
 func TestConnection_Connect_defaultValidator(t *testing.T) {
-	t.Parallel()
-
 	type test struct {
 		name      string
 		handler   http.Handler
@@ -331,8 +321,6 @@ func events(tb testing.TB, c *client.Connection, topics ...string) (events <-cha
 }
 
 func TestConnection_Subscriptions(t *testing.T) {
-	t.Parallel()
-
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		data := "retry: 1000\n\nevent: test\ndata: something\n\nevent: test2\ndata: something else\n\ndata: unnamed\n\ndata: this shouldn't be received"
 
@@ -371,8 +359,6 @@ func TestConnection_Subscriptions(t *testing.T) {
 }
 
 func TestConnection_Unsubscriptions(t *testing.T) {
-	t.Parallel()
-
 	evs := make(chan string)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -444,8 +430,6 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 }
 
 func TestConnection_serverError(t *testing.T) {
-	t.Parallel()
-
 	type action struct {
 		message string
 		cancel  bool
@@ -497,8 +481,6 @@ func TestConnection_serverError(t *testing.T) {
 }
 
 func TestConnection_reconnect(t *testing.T) {
-	t.Parallel()
-
 	var retries []time.Duration
 	var lastEventIDs []string
 
@@ -551,8 +533,6 @@ func drain(tb testing.TB, ch <-chan client.Event) []client.Event {
 }
 
 func TestConnection_Subscriptions_2(t *testing.T) {
-	t.Parallel()
-
 	c := client.Client{
 		HTTPClient: &http.Client{
 			Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
