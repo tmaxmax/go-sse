@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tmaxmax/go-sse/server/event"
+	event "github.com/tmaxmax/go-sse/server/event/v2"
 )
 
 // A ReplayProvider is a type that can replay older published events to new subscribers.
@@ -13,7 +13,8 @@ import (
 // the events' expiration times or any other criteria to determine which are valid for replay.
 //
 // While providers can require events to have IDs beforehand, they can also set the IDs themselves,
-// automatically - it's up to the implementation.
+// automatically - it's up to the implementation. Providers should ignore events without IDs,
+// if they require IDs to be set.
 //
 // Replay providers are not required to be thread-safe - server providers are required to ensure only
 // one operation is executed on the replay provider at any given time. Server providers may not execute
@@ -66,20 +67,24 @@ type ReplayProvider interface {
 // which the replay failed and optionally another error value that describes why
 // the replay failed.
 type ReplayError struct {
-	err error
-	id  string
+	Reason error
+	ID     event.ID
 }
 
 func (e *ReplayError) Error() string {
-	if e.err != nil {
-		return fmt.Sprintf("server.replay.Provider: invalid ID %q: %s", e.id, e.err.Error())
+	if e.Reason != nil {
+		return fmt.Sprintf("server.replay.Provider: invalid ID %q: %s", e.ID, e.Reason.Error())
 	}
-	return fmt.Sprintf("server.replay.Provider: ID %q does not exist", e.id)
+	return fmt.Sprintf("server.replay.Provider: ID %q does not exist", e.ID)
+}
+
+func (e *ReplayError) Unwrap() error {
+	return e.Reason
 }
 
 type (
-	subscriber  = chan<- *event.Event
-	subscribers = map[subscriber]struct{}
+	subscriber  chan<- *event.Event
+	subscribers map[subscriber]struct{}
 )
 
 // Joe is a basic server provider that synchronously executes operations by queueing them in channels.

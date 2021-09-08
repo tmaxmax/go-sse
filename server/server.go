@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/tmaxmax/go-sse/server/event"
+	event "github.com/tmaxmax/go-sse/server/event/v2"
 )
 
 // The Subscription struct is used to subscribe to a given provider.
@@ -22,17 +22,17 @@ type Subscription struct {
 	// An optional last event ID indicating the event to resume the stream from.
 	// The events will replay starting from the first valid event sent after the one with the given ID.
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
-	LastEventID string
+	LastEventID event.ID
 	// The topics to receive message from. If no topic is specified, a default topic is implied.
 	Topics []string
 }
 
 // The Message struct is used to publish a message to a given provider.
 type Message struct {
-	// The event to publish.
-	Event *event.Event
 	// The topic to publish the event to. If no topic is specified the default topic is implied.
 	Topic string
+	// The event to publish.
+	Event *event.Event
 }
 
 // A Provider is a publish-subscribe system that can be used to implement a HTML5 server-sent events
@@ -128,9 +128,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	events := make(chan *event.Event)
+	id, _ := event.NewID(r.Header.Get("Last-Event-ID"))
 	err = s.provider.Subscribe(r.Context(), Subscription{
 		Channel:     events,
-		LastEventID: r.Header.Get("Last-Event-ID"),
+		LastEventID: id,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -150,8 +151,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // You can send any value that implements the event.Marshaler interface, for convenience. If marshalling
 // fails, the error is returned and nothing is sent.
-func (s *Server) Publish(m event.Marshaler, topic ...string) error {
-	msg := Message{Event: m.MarshalEvent()}
+func (s *Server) Publish(e *event.Event, topic ...string) error {
+	msg := Message{Event: e}
 	if len(topic) > 0 {
 		msg.Topic = topic[0]
 	}

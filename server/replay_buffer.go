@@ -1,9 +1,10 @@
 package server
 
 import (
+	"errors"
 	"strconv"
 
-	"github.com/tmaxmax/go-sse/server/event"
+	event "github.com/tmaxmax/go-sse/server/event/v2"
 )
 
 // A buffer is the underlying storage for a provider. Its methods are used by the provider to implement
@@ -13,7 +14,7 @@ type buffer interface {
 	dequeue()
 	front() *event.Event
 	len() int
-	slice(string) ([]Message, error)
+	slice(event.ID) ([]Message, error)
 }
 
 type bufferBase struct {
@@ -32,12 +33,12 @@ func (b *bufferBase) front() *event.Event {
 }
 
 type bufferNoID struct {
-	lastRemovedID string
+	lastRemovedID event.ID
 	bufferBase
 }
 
 func (b *bufferNoID) queue(message *Message) {
-	if message.Event.ID() != "" {
+	if message.Event.ID().IsSet() {
 		b.buf = append(b.buf, *message)
 	}
 }
@@ -47,7 +48,7 @@ func (b *bufferNoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferNoID) slice(atID string) ([]Message, error) {
+func (b *bufferNoID) slice(atID event.ID) ([]Message, error) {
 	if atID == b.lastRemovedID && len(b.buf) != 0 {
 		return b.buf, nil
 	}
@@ -59,7 +60,7 @@ func (b *bufferNoID) slice(atID string) ([]Message, error) {
 		}
 	}
 	if index == -1 {
-		return nil, &ReplayError{id: atID}
+		return nil, &ReplayError{ID: atID}
 	}
 	return b.buf[index:], nil
 }
@@ -73,7 +74,8 @@ type bufferAutoID struct {
 const autoIDBase = 10
 
 func (b *bufferAutoID) queue(message *Message) {
-	message.Event = event.From(message.Event, event.ID(strconv.FormatInt(b.lastID, autoIDBase)))
+	message.Event = message.Event.Clone()
+	message.Event.SetID(event.MustID(strconv.FormatInt(b.lastID, autoIDBase)))
 	b.lastID++
 	b.buf = append(b.buf, *message)
 }
@@ -83,14 +85,17 @@ func (b *bufferAutoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferAutoID) slice(atID string) ([]Message, error) {
-	id, err := strconv.ParseInt(string(atID), autoIDBase, 64)
+func (b *bufferAutoID) slice(atID event.ID) ([]Message, error) {
+	if !atID.IsSet() {
+		return nil, &ReplayError{ID: atID, Reason: errors.New("ID not set")}
+	}
+	id, err := strconv.ParseInt(atID.String(), autoIDBase, 64)
 	if err != nil {
-		return nil, &ReplayError{id: atID, err: err}
+		return nil, &ReplayError{ID: atID, Reason: err}
 	}
 	index := id - b.firstID
 	if index < 0 || index >= int64(len(b.buf)) {
-		return nil, &ReplayError{id: atID}
+		return nil, &ReplayError{ID: atID, Reason: errors.New("ID not found")}
 	}
 	return b.buf[index:], nil
 }

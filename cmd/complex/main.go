@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/tmaxmax/go-sse/server"
-	"github.com/tmaxmax/go-sse/server/event"
+	event "github.com/tmaxmax/go-sse/server/event/v2"
 )
 
 var sse = server.New()
@@ -42,8 +42,10 @@ func main() {
 		Handler: cors(mux),
 	}
 	s.RegisterOnShutdown(func() {
+		e := &event.Event{}
+		e.SetName("close")
 		// Broadcast a close message so clients can gracefully disconnect.
-		_ = sse.Publish(event.New(event.Name("close")))
+		_ = sse.Publish(e)
 		_ = sse.Shutdown()
 	})
 
@@ -83,13 +85,13 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 		select {
 		case <-ticker.C:
 			v := Inc(metric)
-			ev := event.New(
-				event.Name(metric),
-				event.Text(strconv.FormatInt(v, 10)),
-			)
-			ev.SetTTL(frequency)
 
-			_ = sse.Publish(ev)
+			e := &event.Event{}
+			e.SetTTL(frequency)
+			e.SetName(metric)
+			e.AppendData(strconv.AppendInt(nil, v, 10))
+
+			_ = sse.Publish(e)
 		case <-ctx.Done():
 			return
 		}
@@ -115,31 +117,13 @@ func runServer(ctx context.Context, s *http.Server) error {
 	return <-shutdownError
 }
 
-type randomNumbers struct {
-	numbers []uint64
-}
-
-func (r *randomNumbers) MarshalEvent() *event.Event {
-	var buf []byte
-
-	for _, n := range r.numbers {
-		buf = strconv.AppendUint(buf, n, 10)
-		buf = append(buf, '\n')
-	}
-
-	e := event.New(event.Raw(buf))
-	e.SetTTL(time.Second * 30)
-	return e
-}
-
-func generateRandomNumbers() *randomNumbers {
+func generateRandomNumbers() *event.Event {
+	e := &event.Event{}
 	count := 1 + rand.Intn(5)
 
-	r := &randomNumbers{numbers: make([]uint64, 0, count)}
-
 	for i := 0; i < count; i++ {
-		r.numbers = append(r.numbers, rand.Uint64())
+		e.AppendData(strconv.AppendUint(nil, rand.Uint64(), 10))
 	}
 
-	return r
+	return e
 }

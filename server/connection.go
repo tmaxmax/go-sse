@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/tmaxmax/go-sse/server/event"
+	event "github.com/tmaxmax/go-sse/server/event/v2"
 )
 
 type writeFlusher interface {

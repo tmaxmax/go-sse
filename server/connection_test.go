@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/tmaxmax/go-sse/server/event"
+	event "github.com/tmaxmax/go-sse/server/event/v2"
 
 	"github.com/stretchr/testify/require"
 
@@ -62,10 +62,12 @@ func TestConnection_Send(t *testing.T) {
 	require.NoError(t, err, "unexpected NewConnection error")
 
 	rec.Flushed = false
-	ev := event.New(event.Text("sarmale"))
+
+	ev := event.Event{}
+	ev.AppendText("sarmale")
 	expected, _ := ev.MarshalText()
 
-	require.NoError(t, conn.Send(ev), "unexpected Send error")
+	require.NoError(t, conn.Send(&ev), "unexpected Send error")
 	require.True(t, rec.Flushed, "writer wasn't flushed")
 	require.Equal(t, expected, rec.Body.Bytes(), "body not written correctly")
 }
@@ -79,8 +81,7 @@ func TestConnection_Send_error(t *testing.T) {
 	require.NoError(t, err, "unexpected NewConnection error")
 
 	rec.Flushed = false
-	ev := event.New(event.Text("sarmale"))
 
-	require.Equal(t, writerErr, conn.Send(ev), "invalid Send error")
+	require.Equal(t, writerErr, conn.Send(&event.Event{}), "invalid Send error")
 	require.True(t, rec.Flushed, "writer wasn't flushed")
 }
