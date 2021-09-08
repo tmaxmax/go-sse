@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/tmaxmax/go-sse/server/event"
@@ -61,25 +60,6 @@ type ReplayProvider interface {
 	//
 	// If the replay provider implementation is thread-safe the GC operation can be executed in another goroutine.
 	GC() error
-}
-
-// ReplayError is an error returned when a replay failed. It contains the ID for
-// which the replay failed and optionally another error value that describes why
-// the replay failed.
-type ReplayError struct {
-	Reason error
-	ID     event.ID
-}
-
-func (e *ReplayError) Error() string {
-	if e.Reason != nil {
-		return fmt.Sprintf("server.replay.Provider: invalid ID %q: %s", e.ID, e.Reason.Error())
-	}
-	return fmt.Sprintf("server.replay.Provider: ID %q does not exist", e.ID)
-}
-
-func (e *ReplayError) Unwrap() error {
-	return e.Reason
 }
 
 type (

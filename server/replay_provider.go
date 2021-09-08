@@ -46,8 +46,8 @@ func (f *FiniteReplayProvider) Put(message *Message) {
 func (f *FiniteReplayProvider) GC() error { return nil }
 
 func (f *FiniteReplayProvider) Replay(subscription Subscription) {
-	events, err := f.b.slice(subscription.LastEventID)
-	if err != nil {
+	events := f.b.slice(subscription.LastEventID)
+	if events == nil {
 		return
 	}
 
@@ -83,8 +83,8 @@ func (v *ValidReplayProvider) GC() error {
 }
 
 func (v *ValidReplayProvider) Replay(subscription Subscription) {
-	events, err := v.b.slice(subscription.LastEventID)
-	if err != nil {
+	events := v.b.slice(subscription.LastEventID)
+	if events == nil {
 		return
 	}
 

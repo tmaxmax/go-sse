@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"strconv"
 
 	"github.com/tmaxmax/go-sse/server/event"
@@ -14,7 +13,7 @@ type buffer interface {
 	dequeue()
 	front() *event.Event
 	len() int
-	slice(event.ID) ([]Message, error)
+	slice(event.ID) []Message
 }
 
 type bufferBase struct {
@@ -48,9 +47,9 @@ func (b *bufferNoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferNoID) slice(atID event.ID) ([]Message, error) {
+func (b *bufferNoID) slice(atID event.ID) []Message {
 	if atID == b.lastRemovedID && len(b.buf) != 0 {
-		return b.buf, nil
+		return b.buf
 	}
 	index := -1
 	for i := range b.buf {
@@ -60,9 +59,9 @@ func (b *bufferNoID) slice(atID event.ID) ([]Message, error) {
 		}
 	}
 	if index == -1 {
-		return nil, &ReplayError{ID: atID}
+		return nil
 	}
-	return b.buf[index:], nil
+	return b.buf[index:]
 }
 
 type bufferAutoID struct {
@@ -85,19 +84,16 @@ func (b *bufferAutoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferAutoID) slice(atID event.ID) ([]Message, error) {
-	if !atID.IsSet() {
-		return nil, &ReplayError{ID: atID, Reason: errors.New("ID not set")}
-	}
+func (b *bufferAutoID) slice(atID event.ID) []Message {
 	id, err := strconv.ParseInt(atID.String(), autoIDBase, 64)
 	if err != nil {
-		return nil, &ReplayError{ID: atID, Reason: err}
+		return nil
 	}
 	index := id - b.firstID
 	if index < 0 || index >= int64(len(b.buf)) {
-		return nil, &ReplayError{ID: atID, Reason: errors.New("ID not found")}
+		return nil
 	}
-	return b.buf[index:], nil
+	return b.buf[index:]
 }
 
 func getBuffer(autoIDs bool, capacity int) buffer {
