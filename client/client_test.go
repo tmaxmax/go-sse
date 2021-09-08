@@ -539,3 +539,56 @@ func TestConnection_reconnect(t *testing.T) {
 		require.InEpsilon(t, expectedRetries[i], retries[i], backoff.DefaultRandomizationFactor, "invalid retries")
 	}
 }
+
+func drain(tb testing.TB, ch <-chan client.Event) []client.Event {
+	tb.Helper()
+
+	evs := make([]client.Event, 0, len(ch))
+	for ev := range ch {
+		evs = append(evs, ev)
+	}
+	return evs
+}
+
+func TestConnection_Subscriptions_2(t *testing.T) {
+	t.Parallel()
+
+	c := client.Client{
+		HTTPClient: &http.Client{
+			Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+				rec := httptest.NewRecorder()
+				_, _ = io.WriteString(rec, "event: test\ndata: test data\n\ndata: unnamed\n")
+				return rec.Result(), nil
+			}),
+		},
+		ResponseValidator: client.NoopValidator,
+	}
+	conn := c.NewConnection(req(t, "", "", nil))
+
+	ch, test := make(chan client.Event, 2), make(chan client.Event, 1)
+	conn.SubscribeEvent("test", ch)      // subscribe to event with unsubscribed channel
+	conn.UnsubscribeEvent("test", test)  // unsubscribe from existent event with unsubscribed channel (noop)
+	conn.SubscribeToAll(ch)              // subscribe to all with already existing subscriptions (should remove previous subscriptions)
+	conn.SubscribeEvent("test", ch)      // subscribe to event with subscriber to all (noop)
+	conn.SubscribeEvent("test", test)    // subscribe to event with unsubscribed channel
+	conn.SubscribeEvent("test", test)    // subscribe to event with channel already subscribed to it (noop)
+	conn.SubscribeEvent("test2", test)   // subscribe to event with unsubscribed channel
+	conn.UnsubscribeEvent("af", test)    // unsubscribe from nonexistent event (noop)
+	conn.UnsubscribeEvent("test2", test) // unsubscribe from event with subscriber to multiple events (should not close the channel)
+
+	expected := []client.Event{
+		{
+			Name: "test",
+			Data: []byte("test data"),
+		},
+		{Data: []byte("unnamed")},
+	}
+	expectedTest := expected[:1]
+
+	require.NoError(t, conn.Connect(), "unexpected Connect error")
+	require.Equal(t, expected, drain(t, ch), "invalid events received")
+	require.Equal(t, expectedTest, drain(t, test), "invalid events received for test")
+	require.NotPanics(t, func() {
+		conn.SubscribeMessages(make(chan client.Event)) // sub/unsub after connection is closed (noop, nonblocking)
+	})
+}
