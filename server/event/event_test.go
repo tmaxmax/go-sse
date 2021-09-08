@@ -3,10 +3,11 @@ package event
 import (
 	"fmt"
 	"io"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/tmaxmax/go-sse/internal/parser"
 	"github.com/tmaxmax/go-sse/internal/util"
@@ -15,90 +16,73 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	input := []Field{
-		Name("whatever"),
-		ID("again"),
-		Text("input"),
-		Retry(30),
-		Raw([]byte("amazing")),
-		Retry(time.Second),
-		ID("lol"),
-		Name("x"),
+	e := Event{}
+	e.AppendText("whatever", "input", "will\nbe\nchunked")
+	e.AppendData([]byte("amazing"))
+	e.SetRetry(30)
+	e.SetRetry(time.Second)
+
+	require.Panicsf(t, func() { MustID("multi\nline") }, "id %q regarded as valid", "multi\nline")
+	id, ok := NewID("again")
+	require.Truef(t, ok, "id %q regarded as invalid", "again")
+	e.SetID(id)
+	id, ok = NewID("lol")
+	require.Truef(t, ok, "id %q regarded as invalid", "lol")
+	e.SetID(id)
+
+	require.Truef(t, e.SetName("whatever"), "name %q regarded as invalid", "whatever")
+	require.Truef(t, e.SetName("x"), "name %q regarded as invalid", "x")
+	require.Falsef(t, e.SetName("multi\nline"), "name %q regarded as invalid", "multi\nline")
+
+	now := time.Now()
+	e.SetExpiry(now)
+
+	expected := Event{
+		expiresAt: now,
+		chunks: []chunk{
+			{data: []byte("whatever")},
+			{data: []byte("input")},
+			{data: []byte("will\n"), endsInNewline: true},
+			{data: []byte("be\n"), endsInNewline: true},
+			{data: []byte("chunked")},
+			{data: []byte("amazing")},
+		},
+		retryValue: []byte("1000\n"),
+		name:       []byte("x"),
+		id:         []byte("lol"),
 	}
 
-	e := New(input...)
+	require.Equal(t, expected, e, "invalid event")
 
-	if id := e.ID(); id != "lol" {
-		t.Fatalf("Invalid event ID: received %q, expected %q", id, "lol")
-	}
+	e.SetID(ID{})
+
+	require.Nil(t, e.id, "id was not unset")
 }
 
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
-	input := []Field{
-		Text("This is an example\nOf an event"),
-		Text(""), // empty fields should not produce any output
-		ID("example_id"),
-		Retry(time.Second * 5),
-		Raw([]byte("raw bytes here")),
-		Name("test_event"),
-		Comment("This test should pass"),
-		Text("Important data\nImportant again\r\rVery important\r\n"),
-	}
+	e := Event{}
+	e.AppendText("This is an example\nOf an event", "")
+	e.AppendData([]byte("raw bytes here"))
+	e.Comment("This test should pass")
+	e.AppendText("Important data\nImportant again\r\rVery important\r\n")
+	e.SetName("test_event")
+	e.SetRetry(time.Second * 5)
+	e.SetID(MustID("example_id"))
 
-	output := "data: This is an example\ndata: Of an event\nid: example_id\nretry: 5000\ndata: raw bytes here\nevent: test_event\n: This test should pass\ndata: Important data\ndata: Important again\rdata: \rdata: Very important\r\n\n"
+	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: raw bytes here\n: This test should pass\ndata: Important data\ndata: Important again\rdata: \rdata: Very important\r\n\n"
 	expectedWritten := int64(len(output))
 	expected := util.EscapeNewlines(output)
 
-	e := New(input...)
 	w := &strings.Builder{}
 
-	written, err := e.WriteTo(w)
-	if err != nil {
-		t.Fatalf("Failed to write event: %v", err)
-	}
+	written, _ := e.WriteTo(w)
 
 	got := util.EscapeNewlines(w.String())
 
-	if !reflect.DeepEqual(expected, got) {
-		t.Fatalf("Event written incorrectly:\nexpected: %s\nreceived: %s", expected, got)
-	}
-
-	if written != expectedWritten {
-		t.Fatalf("Written byte count wrong: expected %d, got %d", expectedWritten, written)
-	}
-
-}
-
-func TestEvent_SetExpiry(t *testing.T) {
-	t.Parallel()
-
-	e := New()
-	now := time.Now()
-
-	e.SetExpiry(now)
-
-	if e.expiresAt != now {
-		t.Fatalf("Failed to set expiry time: got %v, want %v", e.expiresAt, now)
-	}
-}
-
-func TestFrom(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now()
-	e := New(Text("A field"))
-	e.SetExpiry(now)
-	derivate := From(e, Text("Another field")) //nolint
-	expected := []Field{Text("A field"), Text("Another field")}
-
-	if derivate.ExpiresAt() != now {
-		t.Fatalf("Expiry date not set correctly: expected %v, got %v", now, derivate.ExpiresAt())
-	}
-	if !reflect.DeepEqual(derivate.fields, expected) {
-		t.Fatalf("Fields not set correctly:\nreceived %v\nexpected %v", derivate.fields, expected)
-	}
+	require.Equal(t, expected, got, "event written incorrectly")
+	require.Equal(t, expectedWritten, written, "written byte count wrong")
 }
 
 func TestEvent_UnmarshalText(t *testing.T) {
@@ -108,17 +92,22 @@ func TestEvent_UnmarshalText(t *testing.T) {
 		name        string
 		input       string
 		expectedErr error
-		expected    []Field
+		expected    Event
 	}
+
+	nilEvent := Event{}
+	nilEvent.reset()
 
 	tests := []test{
 		{
 			name:        "No input",
+			expected:    nilEvent,
 			expectedErr: &UnmarshalError{Reason: ErrUnexpectedEOF},
 		},
 		{
-			name:  "Invalid retry field",
-			input: "retry: sigma male\n",
+			name:     "Invalid retry field",
+			input:    "retry: sigma male\n",
+			expected: nilEvent,
 			expectedErr: &UnmarshalError{
 				FieldName:  string(parser.FieldNameRetry),
 				FieldValue: "sigma male",
@@ -128,43 +117,56 @@ func TestEvent_UnmarshalText(t *testing.T) {
 		{
 			name:        "Valid input, no final newline",
 			input:       "data: first\ndata:second\ndata:third",
+			expected:    nilEvent,
 			expectedErr: &UnmarshalError{Reason: ErrUnexpectedEOF},
 		},
 		{
 			name:  "Valid input",
-			input: "data: raw bytes here\nretry: 1000\nid: 2000\n: no comments\ndata: again raw bytes\ndata: from multiple lines\nevent: my name here\n\ndata: I should be ignored",
-			expected: []Field{
-				Raw([]byte("raw bytes here")),
-				Retry(time.Second),
-				ID("2000"),
-				Raw([]byte("again raw bytes")),
-				Raw([]byte("from multiple lines")),
-				Name("my name here"),
+			input: "data: raw bytes here\nretry: 500\nretry: 1000\nid: 1000\nid: 2000\n: no comments\ndata: again raw bytes\ndata: from multiple lines\nevent: overwritten name\nevent: my name here\n\ndata: I should be ignored",
+			expected: Event{
+				chunks: []chunk{
+					{data: []byte("raw bytes here\n"), endsInNewline: true},
+					{data: []byte("again raw bytes\n"), endsInNewline: true},
+					{data: []byte("from multiple lines\n"), endsInNewline: true},
+				},
+				retryValue: []byte("1000\n"),
+				name:       []byte("my name here"),
+				id:         []byte("2000"),
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			e := &Event{}
+			e := Event{}
 
 			if err := e.UnmarshalText([]byte(test.input)); (test.expectedErr != nil && err.Error() != test.expectedErr.Error()) || (test.expectedErr == nil && err != nil) {
 				t.Fatalf("Invalid unmarshal error: got %q, want %q", err, test.expectedErr)
 			}
-			if !reflect.DeepEqual(e.fields, test.expected) {
-				t.Fatalf("Invalid unmarshal fields:\nreceived %v\nexpected %v", e.fields, test.expected)
-			}
+			require.Equal(t, test.expected, e, "invalid unmarshal")
 		})
 	}
 }
 
-var benchmarkEvent = New(
-	Text("Example data\nWith multiple rows\r\nThis is interesting"),
-	ID("example_id"),
-	Comment("An useless comment here that spans\non\n\nmultiple\nlines"),
-	Name("This is the event's name"),
-	Retry(time.Minute),
-)
+func TestEvent_ID(t *testing.T) {
+	e := Event{}
+	require.Equal(t, ID{}, e.ID(), "invalid default ID")
+	id := MustID("idk")
+	e.SetID(id)
+	require.Equal(t, id, e.ID(), "invalid received ID")
+}
+
+func newBenchmarkEvent() *Event {
+	e := Event{}
+	e.AppendText("Example data\nWith multiple rows\r\nThis is interesting")
+	e.Comment("An useless comment here that spans\non\n\nmultiple\nlines")
+	e.SetName("This is the event's name")
+	e.SetID(MustID("example_id"))
+	e.SetRetry(time.Minute)
+	return &e
+}
+
+var benchmarkEvent = newBenchmarkEvent()
 
 func BenchmarkEvent_WriteTo(b *testing.B) {
 	b.ReportAllocs()
@@ -198,55 +200,11 @@ var benchmarkText = []string{
 	"Morbi faucibus nisi a velit dictum eleifend.",
 }
 
-func getBuffer(tb testing.TB, text []string) []Field {
-	tb.Helper()
-
-	return make([]Field, 0, len(text))
-}
-
-func getOpts(buf []Field, text []string) []Field {
-	for _, t := range text {
-		buf = append(buf, Text(t))
-	}
-	return buf
-}
-
-func createEvent(tb testing.TB, text []string) *Event {
-	return New(getOpts(getBuffer(tb, text), text)...)
-}
-
 func BenchmarkEvent_WriteTo_text(b *testing.B) {
-	ev := createEvent(b, benchmarkText)
+	ev := Event{}
+	ev.AppendText(benchmarkText...)
 
 	for n := 0; n < b.N; n++ {
 		_, _ = ev.WriteTo(io.Discard)
-	}
-}
-
-func BenchmarkNew(b *testing.B) {
-	type benchmark struct {
-		name string
-		text []string
-	}
-
-	benchmarks := []benchmark{
-		{
-			name: "Single-line text",
-			text: benchmarkText,
-		},
-	}
-
-	for _, bench := range benchmarks {
-		buf := getBuffer(b, bench.text)
-
-		b.Run(bench.name, func(b *testing.B) {
-			b.ReportAllocs()
-
-			var e *Event
-			for n := 0; n < b.N; n++ {
-				e = New(getOpts(buf, bench.text)...)
-			}
-			_ = e
-		})
 	}
 }

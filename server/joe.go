@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	event "github.com/tmaxmax/go-sse/server/event/v2"
+	"github.com/tmaxmax/go-sse/server/event"
 )
 
 // A ReplayProvider is a type that can replay older published events to new subscribers.

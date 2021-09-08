@@ -12,8 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tmaxmax/go-sse/server/event"
+
 	"github.com/tmaxmax/go-sse/server"
-	event "github.com/tmaxmax/go-sse/server/event/v2"
 )
 
 var sse = server.New()

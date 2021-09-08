@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	event "github.com/tmaxmax/go-sse/server/event/v2"
+	"github.com/tmaxmax/go-sse/server/event"
 
 	"github.com/stretchr/testify/require"
 

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strconv"
 
-	event "github.com/tmaxmax/go-sse/server/event/v2"
+	"github.com/tmaxmax/go-sse/server/event"
 )
 
 // A buffer is the underlying storage for a provider. Its methods are used by the provider to implement

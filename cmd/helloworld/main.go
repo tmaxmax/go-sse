@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tmaxmax/go-sse/server/event"
+
 	"github.com/tmaxmax/go-sse/server"
-	event "github.com/tmaxmax/go-sse/server/event/v2"
 )
 
 func main() {
