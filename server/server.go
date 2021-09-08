@@ -121,20 +121,23 @@ func (s *Server) NewHandlerFunc(h http.HandlerFunc) http.Handler {
 //
 // If you need different behavior, use the NewHandler or NewHandlerFunc methods.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	conn, err := NewConnection(w)
-	if err != nil {
-		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
-		return
-	}
-
 	events := make(chan *event.Event)
-	id, _ := event.NewID(r.Header.Get("Last-Event-ID"))
-	err = s.provider.Subscribe(r.Context(), Subscription{
+	var id event.ID
+	if len(r.Header.Values("Last-Event-ID")) > 0 {
+		id, _ = event.NewID(r.Header.Get("Last-Event-ID"))
+	}
+	err := s.provider.Subscribe(r.Context(), Subscription{
 		Channel:     events,
 		LastEventID: id,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	conn, err := NewConnection(w)
+	if err != nil {
+		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
 		return
 	}
 
