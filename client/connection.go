@@ -207,9 +207,16 @@ func (c *Connection) resetRequest() error {
 	return nil
 }
 
+func (c *Connection) dispatch(ev Event) {
+	if l := len(ev.Data); l > 0 {
+		ev.Data = ev.Data[:l-1]
+	}
+	c.event <- ev
+}
+
 func (c *Connection) read(r io.Reader, reset func()) error {
 	p := parser.NewReaderParser(r)
-	ev := Event{}
+	ev, dirty := Event{}, false
 
 	for p.Scan() {
 		f := p.Field()
@@ -218,8 +225,10 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 		case parser.FieldNameData:
 			ev.Data = append(ev.Data, f.Value...)
 			ev.Data = append(ev.Data, '\n')
+			dirty = true
 		case parser.FieldNameEvent:
 			ev.Name = string(f.Value)
+			dirty = true
 		case parser.FieldNameID:
 			// empty IDs are valid, only IDs that contain the null byte must be ignored:
 			// https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
@@ -229,6 +238,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 
 			ev.ID = string(f.Value)
 			c.lastEventID = ev.ID
+			dirty = true
 		case parser.FieldNameRetry:
 			n, err := strconv.ParseInt(util.String(f.Value), 10, 64)
 			if err != nil {
@@ -238,20 +248,18 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 				*c.reconnectionTime = time.Duration(n) * time.Millisecond
 				reset()
 			}
+			dirty = true
 		default:
-			if l := len(ev.Data); l > 0 {
-				ev.Data = ev.Data[:l-1]
-			}
-			select {
-			case c.event <- ev:
-				ev = Event{}
-			case <-c.request.Context().Done():
-				return nil
-			}
+			c.dispatch(ev)
+			ev = Event{}
+			dirty = false
 		}
 	}
 
 	err := p.Err()
+	if dirty && err == nil {
+		c.dispatch(ev)
+	}
 	if err == nil || err == context.Canceled || err == context.DeadlineExceeded || err == parser.ErrUnexpectedEOF {
 		return nil
 	}
