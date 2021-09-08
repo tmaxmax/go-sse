@@ -109,6 +109,9 @@ func (c *Connection) removeSubscriberFromAll(ch chan<- Event) {
 }
 
 func (c *Connection) addSubscriber(event eventName, ch chan<- Event) {
+	if _, ok := c.subscribersAll[ch]; ok {
+		return
+	}
 	if _, ok := c.subscribers[event]; !ok {
 		c.subscribers[event] = map[subscriber]struct{}{}
 	}
