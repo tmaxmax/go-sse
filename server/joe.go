@@ -146,11 +146,7 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 		replay:         config.ReplayProvider,
 	}
 
-	go func() {
-		defer stopGCTicker()
-
-		j.start()
-	}()
+	go j.start()
 
 	return j
 }
@@ -219,6 +215,7 @@ func (j *Joe) start() {
 	// defer closing all subscribers instead of closing them when done is closed
 	// so in case of a panic subscribers won't block the request goroutines forever.
 	defer j.closeSubscribers()
+	defer j.stopGC()
 
 	for {
 		select {
