@@ -144,16 +144,9 @@ func (c *Connection) removeSubscriber(name eventName, ch chan<- Event) {
 }
 
 func (c *Connection) closeSubscribers() {
-	closed := map[subscriber]struct{}{}
-
 	for _, subs := range c.subscribers {
 		for s := range subs {
-			if _, ok := closed[s]; ok {
-				continue
-			}
-
-			close(s)
-			closed[s] = struct{}{}
+			c.subscribersAll[s] = struct{}{}
 		}
 	}
 	for sub := range c.subscribersAll {
