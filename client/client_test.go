@@ -469,6 +469,9 @@ func TestConnection_serverError(t *testing.T) {
 		defer close(evs)
 		for _, action := range actions {
 			evs <- action
+			if action.cancel {
+				break
+			}
 			time.Sleep(time.Millisecond)
 		}
 	}()
