@@ -237,7 +237,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 			c.lastEventID = ev.ID
 			dirty = true
 		case parser.FieldNameRetry:
-			n, err := strconv.ParseInt(util.String(f.Value), 10, 64)
+			n, err := strconv.ParseInt(string(f.Value), 10, 64)
 			if err != nil {
 				break
 			}

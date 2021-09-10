@@ -7,10 +7,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/tmaxmax/go-sse/internal/parser"
 	"github.com/tmaxmax/go-sse/internal/util"
@@ -40,7 +42,7 @@ type ID struct {
 // is a valid ID. A valid ID must not have any newlines. If the input is not valid,
 // an unset (invalid) ID is returned.
 func NewID(value string) (ID, bool) {
-	if !isSingleLine(util.Bytes(value)) {
+	if !isSingleLine([]byte(value)) {
 		return ID{}, false
 	}
 	return ID{value: value, set: true}, true
@@ -95,18 +97,22 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 // Event is the representation of a single message.
 // This representation is used only for sending events - there is another event type for the client.
 type Event struct {
-	expiresAt  time.Time
+	expiresAt time.Time
+	// DO NOT MUTATE, either original byte slices or unsafely converted from strings
 	chunks     []chunk
 	retryValue []byte
-	name       []byte
-	id         []byte // nil - not set; non-nil, any length: set
+	// DO NOT MUTATE, unsafely converted from string
+	name []byte
+	// nil - not set; non-nil, any length: set
+	// DO NOT MUTATE, unsafely converted from string
+	id []byte
 }
 
 func (e *Event) appendText(isComment bool, chunks ...string) {
 	s := parser.ChunkScanner{}
 
 	for _, c := range chunks {
-		s.Reset(util.Bytes(c))
+		s.Reset(unsafeBytes(c)) // SAFETY: strings are immutable
 
 		for s.Scan() {
 			data, endsInNewline := s.Chunk()
@@ -191,7 +197,7 @@ func (e *Event) ID() ID {
 	if e.id == nil {
 		return ID{}
 	}
-	return ID{value: util.String(e.id), set: true}
+	return ID{value: unsafeString(e.id), set: true} // SAFETY: ids are immutable
 }
 
 // SetID sets the event's ID.
@@ -200,18 +206,17 @@ func (e *Event) SetID(id ID) {
 		e.id = nil
 		return
 	}
-	e.id = util.Bytes(id.String())
+	e.id = unsafeBytes(id.String()) // SAFETY: ids are immutable
 }
 
 // SetName sets the event's name.
 //
-// A Name cannot have multiple lines. If it has, the function will return false
+// A Name cannot have multiple lines. If it has, the function will return false.
 func (e *Event) SetName(name string) bool {
-	b := util.Bytes(name)
-	if !isSingleLine(b) {
+	if !isSingleLine([]byte(name)) {
 		return false
 	}
-	e.name = b
+	e.name = unsafeBytes(name) // SAFETY: strings are immutable
 	return true
 }
 
@@ -418,7 +423,7 @@ loop:
 			if e.id != nil {
 				buf = e.id[:0]
 			}
-			e.id = append(buf, f.Value...)
+			e.id = append(buf, f.Value...) //nolint
 		default: // event end
 			break loop
 		}
@@ -440,4 +445,14 @@ func (e *Event) Clone() *Event {
 		name:       e.name,
 		id:         e.id,
 	}
+}
+
+func unsafeBytes(s string) []byte {
+	b := *(*[]byte)(unsafe.Pointer(&s))
+	(*reflect.SliceHeader)(unsafe.Pointer(&b)).Cap = len(s)
+	return b
+}
+
+func unsafeString(p []byte) string {
+	return *(*string)(unsafe.Pointer(&p))
 }

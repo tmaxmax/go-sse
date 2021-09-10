@@ -1,9 +1,5 @@
 package client
 
-import (
-	"github.com/tmaxmax/go-sse/internal/util"
-)
-
 // The Event struct represents an event sent to the helloworld_client by the server.
 type Event struct {
 	// The eventName's ID. It is empty if the eventName does not have an ID.
@@ -14,7 +10,7 @@ type Event struct {
 	Data []byte
 }
 
-// String returns the data buffer as a string. It does no allocations.
+// String copies the data buffer and returns it as a string.
 func (e Event) String() string {
-	return util.String(e.Data)
+	return string(e.Data)
 }
