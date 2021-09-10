@@ -48,12 +48,14 @@ func TestNewJoe(t *testing.T) {
 	require.Equal(t, rp.callsGC, 1)
 
 	require.NotPanics(t, func() {
-		server.NewJoe(server.JoeConfig{
+		s := server.NewJoe(server.JoeConfig{
 			ReplayGCInterval: -5,
 		})
-		server.NewJoe(server.JoeConfig{
+		defer s.Stop()
+		t := server.NewJoe(server.JoeConfig{
 			ReplayGCInterval: 5,
 		})
+		defer t.Stop()
 	})
 }
 
@@ -106,4 +108,18 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	require.NoError(t, j.Stop())
 	_, ok = <-ch2
 	require.False(t, ok)
+	require.Equal(t, 2, rp.callsPut)
+	require.Equal(t, 2, rp.callsReplay)
+}
+
+func TestJoe_GCInterval(t *testing.T) {
+	rp := &mockReplayProvider{}
+	j := server.NewJoe(server.JoeConfig{
+		ReplayProvider:   rp,
+		ReplayGCInterval: time.Millisecond * 2,
+	})
+
+	time.Sleep(time.Millisecond * 5)
+	require.NoError(t, j.Stop())
+	require.Equal(t, 2, rp.callsGC)
 }
