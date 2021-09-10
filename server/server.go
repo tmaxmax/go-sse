@@ -64,7 +64,9 @@ var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 // are changed.
 const DefaultTopic = ""
 
-// A Server is a convenience wrapper around a provider.
+// A Server is mostly a convenience wrapper around a provider.
+// It implements the http.Handler interface and has some methods
+// for calling the underlying provider's methods.
 type Server struct {
 	provider Provider
 }
@@ -81,55 +83,33 @@ func New(provider ...Provider) *Server {
 	return s
 }
 
-type contextKey int
-
-const contextKeyProvider contextKey = iota
-
-// GetProvider tries to retrieve the provider stored in the given context, if any.
-// Use this function when implementing custom HTTP handlers.
-func GetProvider(ctx context.Context) Provider {
-	if p, ok := ctx.Value(contextKeyProvider).(Provider); ok {
-		return p
-	}
-	return nil
-}
-
-func setProvider(ctx context.Context, p Provider) context.Context {
-	return context.WithValue(ctx, contextKeyProvider, p)
-}
-
-// NewHandler is used to create a custom HTTP handler. It adds the server's underlying provider in
-// the request's context - retrieve it with GetProvider.
-func (s *Server) NewHandler(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(setProvider(r.Context(), s.provider)))
-	})
-}
-
-// NewHandlerFunc is a convenience method that calls NewHandler with the given function.
-func (s *Server) NewHandlerFunc(h http.HandlerFunc) http.Handler {
-	return s.NewHandler(http.Handler(h))
+// Provider returns the server's underlying provider.
+func (s *Server) Provider() Provider {
+	return s.provider
 }
 
 // ServeHTTP implements a default HTTP handler for a server.
 //
 // This handler upgrades the request, subscribes it to the server's provider and
 // starts sending incoming events to the client, while logging any write errors.
+// It also sends the Last-Event-ID header's value, if present.
 //
 // If the request isn't upgradeable, it writes a message to the client along with
-// an 500 Internal Server Error response code.
+// an 500 Internal Server Error response code. If on subscribe the provider returns
+// an error, it writes the error message to the client and a 500 Internal Server Error
+// response code.
 //
-// If you need different behavior, use the NewHandler or NewHandlerFunc methods.
+// If you need different behavior, you can create a custom handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	events := make(chan *event.Event)
-	var id event.ID
-	if len(r.Header.Values("Last-Event-ID")) > 0 {
-		id, _ = event.NewID(r.Header.Get("Last-Event-ID"))
+	events, id := make(chan *event.Event), event.ID{}
+	// Clients must not send empty Last-Event-ID headers:
+	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
+	if h := r.Header.Get("Last-Event-ID"); h != "" {
+		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
+		// which providers are required to ignore.
+		id, _ = event.NewID(h)
 	}
-	err := s.provider.Subscribe(r.Context(), Subscription{
-		Channel:     events,
-		LastEventID: id,
-	})
+	err := s.Subscribe(r.Context(), events, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -149,18 +129,25 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Subscribe subscribes the given channel to the specified topics. It is unsubscribed when the context is closed
+// or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
+func (s *Server) Subscribe(ctx context.Context, ch chan<- *event.Event, lastEventID event.ID, topics ...string) error {
+	return s.Provider().Subscribe(ctx, Subscription{
+		Channel:     ch,
+		LastEventID: lastEventID,
+		Topics:      topics,
+	})
+}
+
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topic is optional - if none is specified, the event is published to the default topic.
-//
-// You can send any value that implements the event.Marshaler interface, for convenience. If marshalling
-// fails, the error is returned and nothing is sent.
 func (s *Server) Publish(e *event.Event, topic ...string) error {
 	msg := Message{Event: e}
 	if len(topic) > 0 {
 		msg.Topic = topic[0]
 	}
 
-	return s.provider.Publish(msg)
+	return s.Provider().Publish(msg)
 }
 
 // Shutdown closes all the connections and stops the server. Publish operations will fail
@@ -172,5 +159,5 @@ func (s *Server) Publish(e *event.Event, topic ...string) error {
 //
 // The error returned is the one returned by the underlying provider's Stop method.
 func (s *Server) Shutdown() error {
-	return s.provider.Stop()
+	return s.Provider().Stop()
 }
