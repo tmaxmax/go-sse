@@ -86,6 +86,7 @@ type Joe struct {
 	subscription   chan Subscription
 	unsubscription chan subscriber
 	done           chan struct{}
+	closed         chan struct{}
 	gc             <-chan time.Time
 	stopGC         func()
 	topics         map[string]subscribers
@@ -113,6 +114,7 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 		subscription:   make(chan Subscription),
 		unsubscription: make(chan subscriber),
 		done:           make(chan struct{}),
+		closed:         make(chan struct{}),
 		gc:             gc,
 		stopGC:         stopGCTicker,
 		topics:         map[string]subscribers{},
@@ -174,6 +176,7 @@ func (j *Joe) Stop() error {
 		return ErrProviderClosed
 	default:
 		close(j.done)
+		<-j.closed
 		return nil
 	}
 }
@@ -186,6 +189,7 @@ func (j *Joe) topic(identifier string) subscribers {
 }
 
 func (j *Joe) start() {
+	defer close(j.closed)
 	// defer closing all subscribers instead of closing them when done is closed
 	// so in case of a panic subscribers won't block the request goroutines forever.
 	defer j.closeSubscribers()
