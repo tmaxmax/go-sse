@@ -6,10 +6,10 @@ import (
 )
 
 type ByteParser struct {
+	err   error
 	field Field
 	chunk []byte
 	cs    ChunkScanner
-	err   error
 }
 
 func min(a, b int) int {

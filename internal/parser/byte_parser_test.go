@@ -11,10 +11,10 @@ func TestByteParser(t *testing.T) {
 	t.Parallel()
 
 	type testCase struct {
+		err      error
 		name     string
 		data     string
 		expected []parser.Field
-		err      error
 	}
 
 	tests := []testCase{

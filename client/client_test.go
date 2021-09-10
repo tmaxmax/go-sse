@@ -126,10 +126,10 @@ type readerWrapper struct {
 
 func TestConnection_Connect_resetBody(t *testing.T) {
 	type test struct {
-		name    string
 		body    io.Reader
 		err     error
 		getBody func() (io.ReadCloser, error)
+		name    string
 	}
 
 	getBodyErr := errors.New("haha")
@@ -196,9 +196,9 @@ func TestConnection_Connect_validator(t *testing.T) {
 	validatorErr := errors.New("invalid")
 
 	type test struct {
-		name      string
-		validator client.ResponseValidator
 		err       error
+		validator client.ResponseValidator
+		name      string
 	}
 
 	tests := []test{
@@ -234,8 +234,8 @@ func TestConnection_Connect_validator(t *testing.T) {
 
 func TestConnection_Connect_defaultValidator(t *testing.T) {
 	type test struct {
-		name      string
 		handler   http.Handler
+		name      string
 		expectErr bool
 	}
 
@@ -385,9 +385,9 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 	messages, unsubMessages := events(t, conn, "")
 
 	type action struct {
-		message string
 		unsub   func()
 		notifs  func()
+		message string
 	}
 
 	actions := []action{
@@ -509,7 +509,7 @@ func TestConnection_reconnect(t *testing.T) {
 		HTTPClient:        ts.Client(),
 		ResponseValidator: client.NoopValidator,
 		MaxRetries:        -1,
-		OnRetry: func(err error, duration time.Duration) {
+		OnRetry: func(_ error, duration time.Duration) {
 			retries = append(retries, duration)
 		},
 	}

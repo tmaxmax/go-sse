@@ -24,10 +24,10 @@ func TestReaderParser(t *testing.T) {
 	t.Parallel()
 
 	type test struct {
-		name     string
 		input    io.Reader
-		expected []parser.Field
 		err      error
+		name     string
+		expected []parser.Field
 	}
 
 	tests := []test{
