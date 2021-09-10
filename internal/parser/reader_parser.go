@@ -36,6 +36,8 @@ var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []
 	return
 }
 
+// ReaderParser extracts fields from a reader. Reading is buffered using a bufio.Scanner.
+// The ReaderParser also removes the UTF-8 BOM if it exists.
 type ReaderParser struct {
 	sc *bufio.Scanner
 	p  *ByteParser
@@ -70,6 +72,7 @@ func (r *ReaderParser) Err() error {
 	return r.p.Err()
 }
 
+// NewReaderParser returns a parser that extracts fields from a reader.
 func NewReaderParser(r io.Reader) *ReaderParser {
 	sc := bufio.NewScanner(util.RemovePrefix(r, "\xEF\xBB\xBF"))
 	sc.Split(splitFunc)

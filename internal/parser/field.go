@@ -1,5 +1,6 @@
 package parser
 
+// FieldName is the name of the field.
 type FieldName string
 
 // A Field represents an unprocessed field of a single event. The Name is the field's identifier, which is used to
@@ -13,6 +14,7 @@ type Field struct {
 	Value []byte
 }
 
+// Valid field names
 const (
 	FieldNameData  = FieldName("data")
 	FieldNameEvent = FieldName("event")

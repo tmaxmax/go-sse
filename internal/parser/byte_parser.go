@@ -5,6 +5,7 @@ import (
 	"errors"
 )
 
+// ByteParser extracts fields from a byte slice.
 type ByteParser struct {
 	err   error
 	field Field
@@ -37,6 +38,7 @@ func (b *ByteParser) scanSegmentName() (FieldName, bool) {
 	return name, false
 }
 
+// ErrUnexpectedEOF is returned when the input is completely parsed but no complete field was found at the end.
 var ErrUnexpectedEOF = errors.New("go-sse: unexpected end of input")
 
 // Scan parses the next available filed in the remaining buffer.
@@ -78,6 +80,7 @@ func (b *ByteParser) Reset(p []byte) {
 	b.cs.Reset(p)
 }
 
+// Err returns the last error encountered by the parser. It is either nil or ErrUnexpectedEOF.
 func (b *ByteParser) Err() error {
 	return b.err
 }
@@ -109,6 +112,7 @@ func trimChunk(c []byte) []byte {
 	return trimFirstSpace(trimNewline(c))
 }
 
+// NewByteParser creates a parser that extracts fields from the given byte slice.
 func NewByteParser(b []byte) *ByteParser {
 	return &ByteParser{cs: NewChunkScanner(b)}
 }

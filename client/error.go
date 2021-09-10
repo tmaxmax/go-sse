@@ -25,11 +25,13 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
+// Temporary returns whether the underlying error is temporary.
 func (e *Error) Temporary() bool {
 	t, ok := e.Err.(interface{ Temporary() bool })
 	return ok && t.Temporary()
 }
 
+// Timeout returns whether the underlying error is caused by a timeout.
 func (e *Error) Timeout() bool {
 	t, ok := e.Err.(interface{ Timeout() bool })
 	return ok && t.Timeout()

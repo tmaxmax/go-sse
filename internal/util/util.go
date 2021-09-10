@@ -7,22 +7,27 @@ import (
 	"unsafe"
 )
 
+// EscapeNewlines escapes the '\n' and '\r' characters with a backslash.
 func EscapeNewlines(s string) string {
 	return strings.NewReplacer("\n", "\\n", "\r", "\\r").Replace(s)
 }
 
+// IsNewlineChar returns whether the given character is '\n' or '\r'.
 func IsNewlineChar(b byte) bool {
 	return b == '\n' || b == '\r'
 }
 
+// Bytes unsafely converts a string to a byte slice.
 func Bytes(s string) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)).Data)), len(s)) //nolint
 }
 
+// String unsafely converts a byte slice to a string.
 func String(p []byte) string {
 	return *(*string)(unsafe.Pointer(&p))
 }
 
+// CloneBytes creates a copy of the given byte slice.
 func CloneBytes(p []byte) []byte {
 	return append(make([]byte, 0, len(p)), p...)
 }

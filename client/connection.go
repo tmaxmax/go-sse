@@ -25,6 +25,10 @@ type subscription struct {
 	all        bool
 }
 
+// Connection is a connection to an events stream. Created using the Client struct,
+// a Connection processes the incoming events and sends them to the subscribed channels.
+// If the connection to the server temporarily fails, the connection will be reattempted.
+// Retry values received from servers will be taken into account.
 type Connection struct {
 	request *http.Request
 
@@ -309,6 +313,8 @@ func (c *Connection) Connect() error {
 	return backoff.RetryNotify(op, b, c.client.OnRetry)
 }
 
+// ErrNoGetBody is a sentinel error returned when the connection cannot be reattempted
+// due to GetBody not existing on the original request.
 var ErrNoGetBody = errors.New("the GetBody function doesn't exist on the request")
 
 func resetRequestBody(r *http.Request) error {

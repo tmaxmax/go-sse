@@ -71,6 +71,7 @@ type Provider interface {
 	Stop() error
 }
 
+// ErrProviderClosed is a sentinel error returned by providers when any operation is attempted after the provider is closed.
 var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 
 // DefaultTopic is the identifier for the topic that is implied when no topics are specified for a Subscription

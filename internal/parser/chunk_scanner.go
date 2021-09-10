@@ -63,6 +63,7 @@ func (s *ChunkScanner) Reset(buffer []byte) {
 	s.length = 0
 }
 
+// NewChunkScanner creates a ChunkScanner that will start scanning from the given buffer.
 func NewChunkScanner(buffer []byte) ChunkScanner {
 	return ChunkScanner{buffer: buffer}
 }

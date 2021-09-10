@@ -127,6 +127,7 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 	return j
 }
 
+// Subscribe tells Joe to send new messages to the given channel. The subscriber is removed when the context is done.
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	sub.Topics = topics(sub.Topics)
 
@@ -158,6 +159,7 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	}
 }
 
+// Publish tells Joe to send the given message to the subscribers.
 func (j *Joe) Publish(msg Message) error {
 	// Waiting on done ensures Publish doesn't block the caller goroutine
 	// when Joe is stopped and implements the required Provider behavior.
@@ -169,6 +171,10 @@ func (j *Joe) Publish(msg Message) error {
 	}
 }
 
+// Stop signals Joe to close all subscribers and stop receiving messages.
+// It returns when all the subscribers are closed.
+//
+// Further calls to Stop will return ErrProviderClosed.
 func (j *Joe) Stop() error {
 	// Waiting on Stop here prevents double-closing and implements the required Provider behavior.
 	select {

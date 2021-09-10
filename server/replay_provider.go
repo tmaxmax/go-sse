@@ -35,6 +35,8 @@ type FiniteReplayProvider struct {
 	count int
 }
 
+// Put puts a message into the provider's buffer. If there are more messages than the maximum
+// number, the oldest message is removed.
 func (f *FiniteReplayProvider) Put(message *Message) {
 	if f.b.len() == f.count {
 		f.b.dequeue()
@@ -43,8 +45,11 @@ func (f *FiniteReplayProvider) Put(message *Message) {
 	f.b.queue(message)
 }
 
+// GC is a no-op for this provider.
 func (f *FiniteReplayProvider) GC() error { return nil }
 
+// Replay replays the messages in the buffer to the subscription.
+// It doesn't take into account the messages' expiry times.
 func (f *FiniteReplayProvider) Replay(subscription Subscription) {
 	events := f.b.slice(subscription.LastEventID)
 	if events == nil {
@@ -63,10 +68,12 @@ type ValidReplayProvider struct {
 	b buffer
 }
 
+// Put puts the message into the provider's buffer.
 func (v *ValidReplayProvider) Put(message *Message) {
 	v.b.queue(message)
 }
 
+// GC removes all the expired messages from the provider's buffer.
 func (v *ValidReplayProvider) GC() error {
 	now := time.Now()
 
@@ -82,6 +89,7 @@ func (v *ValidReplayProvider) GC() error {
 	return nil
 }
 
+// Replay replays all the valid messages to the subscription.
 func (v *ValidReplayProvider) Replay(subscription Subscription) {
 	events := v.b.slice(subscription.LastEventID)
 	if events == nil {

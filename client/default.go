@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// The DefaultValidator is the default response validation function. It checks the content type to be
+// DefaultValidator is the default response validation function. It checks the content type to be
 // text/event-stream and the response status code to be 200 OK.
 var DefaultValidator ResponseValidator = func(r *http.Response) error {
 	if r.StatusCode != http.StatusOK {
