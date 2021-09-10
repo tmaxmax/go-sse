@@ -263,7 +263,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 }
 
 func isSuccess(err error) bool {
-	return err == nil || err == context.Canceled || err == context.DeadlineExceeded || err == parser.ErrUnexpectedEOF
+	return err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, parser.ErrUnexpectedEOF)
 }
 
 // Connect sends the request the connection was created with to the server
