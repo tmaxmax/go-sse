@@ -1,3 +1,6 @@
+/*
+Package events is used for creating events that are sent from the server side.
+*/
 package event
 
 import (

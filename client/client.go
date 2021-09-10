@@ -1,3 +1,6 @@
+/*
+Package client provides a fully spec-compliant HTML5 server-sent events client implementation.
+*/
 package client
 
 import (
@@ -13,6 +16,11 @@ import (
 // to read events from them. See the Client's documentation for more info.
 type ResponseValidator func(*http.Response) error
 
+// The Client struct is used to initialize new connections to different servers.
+// It is safe for concurrent use.
+//
+// After connections are created, the Connect method must be called to start
+// receiving events.
 type Client struct {
 	// The HTTP client to be used. Defaults to http.DefaultClient.
 	HTTPClient *http.Client
