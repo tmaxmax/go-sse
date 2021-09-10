@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -480,47 +481,122 @@ func TestConnection_serverError(t *testing.T) {
 	require.Equal(t, expected, <-all, "unexpected values for all")
 }
 
-func TestConnection_reconnect(t *testing.T) {
-	t.Skip("This test does not work")
+type reconnectWriterError bool
 
-	var retries []time.Duration
-	var lastEventIDs []string
+func (r reconnectWriterError) Error() string   { return "write error" }
+func (r reconnectWriterError) Temporary() bool { return bool(r) }
+func (r reconnectWriterError) Timeout() bool   { return !bool(r) }
 
-	sleep := time.Millisecond
-	attempt := -1
-	idsToSet := [...]string{"1", "\000mama", "", ""}
-	retriesToSet := [...]string{"1", "mama", "3", ""}
-	expectedRetries := []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond * 3}
-	expectedIDs := []string{"", "1", "1", ""}
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if attempt >= 3 {
-			panic(http.ErrAbortHandler)
-		}
-		attempt++
-		lastEventIDs = append(lastEventIDs, r.Header.Get("Last-Event-ID"))
-		flusher := w.(http.Flusher)
+type reconnectWriter struct {
+	event string
+}
 
-		_, _ = fmt.Fprintf(w, "id: %s\nretry: %s\n\n", idsToSet[attempt], retriesToSet[attempt])
-		flusher.Flush()
-		time.Sleep(sleep * 2)
-	}))
-	defer ts.Close()
-	ts.Client().Timeout = sleep
-
-	c := client.Client{
-		HTTPClient:        ts.Client(),
-		ResponseValidator: client.NoopValidator,
-		MaxRetries:        -1,
-		OnRetry: func(_ error, duration time.Duration) {
-			retries = append(retries, duration)
-		},
+func (r *reconnectWriter) Read(p []byte) (int, error) {
+	if r.event != "" {
+		n := copy(p, r.event)
+		r.event = r.event[n:]
+		return n, nil
 	}
-	conn := c.NewConnection(req(t, "", ts.URL, nil))
+	return 0, reconnectWriterError(rand.Intn(2) == 0)
+}
+
+func (r *reconnectWriter) Close() error { return nil }
+
+func newReconnectWriter(tb testing.TB, id, retry string) *reconnectWriter {
+	tb.Helper()
+
+	var event string
+	event += "id: " + id + "\n"
+	if retry == "" {
+		event += "\n"
+	} else {
+		event += "retry: " + retry + "\n\n"
+	}
+
+	return &reconnectWriter{event: event}
+}
+
+func newReconnectResponse(tb testing.TB, r *http.Request, id, retry string) *http.Response {
+	tb.Helper()
+
+	code := http.StatusOK
+	cr := *r
+	cr.Body = nil
+
+	return &http.Response{
+		StatusCode:    code,
+		Status:        fmt.Sprintf("%d %s", code, http.StatusText(code)),
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:          newReconnectWriter(tb, id, retry),
+		ContentLength: -1,
+		Request:       &cr,
+	}
+}
+
+const reconnectRetries = 3
+
+type reconnectTransport struct {
+	tb         testing.TB
+	setIDs     [reconnectRetries]string
+	setRetries [reconnectRetries]string
+	recvIDs    []string
+	recvBodies []string
+	attempt    int
+}
+
+func (r *reconnectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.recvIDs = append(r.recvIDs, req.Header.Get("Last-Event-ID"))
+	b, _ := io.ReadAll(req.Body)
+	r.recvBodies = append(r.recvBodies, string(b))
+
+	r.attempt++
+	if r.attempt > reconnectRetries {
+		return nil, errors.New("reconnectTransport: RoundTrip permanently failed")
+	}
+
+	return newReconnectResponse(r.tb, req, r.setIDs[r.attempt-1], r.setRetries[r.attempt-1]), nil
+}
+
+func (r *reconnectTransport) IDs() []string    { return r.recvIDs }
+func (r *reconnectTransport) Bodies() []string { return r.recvBodies }
+
+func newReconnectTransport(tb testing.TB, ids, retries [reconnectRetries]string) *reconnectTransport {
+	tb.Helper()
+
+	return &reconnectTransport{
+		tb:         tb,
+		setIDs:     ids,
+		setRetries: retries,
+	}
+}
+
+func TestConnection_reconnect(t *testing.T) {
+	bodyText := "body"
+	expectedIDs := []string{"", "1", "1", ""}
+	expectedRetries := []time.Duration{time.Millisecond, time.Millisecond, 2 * time.Millisecond}
+	expectedBodies := []string{bodyText, bodyText, bodyText, bodyText}
+
+	var recvRetries []time.Duration
+	onRetry := func(_ error, duration time.Duration) {
+		recvRetries = append(recvRetries, duration)
+	}
+
+	rt := newReconnectTransport(t, [3]string{"1", "\000mama", ""}, [3]string{"1", "mama", "2"})
+	c := client.Client{
+		HTTPClient: &http.Client{Transport: rt},
+		OnRetry:    onRetry,
+		MaxRetries: reconnectRetries,
+	}
+	conn := c.NewConnection(req(t, "", "", strings.NewReader(bodyText)))
 
 	require.Error(t, conn.Connect(), "expected Connect error")
-	require.Equal(t, expectedIDs, lastEventIDs, "invalid last event IDs")
+	require.Equal(t, expectedIDs, rt.IDs(), "incorrect Last-Event-IDs received")
+	require.Equal(t, expectedBodies, rt.Bodies(), "incorrect bodies received")
 	for i := range expectedRetries {
-		require.InEpsilon(t, expectedRetries[i], retries[i], backoff.DefaultRandomizationFactor, "invalid retries")
+		require.InEpsilon(t, expectedRetries[i], recvRetries[i], backoff.DefaultRandomizationFactor, "invalid retry value")
 	}
 }
 
