@@ -48,6 +48,8 @@ func testNoopReplays(p server.ReplayProvider, ch chan<- *event.Event) {
 }
 
 func TestValidReplayProvider(t *testing.T) {
+	t.Parallel()
+
 	p := server.NewValidReplayProvider(true)
 	ch := make(chan *event.Event, 1)
 
@@ -81,6 +83,8 @@ func TestValidReplayProvider(t *testing.T) {
 }
 
 func TestFiniteReplayProvider(t *testing.T) {
+	t.Parallel()
+
 	p := server.NewFiniteReplayProvider(3)
 	ch := make(chan *event.Event, 1)
 
