@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -27,14 +28,20 @@ func (e *Error) Unwrap() error {
 
 // Temporary returns whether the underlying error is temporary.
 func (e *Error) Temporary() bool {
-	t, ok := e.Err.(interface{ Temporary() bool })
-	return ok && t.Temporary()
+	var t interface{ Temporary() bool }
+	if errors.As(e.Err, &t) {
+		return t.Temporary()
+	}
+	return false
 }
 
 // Timeout returns whether the underlying error is caused by a timeout.
 func (e *Error) Timeout() bool {
-	t, ok := e.Err.(interface{ Timeout() bool })
-	return ok && t.Timeout()
+	var t interface{ Timeout() bool }
+	if errors.As(e.Err, &t) {
+		return t.Timeout()
+	}
+	return false
 }
 
 func (e *Error) toPermanent() error {
