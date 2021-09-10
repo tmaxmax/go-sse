@@ -5,9 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tmaxmax/go-sse/server/event"
-
 	"github.com/tmaxmax/go-sse/server"
+	"github.com/tmaxmax/go-sse/server/event"
 )
 
 func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) server.Message {
@@ -27,8 +26,8 @@ func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) ser
 }
 
 func putMessages(p server.ReplayProvider, msgs ...server.Message) {
-	for _, m := range msgs {
-		p.Put(&m)
+	for i := range msgs {
+		p.Put(&msgs[i])
 	}
 }
 
