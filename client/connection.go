@@ -42,7 +42,6 @@ type Connection struct {
 	lastEventID      string
 	client           Client
 	isRetry          bool
-	lastEventIDSet   bool
 }
 
 func (c *Connection) send(ch chan<- subscription, s subscription) {
