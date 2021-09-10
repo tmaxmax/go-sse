@@ -14,10 +14,10 @@ type errReader struct {
 	r io.Reader
 }
 
-var readerErr = errors.New("haha error")
+var errReadFailed = errors.New("haha error")
 
 func (e errReader) Read(_ []byte) (int, error) {
-	return 0, readerErr
+	return 0, errReadFailed
 }
 
 func TestReaderParser(t *testing.T) {
@@ -70,7 +70,7 @@ data: still, here's some data: you deserve it
 		{
 			name:  "Error",
 			input: errReader{nil},
-			err:   readerErr,
+			err:   errReadFailed,
 		},
 		{
 			name:  "Error from byte parser (no final newline)",
@@ -100,7 +100,7 @@ data: still, here's some data: you deserve it
 				fields = append(fields, p.Field())
 			}
 
-			if err := p.Err(); err != test.err {
+			if err := p.Err(); err != test.err { //nolint
 				t.Fatalf("invalid error: received %v, expected %v", err, test.err)
 			}
 

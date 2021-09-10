@@ -6,11 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmaxmax/go-sse/server/event"
-
 	"github.com/stretchr/testify/require"
-
 	"github.com/tmaxmax/go-sse/server"
+	"github.com/tmaxmax/go-sse/server/event"
 )
 
 type mockReplayProvider struct {
@@ -47,6 +45,7 @@ func TestNewJoe(t *testing.T) {
 	require.NoError(t, j.Stop())
 	require.Equal(t, rp.callsGC, 1)
 
+	//nolint
 	require.NotPanics(t, func() {
 		s := server.NewJoe(server.JoeConfig{
 			ReplayGCInterval: -5,
@@ -74,6 +73,7 @@ func TestJoe_Stop(t *testing.T) {
 	require.Zero(t, rp.callsGC)
 
 	j = server.NewJoe()
+	//nolint
 	require.NotPanics(t, func() {
 		go j.Stop()
 		j.Stop()

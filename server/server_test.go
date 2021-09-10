@@ -8,10 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse/server"
 	"github.com/tmaxmax/go-sse/server/event"
-
-	"github.com/stretchr/testify/require"
 )
 
 type mockProvider struct {
@@ -68,7 +67,7 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	s := server.New()
-	defer s.Shutdown()
+	defer s.Shutdown() //nolint
 	_, ok := s.Provider().(*server.Joe)
 	require.True(t, ok, "Default provider isn't Joe")
 
@@ -96,7 +95,9 @@ func TestServer_ShutdownPublish(t *testing.T) {
 	require.True(t, p.Stopped, "Stop wasn't called")
 }
 
-func request(tb testing.TB, method, address string, body io.Reader) (*http.Request, context.CancelFunc) {
+func request(tb testing.TB, method, address string, body io.Reader) (*http.Request, context.CancelFunc) { //nolint
+	tb.Helper()
+
 	r := httptest.NewRequest(method, address, body)
 	ctx, cancel := context.WithCancel(r.Context())
 	return r.WithContext(ctx), cancel

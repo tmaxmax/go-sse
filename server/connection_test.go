@@ -6,11 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/tmaxmax/go-sse/server/event"
-
 	"github.com/stretchr/testify/require"
-
 	"github.com/tmaxmax/go-sse/server"
+	"github.com/tmaxmax/go-sse/server/event"
 )
 
 func TestNewConnection(t *testing.T) {
@@ -38,7 +36,7 @@ func TestNewConnection(t *testing.T) {
 	require.Equal(t, server.ErrUnsupported, err, "invalid NewConnection error")
 }
 
-var writerErr = errors.New("err")
+var errWriteFailed = errors.New("err")
 
 type errorWriter struct {
 	Flushed bool
@@ -46,7 +44,7 @@ type errorWriter struct {
 
 func (e *errorWriter) WriteHeader(_ int)           {}
 func (e *errorWriter) Header() http.Header         { return http.Header{} }
-func (e *errorWriter) Write(_ []byte) (int, error) { return 0, writerErr }
+func (e *errorWriter) Write(_ []byte) (int, error) { return 0, errWriteFailed }
 func (e *errorWriter) Flush()                      { e.Flushed = true }
 
 func TestConnection_Send(t *testing.T) {
@@ -78,6 +76,6 @@ func TestConnection_Send_error(t *testing.T) {
 
 	rec.Flushed = false
 
-	require.Equal(t, writerErr, conn.Send(&event.Event{}), "invalid Send error")
+	require.Equal(t, errWriteFailed, conn.Send(&event.Event{}), "invalid Send error")
 	require.True(t, rec.Flushed, "writer wasn't flushed")
 }

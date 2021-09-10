@@ -11,13 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse/client"
 	"github.com/tmaxmax/go-sse/internal/parser"
-	"github.com/tmaxmax/go-sse/internal/util"
-
-	"github.com/cenkalti/backoff/v4"
-
-	"github.com/stretchr/testify/require"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -34,7 +31,7 @@ func (t temporaryError) Temporary() bool {
 	return true
 }
 
-func reqCtx(tb testing.TB, ctx context.Context, method, address string, body io.Reader) *http.Request {
+func reqCtx(tb testing.TB, ctx context.Context, method, address string, body io.Reader) *http.Request { //nolint
 	tb.Helper()
 
 	r, err := http.NewRequestWithContext(ctx, method, address, body)
@@ -43,19 +40,21 @@ func reqCtx(tb testing.TB, ctx context.Context, method, address string, body io.
 	return r
 }
 
-func req(tb testing.TB, method, address string, body io.Reader) *http.Request {
+func req(tb testing.TB, method, address string, body io.Reader) *http.Request { //nolint
 	tb.Helper()
 	return reqCtx(tb, context.Background(), method, address, body)
 }
 
 func toEv(tb testing.TB, s string) (ev client.Event) {
+	tb.Helper()
+
 	defer func() {
 		if l := len(ev.Data); l > 0 {
 			ev.Data = ev.Data[:l-1]
 		}
 	}()
 
-	p := parser.NewByteParser(util.Bytes(s))
+	p := parser.NewByteParser([]byte(s))
 
 	for p.Scan() {
 		f := p.Field()
@@ -386,7 +385,6 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 
 	type action struct {
 		unsub   func()
-		notifs  func()
 		message string
 	}
 
@@ -414,7 +412,6 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 		for _, action := range actions {
 			evs <- action.message
 			// we wait for the subscribers to receive the event
-			// TODO: a solution that doesn't imply sleep?
 			time.Sleep(time.Millisecond)
 			if action.unsub != nil {
 				action.unsub()

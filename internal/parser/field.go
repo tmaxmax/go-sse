@@ -14,7 +14,7 @@ type Field struct {
 	Value []byte
 }
 
-// Valid field names
+// Valid field names.
 const (
 	FieldNameData  = FieldName("data")
 	FieldNameEvent = FieldName("event")

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
 	"github.com/tmaxmax/go-sse/internal/parser"
 	"github.com/tmaxmax/go-sse/internal/util"
 )

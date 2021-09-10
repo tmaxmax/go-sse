@@ -75,7 +75,7 @@ func TestByteParser(t *testing.T) {
 				segments = append(segments, p.Field())
 			}
 
-			if p.Err() != test.err {
+			if p.Err() != test.err { //nolint
 				t.Fatalf("invalid error: received %v, expected %v", p.Err(), test.err)
 			}
 			if !reflect.DeepEqual(test.expected, segments) {
