@@ -257,11 +257,15 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 	if dirty && err == nil {
 		c.dispatch(ev)
 	}
-	if err == nil || err == context.Canceled || err == context.DeadlineExceeded || err == parser.ErrUnexpectedEOF {
+	if isSuccess(err) {
 		return nil
 	}
 	e := &Error{Req: c.request, Reason: "reading response body failed", Err: err}
 	return e.toPermanent()
+}
+
+func isSuccess(err error) bool {
+	return err == nil || err == context.Canceled || err == context.DeadlineExceeded || err == parser.ErrUnexpectedEOF
 }
 
 // Connect sends the request the connection was created with to the server
