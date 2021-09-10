@@ -5,7 +5,7 @@ import "github.com/tmaxmax/go-sse/internal/util"
 // NewlineIndex returns the index of the first occurrence of a newline sequence (\n, \r, or \r\n).
 // It also returns the sequence's length. If no sequence is found, index is equal to len(s)
 // and length is 0.
-func NewlineIndex(s []byte) (index int, length int) {
+func NewlineIndex(s []byte) (index, length int) {
 	for l := len(s); index < l; index++ {
 		b := s[index]
 

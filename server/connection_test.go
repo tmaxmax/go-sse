@@ -44,14 +44,10 @@ type errorWriter struct {
 	Flushed bool
 }
 
-func (e *errorWriter) WriteHeader(_ int)   {}
-func (e *errorWriter) Header() http.Header { return http.Header{} }
-func (e *errorWriter) Write(_ []byte) (int, error) {
-	return 0, writerErr
-}
-func (e *errorWriter) Flush() {
-	e.Flushed = true
-}
+func (e *errorWriter) WriteHeader(_ int)           {}
+func (e *errorWriter) Header() http.Header         { return http.Header{} }
+func (e *errorWriter) Write(_ []byte) (int, error) { return 0, writerErr }
+func (e *errorWriter) Flush()                      { e.Flushed = true }
 
 func TestConnection_Send(t *testing.T) {
 	t.Parallel()
