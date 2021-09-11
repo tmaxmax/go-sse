@@ -166,6 +166,14 @@ Either way, IDs and expiry times can also be retrieved, so replay providers can 
 fmt.Println(e.ID(), e.ExpiresAt())
 ```
 
+Setting the event's name (or type) is equally easy:
+
+```go
+ok := e.SetName("The event's name")
+```
+
+Names cannot have newlines, so the returned boolean flag indicates whether the name was valid and set.
+
 Note that the `Event` type used on the server-side is different from the one used by the client - we'll present it later. Read the [docs][4] to find out more about events and how to use them!
 
 ### The server-side "Hello world"
