@@ -3,8 +3,14 @@ name: Go
 on:
   push:
     branches: [master]
+    paths:
+      - '*.go'
+      - '.golangci.yml'
   pull_request:
     branches: [master]
+    paths:
+      - '*.go'
+      - '.golangci.yml'
 
 jobs:
   format:
