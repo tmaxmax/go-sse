@@ -50,24 +50,26 @@ func TestValidReplayProvider(t *testing.T) {
 	t.Parallel()
 
 	p := server.NewValidReplayProvider(true)
-	ch := make(chan *event.Event, 1)
+	ch := make(chan *event.Event, 2)
 
 	require.NoError(t, p.GC(), "unexpected GC error") // no elements, noop
 
+	exp := time.Millisecond * 5
+
 	putMessages(p,
-		msg(t, "hi", "", time.Millisecond, server.DefaultTopic),
-		msg(t, "there", "", time.Millisecond, "t"),
-		msg(t, "world", "", time.Millisecond*2, server.DefaultTopic),
-		msg(t, "again", "", time.Millisecond*2, "t"),
-		msg(t, "world", "", time.Millisecond*5, server.DefaultTopic),
-		msg(t, "again", "", time.Millisecond*5, "t"),
+		msg(t, "hi", "", exp, server.DefaultTopic),
+		msg(t, "there", "", exp, "t"),
+		msg(t, "world", "", exp*2, server.DefaultTopic),
+		msg(t, "again", "", exp*2, "t"),
+		msg(t, "world", "", exp*5, server.DefaultTopic),
+		msg(t, "again", "", exp*5, "t"),
 	)
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(exp)
 
 	require.NoError(t, p.GC(), "unexpected GC error")
 
-	time.Sleep(time.Millisecond)
+	time.Sleep(exp)
 
 	p.Replay(server.Subscription{
 		Channel:     ch,

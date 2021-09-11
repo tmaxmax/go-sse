@@ -114,12 +114,15 @@ func TestJoe_SubscribePublish(t *testing.T) {
 
 func TestJoe_GCInterval(t *testing.T) {
 	rp := &mockReplayProvider{}
+	interval := time.Millisecond * 6
 	j := server.NewJoe(server.JoeConfig{
 		ReplayProvider:   rp,
-		ReplayGCInterval: time.Millisecond * 2,
+		ReplayGCInterval: interval,
 	})
 
-	time.Sleep(time.Millisecond * 5)
+	expected := 2
+
+	time.Sleep(interval*time.Duration(expected) + interval/2)
 	require.NoError(t, j.Stop())
-	require.Equal(t, 2, rp.callsGC)
+	require.Equal(t, expected, rp.callsGC)
 }
