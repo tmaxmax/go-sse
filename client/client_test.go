@@ -64,7 +64,7 @@ func toEv(tb testing.TB, s string) (ev client.Event) {
 			ev.Data = append(ev.Data, f.Value...)
 			ev.Data = append(ev.Data, '\n')
 		case parser.FieldNameID:
-			ev.ID = string(f.Value)
+			ev.LastEventID = string(f.Value)
 		case parser.FieldNameEvent:
 			ev.Name = string(f.Value)
 		case parser.FieldNameRetry:
@@ -322,7 +322,7 @@ func events(tb testing.TB, c *client.Connection, topics ...string) (events <-cha
 
 func TestConnection_Subscriptions(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		data := "retry: 1000\n\nevent: test\ndata: something\n\nevent: test2\ndata: something else\n\ndata: unnamed\n\ndata: this shouldn't be received"
+		data := "retry: 1000\n\nevent: test\ndata: something\nid: 1\n\nevent: test2\ndata: something else\n\ndata: unnamed\nid: 2\n\ndata: this shouldn't be received"
 
 		_, _ = io.WriteString(w, data)
 	}))
@@ -335,9 +335,9 @@ func TestConnection_Subscriptions(t *testing.T) {
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
 	firstEvent := client.Event{}
-	secondEvent := client.Event{Name: "test", Data: []byte("something")}
-	thirdEvent := client.Event{Name: "test2", Data: []byte("something else")}
-	fourthEvent := client.Event{Data: []byte("unnamed")}
+	secondEvent := client.Event{Name: "test", Data: []byte("something"), LastEventID: "1"}
+	thirdEvent := client.Event{Name: "test2", Data: []byte("something else"), LastEventID: "1"}
+	fourthEvent := client.Event{Data: []byte("unnamed"), LastEventID: "2"}
 
 	all, _ := events(t, conn)
 	expectedAll := []client.Event{firstEvent, secondEvent, thirdEvent, fourthEvent}

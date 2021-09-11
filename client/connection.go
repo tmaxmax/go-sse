@@ -206,6 +206,7 @@ func (c *Connection) dispatch(ev Event) {
 	if l := len(ev.Data); l > 0 {
 		ev.Data = ev.Data[:l-1]
 	}
+	ev.LastEventID = c.lastEventID
 	c.event <- ev
 }
 
@@ -231,8 +232,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 				break
 			}
 
-			ev.ID = string(f.Value)
-			c.lastEventID = ev.ID
+			c.lastEventID = string(f.Value)
 			dirty = true
 		case parser.FieldNameRetry:
 			n, err := strconv.ParseInt(string(f.Value), 10, 64)
