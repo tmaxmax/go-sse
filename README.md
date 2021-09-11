@@ -24,7 +24,7 @@ Lightweight, fully spec-compliant HTML5 server-sent events library.
     - [Receiving events](#receiving-events)
     - [Establishing the connection](#establishing-the-connection)
     - [Connection lost?](#connection-lost)
-    - [The "Hello world!" server's client](#the-hello-world-servers-client)
+    - [The "Hello world" server's client](#the-hello-world-servers-client)
   - [License](#license)
   - [Contributing](#contributing)
 
@@ -359,7 +359,7 @@ Not a sweat, though! The connection will automatically be reattempted after a mi
 
 If the server doesn't set a retry time, the client's `DefaultReconnectionTime` is used.
 
-### The "Hello world!" server's client
+### The "Hello world" server's client
 
 Let's use what we know to create a client for the prevoius server example:
 
