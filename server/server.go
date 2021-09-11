@@ -9,7 +9,7 @@ The default provider will work for simple use-cases, but where scalability is re
 look at a more suitable solution. Adapters that satisfy the Provider interface can easily be created,
 and then plugged into the server instance.
 
-The events themselves are represented ass an object that's under package event, see its documentation
+The events themselves are represented as an object that's under package event, see its documentation
 for info on how to create events.
 */
 package server
@@ -38,6 +38,7 @@ type Subscription struct {
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
 	LastEventID event.ID
 	// The topics to receive message from. If no topic is specified, a default topic is implied.
+	// Topics are orthogonal to event names. They are used to filter what the server sends to each client.
 	Topics []string
 }
 
