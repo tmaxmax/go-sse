@@ -71,7 +71,7 @@ func TestNew(t *testing.T) {
 	_, ok := s.Provider().(*server.Joe)
 	require.True(t, ok, "Default provider isn't Joe")
 
-	s = server.New(&mockProvider{})
+	s = server.New(server.WithProvider(&mockProvider{}))
 	_, ok = s.Provider().(*mockProvider)
 	require.True(t, ok, "given provider isn't used")
 }
@@ -80,7 +80,7 @@ func TestServer_ShutdownPublish(t *testing.T) {
 	t.Parallel()
 
 	p := &mockProvider{}
-	s := server.New(p)
+	s := server.New(server.WithProvider(p))
 
 	require.NoError(t, s.Publish(nil), "unexpected Publish error")
 	require.True(t, p.Published, "Publish wasn't called")
@@ -114,7 +114,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 
 	go cancel()
 
-	server.New(p).ServeHTTP(rec, req)
+	server.New(server.WithProvider(p)).ServeHTTP(rec, req)
 	cancel()
 
 	require.True(t, p.Subscribed, "Subscribe wasn't called")
@@ -135,7 +135,7 @@ func TestServer_ServeHTTP_unsupportedRespWriter(t *testing.T) {
 	defer cancel()
 	p := newMockProvider(t, nil)
 
-	server.New(p).ServeHTTP(noFlusher{rec}, req)
+	server.New(server.WithProvider(p)).ServeHTTP(noFlusher{rec}, req)
 	cancel()
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
@@ -150,7 +150,7 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 	defer cancel()
 	p := newMockProvider(t, errors.New("can't subscribe"))
 
-	server.New(p).ServeHTTP(rec, req)
+	server.New(server.WithProvider(p)).ServeHTTP(rec, req)
 	cancel()
 
 	require.Equal(t, p.SubError.Error()+"\n", rec.Body.String(), "invalid response body")
@@ -179,7 +179,7 @@ func TestServer_ServeHTTP_connectionError(t *testing.T) {
 	defer cancel()
 	p := newMockProvider(t, nil)
 
-	server.New(p).ServeHTTP(&responseWriterErr{rec}, req)
+	server.New(server.WithProvider(p)).ServeHTTP(&responseWriterErr{rec}, req)
 	cancel()
 	_, ok := <-p.Closed
 	require.False(t, ok)

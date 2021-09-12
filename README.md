@@ -56,20 +56,29 @@ sse := server.New()
 
 The `server.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L118) to learn how to implement your own custom logic.
 
-The `New` constructor actually takes in an optional parameter, a `Provider`:
+The `New` constructor actually takes in additional options:
 
 ```go
 package server
 
-func New(provider ...Provider) *Server
+func New(options ...Option) *Server
+```
+
+One of them is the `WithProvider` option:
+
+```go
+func WithProvider(provider Provider) Option
 ```
 
 A provider is an implmenetation of the publish-subscribe messaging pattern:
 
 ```go
 type Provider interface {
+    // Publish a message to all subscribers.
     Publish(msg Message) error
+    // Add a new subscriber that is unsubscribed when the context is done.
     Subscribe(ctx context.Context, sub Subscription) error
+    // Cleanup all resources and stop publishing messages or accepting subscriptions.
     Stop() error
 }
 ```
@@ -99,8 +108,11 @@ and he'll dispatch events all day! By default, he has no memory of what events h
 
 ```go
 type ReplayProvider interface {
+    // Put a new event in the provider's buffer.
     Put(msg *Message)
+    // Replay valid events to a subscriber.
     Replay(sub Subscription)
+    // Cleanup all invalid events.
     GC() error
 }
 ```

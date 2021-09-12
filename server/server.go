@@ -80,6 +80,19 @@ var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 // are changed.
 const DefaultTopic = ""
 
+// An Option configures a certain property of a given Server.
+type Option func(*Server)
+
+// WithProvider is an option that sets a custom provider for a given Server.
+// The default provider is Joe without any ReplayProvider, if this option isn't given.
+func WithProvider(provider Provider) Option {
+	return func(s *Server) {
+		if provider != nil {
+			s.provider = provider
+		}
+	}
+}
+
 // A Server is mostly a convenience wrapper around a provider.
 // It implements the http.Handler interface and has some methods
 // for calling the underlying provider's methods.
@@ -88,11 +101,14 @@ type Server struct {
 }
 
 // New creates a new server using the specified provider. If no provider is given, Joe with no replay provider is used.
-func New(provider ...Provider) *Server {
+func New(options ...Option) *Server {
 	s := &Server{}
-	if len(provider) > 0 {
-		s.provider = provider[0]
-	} else {
+
+	for _, opt := range options {
+		opt(s)
+	}
+
+	if s.provider == nil {
 		s.provider = NewJoe()
 	}
 
