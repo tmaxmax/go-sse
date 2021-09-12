@@ -13,8 +13,8 @@ Lightweight, fully spec-compliant HTML5 server-sent events library.
   - [Table of contents](#table-of-contents)
   - [Installation and usage](#installation-and-usage)
   - [Implementing a server](#implementing-a-server)
-    - [Creating the server instance](#creating-the-server-instance)
-    - [Meet Joe](#meet-joe)
+    - [Providers and why they are vital](#providers-and-why-they-are-vital)
+    - [Meet Joe, the default provider](#meet-joe-the-default-provider)
     - [Publish your first event](#publish-your-first-event)
     - [The server-side "Hello world"](#the-server-side-hello-world)
   - [Using the client](#using-the-client)
@@ -44,7 +44,7 @@ If you are not familiar with the protocol or not sure how it works, read [MDN's 
 
 ## Implementing a server
 
-### Creating the server instance
+### Providers and why they are vital
 
 First, a server instance has to be created:
 
@@ -74,11 +74,18 @@ type Provider interface {
 }
 ```
 
-It can be anything: a pure Go implementation or an adapter for an external service or tool, such as Redis or RabbitMQ, you name it!
+The messaging system is valid for your application: it determines the maximum number of clients your server can handle, the latency between broadcasting events and receiving them client-side and the maximum message throughput supported by your server. As different use cases have different needs, `go-sse` allows to plug in your own system. Some examples of such external systems are:
 
-Read about the Provider interface in the [docs][2].
+- [RabbitMQ streams](https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-overview/)
+- [Redis pub-sub](https://redis.io/topics/pubsub)
+- [Apache Kafka](https://kafka.apache.org/)
+- Your own!
 
-### Meet Joe
+If an external system is required, an adapter that satisfies the `Provider` interface must be created so it can then be used with `go-sse`. To implement such an adapter, read [the Provider documentation][2] for implementation requirements! And maybe share them with others: `go-sse` is built with reusability in mind!
+
+But in most cases the power and scalability that these external systems bring is not necessary, so `go-sse` comes with a default provider builtin. Read further!
+
+### Meet Joe, the default provider
 
 The server still works by default, without a provider. `go-sse` brings you Joe: the trusty, pure Go pub-sub pattern, who handles all your events by default! Befriend Joe as following:
 
@@ -108,6 +115,10 @@ server.NewJoe(server.JoeConfig{
 ```
 
 will tell Joe to replay all valid events and clean up the expired ones each minute! Replay providers can do so much more (for example, add IDs to events automatically): read the [docs][3] on how to use the existing ones and how to implement yours.
+
+You can also implement your own replay providers: maybe you need persistent storage for your events? Or event validity is determined based on other criterias than expiry time? And if you think your replay provider may be useful to others, you are encouraged to share it!
+
+`go-sse` created the `ReplayProvider` interface mainly for `Joe`, but it encourages you to integrate it with your own `Provider` implementations, where suitable.
 
 ### Publish your first event
 
