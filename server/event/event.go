@@ -32,42 +32,6 @@ var (
 	fieldBytesComment = []byte{':', ' '}
 )
 
-// The ID struct represents any valid event ID value.
-type ID struct {
-	value string
-	set   bool
-}
-
-// NewID creates an ID value. It also returns a flag that indicates whether the input
-// is a valid ID. A valid ID must not have any newlines. If the input is not valid,
-// an unset (invalid) ID is returned.
-func NewID(value string) (ID, bool) {
-	if !isSingleLine([]byte(value)) {
-		return ID{}, false
-	}
-	return ID{value: value, set: true}, true
-}
-
-// MustID is the same as NewID, but it panics if the input isn't a valid ID.
-func MustID(value string) ID {
-	id, ok := NewID(value)
-	if !ok {
-		panic(fmt.Sprintf("go-sse.server.event: invalid id value %q, has newlines", value))
-	}
-	return id
-}
-
-// IsSet returns true if the receiver is a valid (set) ID value.
-func (i ID) IsSet() bool {
-	return i.set
-}
-
-// String returns the ID's value. The value may be an empty string,
-// make sure to check if the ID is set before using the value.
-func (i ID) String() string {
-	return i.value
-}
-
 type chunk struct {
 	data          []byte
 	endsInNewline bool

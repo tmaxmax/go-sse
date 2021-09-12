@@ -21,13 +21,8 @@ func TestNew(t *testing.T) {
 	e.SetRetry(30)
 	e.SetRetry(time.Second)
 
-	require.Panicsf(t, func() { MustID("multi\nline") }, "id %q regarded as valid", "multi\nline")
-	id, ok := NewID("again")
-	require.Truef(t, ok, "id %q regarded as invalid", "again")
-	e.SetID(id)
-	id, ok = NewID("lol")
-	require.Truef(t, ok, "id %q regarded as invalid", "lol")
-	e.SetID(id)
+	e.SetID(MustID("again"))
+	e.SetID(MustID("lol"))
 
 	require.Truef(t, e.SetName("whatever"), "name %q regarded as invalid", "whatever")
 	require.Truef(t, e.SetName("x"), "name %q regarded as invalid", "x")

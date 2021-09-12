@@ -177,13 +177,13 @@ data: to see you.
 
 And the ValidReplayProvider will stop replaying it after 5 minutes!
 
-The `event` package also exposes an `ID` type, which is a special type that denotes an event's ID. An ID must not have newlines, so we use a special function that validates the ID beforehand. `MustID` panics, but there's also `NewID`, which returns a boolean flag indicating whether the ID is valid or not:
+The `event` package also exposes an `ID` type, which is a special type that denotes an event's ID. An ID must not have newlines, so we use a special function that validates the ID beforehand. `MustID` panics, but there's also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
 
 ```go
-id, ok := event.NewID("invalid\nID")
+id, err := event.NewID("invalid\nID")
 ```
 
-Here, `ok` will be `false` and `id` will be an invalid value: nothing will be sent to clients if you set an event's ID using that value!
+Here, `err` will be non-nil and `id` will be an invalid value: nothing will be sent to clients if you set an event's ID using that value!
 
 Either way, IDs and expiry times can also be retrieved, so replay providers can use them to determine which IDs to replay and which are still valid:
 
