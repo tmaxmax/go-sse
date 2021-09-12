@@ -7,6 +7,8 @@ import (
 )
 
 // The ID struct represents any valid event ID value.
+// IDs must be passed around as values, not as pointers!
+// They can also safely be used as map keys.
 type ID struct {
 	value string
 	set   bool
