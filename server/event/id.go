@@ -1,6 +1,7 @@
 package event
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -92,7 +93,7 @@ var ErrIDUnset = errors.New("tried to marshal to text an unset ID")
 // It returns an error when trying to marshal an unset ID.
 func (i *ID) MarshalText() ([]byte, error) {
 	if i.IsSet() {
-		return []byte(i.value), nil
+		return []byte(i.String()), nil
 	}
 
 	return nil, ErrIDUnset
@@ -102,8 +103,41 @@ func (i *ID) MarshalText() ([]byte, error) {
 // It otherwise returns the representation of the JSON null value.
 func (i *ID) MarshalJSON() ([]byte, error) {
 	if i.IsSet() {
-		return json.Marshal(i.value)
+		return json.Marshal(i.String())
 	}
 
 	return json.Marshal(nil)
+}
+
+// Scan implements the sql.Scanner interface. IDs can be scanned from:
+//  - nil interfaces (result: unset ID)
+//  - byte slice
+//  - string
+func (i *ID) Scan(src interface{}) error {
+	*i = ID{}
+
+	if src == nil {
+		return nil
+	}
+
+	switch v := src.(type) {
+	case []byte:
+		i.value = string(v)
+	case string:
+		i.value = string([]byte(v))
+	default:
+		return fmt.Errorf("unsupported Scan, storing driver.Value type %T into type %T", src, *i)
+	}
+
+	i.set = true
+
+	return nil
+}
+
+// Value implements the driver.Valuer interface.
+func (i ID) Value() (driver.Value, error) {
+	if i.IsSet() {
+		return i.String(), nil
+	}
+	return nil, nil
 }

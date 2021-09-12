@@ -110,3 +110,39 @@ func TestID_MarshalText(t *testing.T) {
 	require.NoError(t, err, "unexpected error")
 	require.Equal(t, []byte{}, v, "unexpected result")
 }
+
+func TestID_Scan(t *testing.T) {
+	t.Parallel()
+
+	var id event.ID
+
+	err := id.Scan(nil)
+	require.NoError(t, err, "unexpected error")
+	require.Empty(t, id, "unexpected result")
+
+	err = id.Scan("")
+	require.NoError(t, err, "unexpected error")
+	require.Equal(t, event.MustID(""), id, "unexpected result")
+
+	err = id.Scan([]byte(""))
+	require.NoError(t, err, "unexpected error")
+	require.Equal(t, event.MustID(""), id, "unexpected result")
+
+	err = id.Scan(5)
+	require.Error(t, err, "expected error")
+	require.Empty(t, id, "invalid result")
+}
+
+func TestID_Value(t *testing.T) {
+	t.Parallel()
+
+	var id event.ID
+	v, err := id.Value()
+	require.NoError(t, err, "unexpected error")
+	require.Nil(t, v, "unexpected value")
+
+	id = event.MustID("")
+	v, err = id.Value()
+	require.NoError(t, err, "unexpected error")
+	require.Equal(t, "", v, "unexpected value")
+}
