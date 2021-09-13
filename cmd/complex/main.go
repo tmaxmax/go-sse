@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	sse2 "github.com/tmaxmax/go-sse"
+	"github.com/tmaxmax/go-sse"
 )
 
-var sse = sse2.NewServer()
+var sseHandler = sse.NewServer()
 
 func cors(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,18 +34,18 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("/", SnapshotHTTPEndpoint)
-	mux.Handle("/events", sse)
+	mux.Handle("/events", sseHandler)
 
 	s := &http.Server{
 		Addr:    "0.0.0.0:8080",
 		Handler: cors(mux),
 	}
 	s.RegisterOnShutdown(func() {
-		e := &sse2.Message{}
+		e := &sse.Message{}
 		e.SetName("close")
 		// Broadcast a close message so clients can gracefully disconnect.
-		_ = sse.Publish(e)
-		_ = sse.Shutdown()
+		_ = sseHandler.Publish(e)
+		_ = sseHandler.Shutdown()
 	})
 
 	go recordMetric(ctx, "ops", time.Second*2)
@@ -62,7 +62,7 @@ func main() {
 		for {
 			select {
 			case <-timer.C:
-				_ = sse.Publish(generateRandomNumbers())
+				_ = sseHandler.Publish(generateRandomNumbers())
 			case <-ctx.Done():
 				return
 			}
@@ -85,12 +85,12 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 		case <-ticker.C:
 			v := Inc(metric)
 
-			e := &sse2.Message{}
+			e := &sse.Message{}
 			e.SetTTL(frequency)
 			e.SetName(metric)
 			e.AppendData(strconv.AppendInt(nil, v, 10))
 
-			_ = sse.Publish(e)
+			_ = sseHandler.Publish(e)
 		case <-ctx.Done():
 			return
 		}
@@ -116,8 +116,8 @@ func runServer(ctx context.Context, s *http.Server) error {
 	return <-shutdownError
 }
 
-func generateRandomNumbers() *sse2.Message {
-	e := &sse2.Message{}
+func generateRandomNumbers() *sse.Message {
+	e := &sse.Message{}
 	count := 1 + rand.Intn(5)
 
 	for i := 0; i < count; i++ {
