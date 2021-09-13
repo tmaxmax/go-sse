@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse/server"
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 func TestNewConnection(t *testing.T) {
@@ -57,7 +56,7 @@ func TestConnection_Send(t *testing.T) {
 
 	rec.Flushed = false
 
-	ev := event.Event{}
+	ev := server.Event{}
 	ev.AppendText("sarmale")
 	expected, _ := ev.MarshalText()
 
@@ -76,6 +75,6 @@ func TestConnection_Send_error(t *testing.T) {
 
 	rec.Flushed = false
 
-	require.Equal(t, errWriteFailed, conn.Send(&event.Event{}), "invalid Send error")
+	require.Equal(t, errWriteFailed, conn.Send(&server.Event{}), "invalid Send error")
 	require.True(t, rec.Flushed, "writer wasn't flushed")
 }

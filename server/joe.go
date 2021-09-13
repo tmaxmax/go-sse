@@ -3,8 +3,6 @@ package server
 import (
 	"context"
 	"time"
-
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 // A ReplayProvider is a type that can replay older published events to new subscribers.
@@ -63,7 +61,7 @@ type ReplayProvider interface {
 }
 
 type (
-	subscriber  chan<- *event.Event
+	subscriber  chan<- *Event
 	subscribers map[subscriber]struct{}
 )
 

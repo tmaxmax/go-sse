@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse/server"
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 type mockReplayProvider struct {
@@ -86,7 +85,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 		ReplayProvider: rp,
 	})
 
-	ch := make(chan *event.Event, 1)
+	ch := make(chan *server.Event, 1)
 	sub := server.Subscription{Channel: ch}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -101,7 +100,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	_, ok := <-ch
 	require.False(t, ok)
 
-	ch2 := make(chan *event.Event)
+	ch2 := make(chan *server.Event)
 	sub2 := server.Subscription{Channel: ch2}
 
 	require.NoError(t, j.Subscribe(context.Background(), sub2))

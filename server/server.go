@@ -19,8 +19,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 // The Subscription struct is used to subscribe to a given provider.
@@ -32,11 +30,11 @@ type Subscription struct {
 	// Subsequent subscriptions that use the same channel are ignored by providers.
 	//
 	// Only the provider is allowed to close this channel. Closing it yourself may cause the program to panic!
-	Channel chan<- *event.Event
+	Channel chan<- *Event
 	// An optional last event ID indicating the event to resume the stream from.
 	// The events will replay starting from the first valid event sent after the one with the given ID.
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
-	LastEventID event.ID
+	LastEventID ID
 	// The topics to receive message from. If no topic is specified, a default topic is implied.
 	// Topics are orthogonal to event names. They are used to filter what the server sends to each client.
 	Topics []string
@@ -45,7 +43,7 @@ type Subscription struct {
 // The Message struct is used to publish a message to a given provider.
 type Message struct {
 	// The event to publish.
-	Event *event.Event
+	Event *Event
 	// The topic to publish the event to. If no topic is specified the default topic is implied.
 	Topic string
 }
@@ -133,13 +131,13 @@ func (s *Server) Provider() Provider {
 //
 // If you need different behavior, you can create a custom handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	events, id := make(chan *event.Event), event.ID{}
+	events, id := make(chan *Event), ID{}
 	// Clients must not send empty Last-Event-ID headers:
 	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
 	if h := r.Header.Get("Last-Event-ID"); h != "" {
 		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
 		// which providers are required to ignore.
-		id, _ = event.NewID(h)
+		id, _ = NewID(h)
 	}
 	err := s.Subscribe(r.Context(), events, id)
 	if err != nil {
@@ -163,7 +161,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Subscribe subscribes the given channel to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
-func (s *Server) Subscribe(ctx context.Context, ch chan<- *event.Event, lastEventID event.ID, topics ...string) error {
+func (s *Server) Subscribe(ctx context.Context, ch chan<- *Event, lastEventID ID, topics ...string) error {
 	return s.Provider().Subscribe(ctx, Subscription{
 		Channel:     ch,
 		LastEventID: lastEventID,
@@ -173,7 +171,7 @@ func (s *Server) Subscribe(ctx context.Context, ch chan<- *event.Event, lastEven
 
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topic is optional - if none is specified, the event is published to the default topic.
-func (s *Server) Publish(e *event.Event, topic ...string) error {
+func (s *Server) Publish(e *Event, topic ...string) error {
 	msg := Message{Event: e}
 	if len(topic) > 0 {
 		msg.Topic = topic[0]

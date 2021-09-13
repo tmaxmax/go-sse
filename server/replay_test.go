@@ -6,17 +6,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse/server"
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) server.Message {
 	tb.Helper()
 
-	e := &event.Event{}
+	e := &server.Event{}
 	e.AppendText(data)
 	e.SetTTL(expiry)
 	if id != "" {
-		e.SetID(event.MustID(id))
+		e.SetID(server.MustID(id))
 	}
 
 	return server.Message{
@@ -31,18 +30,18 @@ func putMessages(p server.ReplayProvider, msgs ...server.Message) {
 	}
 }
 
-func testNoopReplays(p server.ReplayProvider, ch chan<- *event.Event) {
+func testNoopReplays(p server.ReplayProvider, ch chan<- *server.Event) {
 	p.Replay(server.Subscription{ // unset ID, noop
 		Channel:     ch,
-		LastEventID: event.ID{},
+		LastEventID: server.ID{},
 	})
 	p.Replay(server.Subscription{ // invalid ID, noop
 		Channel:     ch,
-		LastEventID: event.MustID("mama"),
+		LastEventID: server.MustID("mama"),
 	})
 	p.Replay(server.Subscription{ // nonexistent ID, noop
 		Channel:     ch,
-		LastEventID: event.MustID("10"),
+		LastEventID: server.MustID("10"),
 	})
 }
 
@@ -50,7 +49,7 @@ func TestValidReplayProvider(t *testing.T) {
 	t.Parallel()
 
 	p := server.NewValidReplayProvider(true)
-	ch := make(chan *event.Event, 2)
+	ch := make(chan *server.Event, 2)
 
 	require.NoError(t, p.GC(), "unexpected GC error") // no elements, noop
 
@@ -73,7 +72,7 @@ func TestValidReplayProvider(t *testing.T) {
 
 	p.Replay(server.Subscription{
 		Channel:     ch,
-		LastEventID: event.MustID("3"),
+		LastEventID: server.MustID("3"),
 		Topics:      []string{server.DefaultTopic},
 	})
 	testNoopReplays(p, ch)
@@ -87,7 +86,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
 	p := server.NewFiniteReplayProvider(3)
-	ch := make(chan *event.Event, 1)
+	ch := make(chan *server.Event, 1)
 
 	require.NoError(t, p.GC(), "unexpected GC error") // GC is not required, noop
 
@@ -100,7 +99,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 
 	p.Replay(server.Subscription{
 		Channel:     ch,
-		LastEventID: event.MustID("2"),
+		LastEventID: server.MustID("2"),
 		Topics:      []string{server.DefaultTopic},
 	})
 	testNoopReplays(p, ch)
@@ -117,7 +116,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 
 	p.Replay(server.Subscription{
 		Channel:     ch,
-		LastEventID: event.MustID("4"),
+		LastEventID: server.MustID("4"),
 		Topics:      []string{server.DefaultTopic},
 	})
 

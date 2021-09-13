@@ -2,8 +2,6 @@ package server
 
 import (
 	"strconv"
-
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 // A buffer is the underlying storage for a provider. Its methods are used by the provider to implement
@@ -11,9 +9,9 @@ import (
 type buffer interface {
 	queue(message *Message)
 	dequeue()
-	front() *event.Event
+	front() *Event
 	len() int
-	slice(event.ID) []Message
+	slice(ID) []Message
 }
 
 type bufferBase struct {
@@ -24,7 +22,7 @@ func (b *bufferBase) len() int {
 	return len(b.buf)
 }
 
-func (b *bufferBase) front() *event.Event {
+func (b *bufferBase) front() *Event {
 	if b.len() == 0 {
 		return nil
 	}
@@ -32,7 +30,7 @@ func (b *bufferBase) front() *event.Event {
 }
 
 type bufferNoID struct {
-	lastRemovedID event.ID
+	lastRemovedID ID
 	bufferBase
 }
 
@@ -47,7 +45,7 @@ func (b *bufferNoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferNoID) slice(atID event.ID) []Message {
+func (b *bufferNoID) slice(atID ID) []Message {
 	if atID == b.lastRemovedID && len(b.buf) != 0 {
 		return b.buf
 	}
@@ -74,7 +72,7 @@ const autoIDBase = 10
 
 func (b *bufferAutoID) queue(message *Message) {
 	message.Event = message.Event.Clone()
-	message.Event.SetID(event.MustID(strconv.FormatInt(b.lastID, autoIDBase)))
+	message.Event.SetID(MustID(strconv.FormatInt(b.lastID, autoIDBase)))
 	b.lastID++
 	b.buf = append(b.buf, *message)
 }
@@ -84,7 +82,7 @@ func (b *bufferAutoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferAutoID) slice(atID event.ID) []Message {
+func (b *bufferAutoID) slice(atID ID) []Message {
 	id, err := strconv.ParseInt(atID.String(), autoIDBase, 64)
 	if err != nil {
 		return nil

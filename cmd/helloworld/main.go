@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/tmaxmax/go-sse/server"
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 func main() {
 	sse := server.New()
 
 	go func() {
-		ev := &event.Event{}
+		ev := &server.Event{}
 		ev.AppendText("Hello world")
 
 		for range time.Tick(time.Second) {

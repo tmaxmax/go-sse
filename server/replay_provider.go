@@ -2,8 +2,6 @@ package server
 
 import (
 	"time"
-
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 func isAutoIDsSet(input []bool) bool {
@@ -77,7 +75,7 @@ func (v *ValidReplayProvider) Put(message *Message) {
 func (v *ValidReplayProvider) GC() error {
 	now := time.Now()
 
-	var e *event.Event
+	var e *Event
 	for {
 		e = v.b.front()
 		if e == nil || e.ExpiresAt().After(now) {

@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse/server"
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 type mockProvider struct {
@@ -31,7 +30,7 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub server.Subscription) e
 
 	m.Sub = sub
 
-	e := &event.Event{}
+	e := &server.Event{}
 	e.AppendText("hello")
 
 	go func() {
@@ -118,7 +117,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 	cancel()
 
 	require.True(t, p.Subscribed, "Subscribe wasn't called")
-	require.Equal(t, event.MustID("5"), p.Sub.LastEventID, "Invalid last event ID received")
+	require.Equal(t, server.MustID("5"), p.Sub.LastEventID, "Invalid last event ID received")
 	require.Equal(t, "data: hello\n\n", rec.Body.String(), "Invalid response body")
 	require.Equal(t, http.StatusOK, rec.Code, "invalid response code")
 }

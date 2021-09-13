@@ -4,8 +4,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-
-	"github.com/tmaxmax/go-sse/server/event"
 )
 
 type writeFlusher interface {
@@ -19,7 +17,7 @@ type Connection struct {
 }
 
 // Send sends the given event to the client. It returns any errors that occurred while writing the event.
-func (c *Connection) Send(e *event.Event) error {
+func (c *Connection) Send(e *Event) error {
 	_, err := e.WriteTo(c.w)
 	c.w.Flush()
 	return err

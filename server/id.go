@@ -1,4 +1,4 @@
-package event
+package server
 
 import (
 	"database/sql/driver"
