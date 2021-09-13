@@ -89,7 +89,7 @@ func (c *Client) newBackoff(ctx context.Context) (backoff.BackOff, *time.Duratio
 	return b, initialReconnectionTime
 }
 
-// DefaultValidator is the default response validation function. It checks the content type to be
+// DefaultValidator is the default client response validation function. It checks the content type to be
 // text/event-stream and the response status code to be 200 OK.
 var DefaultValidator ResponseValidator = func(r *http.Response) error {
 	if r.StatusCode != http.StatusOK {
@@ -101,12 +101,12 @@ var DefaultValidator ResponseValidator = func(r *http.Response) error {
 	return nil
 }
 
-// NoopValidator is a validator function that treats all responses as valid.
+// NoopValidator is a client response validator function that treats all responses as valid.
 var NoopValidator ResponseValidator = func(_ *http.Response) error {
 	return nil
 }
 
-// DefaultClient is the client that is used by the free functions exported by this package.
+// DefaultClient is the client that is used when creating a new connection using the NewConnection function.
 // Unset properties on new clients are replaced with the ones set for the default client.
 var DefaultClient = &Client{
 	HTTPClient:              http.DefaultClient,

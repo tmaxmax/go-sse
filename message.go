@@ -55,7 +55,16 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 }
 
 // Message is the representation of a single message sent from the server to its clients.
-// It holds the topic of the message and all the data associated to the actual event.
+//
+// A Message is made of a single event, which is sent to each client, and other metadata
+// about the message itself: its expiry time and topic.
+//
+// Topics are used to filter which events reach which clients. If a client subscribes to
+// a certain set of topics, but a message's topic is not part of that set, then the underlying
+// event of the message does not reach the client.
+//
+// The message's expiry time can be used when replaying messages to new clients. If a message
+// is expired, then it is not sent. Replay providers will usually make use of this.
 type Message struct {
 	Topic string
 
@@ -83,14 +92,14 @@ func (e *Message) appendText(isComment bool, chunks ...string) {
 	}
 }
 
-// AppendText creates multiple data fields from the given strings. It uses the unsafe package
+// AppendText creates multiple data fields on the message's event from the given strings. It uses the unsafe package
 // to convert the string to a byte slice, so no allocations are made. See the AppendData method's
 // documentation for details about the data field type.
 func (e *Message) AppendText(chunks ...string) {
 	e.appendText(false, chunks...)
 }
 
-// AppendData creates multiple data fields from the given byte slices.
+// AppendData creates multiple data fields on the message's event from the given byte slices.
 //
 // Server-sent events are not suited for binary data: the event fields are delimited by newlines,
 // where a newline can be a LF, CR or CRLF sequence. When the client interprets the fields,
@@ -123,7 +132,7 @@ func (e *Message) AppendText(chunks ...string) {
 // https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream.
 //
 // Still, if you need to send binary data, you can use a Base64 encoder or any other encoder that does not output
-// any newline characters (\n or \n) and then append the resulted byte slices.
+// any newline characters (\r or \n) and then append the resulted byte slices.
 func (e *Message) AppendData(chunks ...[]byte) {
 	s := parser.ChunkScanner{}
 
@@ -137,13 +146,13 @@ func (e *Message) AppendData(chunks ...[]byte) {
 	}
 }
 
-// Comment creates an event comment field. If it spans on multiple lines,
+// Comment creates a comment field on the message's event. If it spans multiple lines,
 // new comment lines are created.
 func (e *Message) Comment(comments ...string) {
 	e.appendText(true, comments...)
 }
 
-// SetRetry creates an event field that tells the client to set the event stream reconnection time to
+// SetRetry creates a field on the message's event that tells the client to set the event stream reconnection time to
 // the number of milliseconds it provides.
 func (e *Message) SetRetry(duration time.Duration) {
 	var buf []byte
@@ -154,7 +163,7 @@ func (e *Message) SetRetry(duration time.Duration) {
 	e.retryValue = append(e.retryValue, '\n')
 }
 
-// ID returns the event's ID.
+// ID returns the message's event's ID.
 func (e *Message) ID() EventID {
 	if e.id == nil {
 		return EventID{}
@@ -162,7 +171,7 @@ func (e *Message) ID() EventID {
 	return EventID{value: unsafeString(e.id), set: true} // SAFETY: ids are immutable
 }
 
-// SetID sets the event's ID.
+// SetID sets the message's event's ID.
 func (e *Message) SetID(id EventID) {
 	if !id.IsSet() {
 		e.id = nil
@@ -171,7 +180,7 @@ func (e *Message) SetID(id EventID) {
 	e.id = unsafeBytes(id.String()) // SAFETY: ids are immutable
 }
 
-// SetName sets the event's name.
+// SetName sets the message's event's name.
 //
 // A Name cannot have multiple lines. If it has, the function will return false.
 func (e *Message) SetName(name string) bool {
@@ -182,7 +191,7 @@ func (e *Message) SetName(name string) bool {
 	return true
 }
 
-// SetExpiry sets the event's expiry time to the given timestamp.
+// SetExpiry sets the message's expiry time to the given timestamp.
 //
 // This is not sent to the clients. The expiry time can be used when implementing
 // event replay providers, to see if an event is still valid for replay.
@@ -190,7 +199,7 @@ func (e *Message) SetExpiry(t time.Time) {
 	e.expiresAt = t
 }
 
-// SetTTL sets the event's expiry time to a timestamp after the given duration from the current time.
+// SetTTL sets the message's expiry time to a timestamp after the given duration from the current time.
 //
 // This is not sent to the clients. The expiry time can be used when implementing
 // event replay providers, to see if an event is still valid for replay.
@@ -198,7 +207,7 @@ func (e *Message) SetTTL(d time.Duration) {
 	e.SetExpiry(time.Now().Add(d))
 }
 
-// ExpiresAt returns the timestamp when the event expires.
+// ExpiresAt returns the timestamp when the message expires.
 func (e *Message) ExpiresAt() time.Time {
 	return e.expiresAt
 }
@@ -252,7 +261,7 @@ func (e *Message) writeRetry(w io.Writer) (int64, error) {
 	return int64(n + m), err
 }
 
-// WriteTo writes the standard textual representation of an event to an io.Writer.
+// WriteTo writes the standard textual representation of the message's event to an io.Writer.
 // This operation is heavily optimized and does zero allocations, so it is strongly preferred
 // over MarshalText or String.
 func (e *Message) WriteTo(w io.Writer) (int64, error) {
@@ -281,9 +290,8 @@ func (e *Message) WriteTo(w io.Writer) (int64, error) {
 	return int64(o) + n, err
 }
 
-// MarshalText writes the standard textual representation of the event. Marshalling and unmarshalling will not
-// result in an event with the same fields: comment fields will not be unmarshalled, expiry time will be lost,
-// and data fields won't be of the same type: a multiline Text field will be unmarshalled into multiple Line fields.
+// MarshalText writes the standard textual representation of the message's event. Marshalling and unmarshalling will not
+// result in a message with an event that has the same fields: comment fields will not be unmarshalled, and expiry time and topic will be lost.
 //
 // Use the WriteTo method if you don't need the byte representation.
 //
@@ -296,7 +304,7 @@ func (e *Message) MarshalText() ([]byte, error) {
 	return b.Bytes(), err
 }
 
-// String writes the event's standard textual representation to a strings.Builder and returns the resulted string.
+// String writes the message's event standard textual representation to a strings.Builder and returns the resulted string.
 // It may panic if the representation is too long to be buffered.
 //
 // Use the WriteTo method if you don't actually need the string representation.
@@ -306,7 +314,7 @@ func (e *Message) String() string {
 	return s.String()
 }
 
-// UnmarshalError is the error returned by the event's UnmarshalText method.
+// UnmarshalError is the error returned by the Message's UnmarshalText method.
 // If the error is related to a specific field, FieldName will be a non-empty string.
 // If no fields were found in the target text or any other errors occurred, only
 // a Reason will be provided. Reason is always present.
@@ -340,7 +348,7 @@ func (e *Message) reset() {
 }
 
 // UnmarshalText extracts the first event found in the given byte slice into the
-// receiver. The receiver is always reset to the event's default value before unmarshaling,
+// receiver. The receiver is always reset to the message's default value before unmarshaling,
 // so always use a new Message instance if you don't want to overwrite data.
 //
 // Unmarshaling ignores comments and fields with invalid names. If no valid fields are found,
@@ -398,7 +406,7 @@ loop:
 	return nil
 }
 
-// Clone returns a copy of the event.
+// Clone returns a deep copy of the message.
 func (e *Message) Clone() *Message {
 	return &Message{
 		expiresAt:  e.expiresAt,

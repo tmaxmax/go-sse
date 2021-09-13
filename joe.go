@@ -92,7 +92,7 @@ type Joe struct {
 	replay         ReplayProvider
 }
 
-// JoeConfig is used to tune Joe to preference.
+// JoeConfig is used to optionally configure a replay provider for Joe.
 type JoeConfig struct {
 	// An optional replay provider that Joe uses to resend older messages to new subscribers.
 	ReplayProvider ReplayProvider
@@ -101,7 +101,8 @@ type JoeConfig struct {
 	ReplayGCInterval time.Duration
 }
 
-// NewJoe creates and starts a Joe.
+// NewJoe creates and starts a Joe (the default provider for servers).
+// You can optionally pass a JoeConfig if you want to use a ReplayProvider with Joe.
 func NewJoe(configuration ...JoeConfig) *Joe {
 	config := joeConfig(configuration)
 

@@ -1,16 +1,14 @@
 /*
-Package server provides utilities for creating fully spec-compliant HTML5 server-sent events streams.
+Package sse provides utilities for creating and consuming fully spec-compliant HTML5 server-sent events streams.
 
-The central piece of this package is the Provider interface. A Provider describes a publish-subscribe
+The central piece of a server's implementation is the Provider interface. A Provider describes a publish-subscribe
 system that can be used to implement messaging for the SSE protocol. This package already has an
 implementation, called Joe, that is the default provider for any server. Abstracting the messaging
 system implementation away allows servers to use any arbitrary provider under the same interface.
 The default provider will work for simple use-cases, but where scalability is required, one will
 look at a more suitable solution. Adapters that satisfy the Provider interface can easily be created,
 and then plugged into the server instance.
-
-The events themselves are represented as an object that's under package event, see its documentation
-for info on how to create events.
+Events themselves are represented using the Message type.
 */
 package sse
 
@@ -87,6 +85,9 @@ func WithProvider(provider Provider) ServerOption {
 // A Server is mostly a convenience wrapper around a provider.
 // It implements the http.Handler interface and has some methods
 // for calling the underlying provider's methods.
+//
+// When creating a server, if no provider is specified using the WithProvider
+// option, the Joe provider found in this package with no replay provider is used.
 type Server struct {
 	provider Provider
 }
