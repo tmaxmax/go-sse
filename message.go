@@ -336,7 +336,7 @@ func (u *UnmarshalError) Unwrap() error {
 	return u.Reason
 }
 
-// ErrUnexpectedEOF is returned when UnmarshalText isn't provided a byte slice that ends in a newline.
+// ErrUnexpectedEOF is returned when unmarshaling a Message from an input that doesn't end in a newline.
 var ErrUnexpectedEOF = parser.ErrUnexpectedEOF
 
 func (e *Message) reset() {
