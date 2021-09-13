@@ -12,11 +12,12 @@ and then plugged into the server instance.
 The events themselves are represented as an object that's under package event, see its documentation
 for info on how to create events.
 */
-package server
+package sse
 
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 )
@@ -49,13 +50,13 @@ type Subscription struct {
 // may return other implementation-specific errors too, but the close error is guaranteed to be the same across
 // providers.
 type Provider interface {
-	// Subscribe to the provider. The context is used to remove the subscription automatically
+	// Subscribe to the provider. The context is used to remove the listener automatically
 	// when the subscriber stops receiving messages.
 	Subscribe(ctx context.Context, subscription Subscription) error
 	// Publish a message to all the subscribers that are subscribed to the message's topic.
 	Publish(message *Message) error
 	// Stop the provider. Calling Stop will clean up all the provider's resources and
-	// make Subscribe and Publish fail with an error. All the subscription channels will be
+	// make Subscribe and Publish fail with an error. All the listener channels will be
 	// closed and any ongoing publishes will be aborted.
 	//
 	// Calling Stop multiple times does nothing but return ErrProviderClosed.
@@ -90,8 +91,8 @@ type Server struct {
 	provider Provider
 }
 
-// New creates a new server using the specified provider. If no provider is given, Joe with no replay provider is used.
-func New(options ...Option) *Server {
+// NewServer creates a new server using the specified provider. If no provider is given, Joe with no replay provider is used.
+func NewServer(options ...Option) *Server {
 	s := &Server{}
 
 	for _, opt := range options {
@@ -110,6 +111,45 @@ func (s *Server) Provider() Provider {
 	return s.provider
 }
 
+type writeFlusher interface {
+	io.Writer
+	http.Flusher
+}
+
+// An UpgradedRequest is used to send events to the client.
+// Create one using the Upgrade function.
+type UpgradedRequest struct {
+	w writeFlusher
+}
+
+// Send sends the given event to the client. It returns any errors that occurred while writing the event.
+func (u *UpgradedRequest) Send(e *Message) error {
+	_, err := e.WriteTo(u.w)
+	u.w.Flush()
+	return err
+}
+
+// Upgrade upgrades an HTTP request to support server-sent events.
+// It returns a Connection that's used to send events to the client or an
+// error if the upgrade failed.
+func Upgrade(w http.ResponseWriter) (*UpgradedRequest, error) {
+	fw, ok := w.(writeFlusher)
+	if !ok {
+		return nil, ErrUpgradeUnsupported
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	fw.Flush()
+
+	return &UpgradedRequest{w: fw}, nil
+}
+
+// ErrUpgradeUnsupported is returned when a request can't be upgraded to support server-sent events.
+var ErrUpgradeUnsupported = errors.New("go-sse.server.connection: unsupported")
+
 // ServeHTTP implements a default HTTP handler for a server.
 //
 // This handler upgrades the request, subscribes it to the server's provider and
@@ -117,8 +157,8 @@ func (s *Server) Provider() Provider {
 // It also sends the Last-Event-ID header's value, if present.
 //
 // If the request isn't upgradeable, it writes a message to the client along with
-// an 500 Internal Server Error response code. If on subscribe the provider returns
-// an error, it writes the error message to the client and a 500 Internal Server Error
+// an 500 Internal Server ConnectionError response code. If on subscribe the provider returns
+// an error, it writes the error message to the client and a 500 Internal Server ConnectionError
 // response code.
 //
 // If you need different behavior, you can create a custom handler.
@@ -137,7 +177,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := NewConnection(w)
+	conn, err := Upgrade(w)
 	if err != nil {
 		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
 		return
@@ -168,7 +208,7 @@ func (s *Server) Publish(e *Message) error {
 }
 
 // Shutdown closes all the connections and stops the server. Publish operations will fail
-// with the error sent by the underlying provider. New requests will be ignored.
+// with the error sent by the underlying provider. NewServer requests will be ignored.
 //
 // Call this method when shutting down the HTTP server using http.Server's RegisterOnShutdown
 // method. Not doing this will result in the server never shutting down or connections being

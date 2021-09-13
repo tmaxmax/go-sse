@@ -5,13 +5,13 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/tmaxmax/go-sse/client"
+	"github.com/tmaxmax/go-sse"
 )
 
 func main() {
 	r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", nil)
-	conn := client.NewConnection(r)
-	ch := make(chan client.Event)
+	conn := sse.NewConnection(r)
+	ch := make(chan sse.Event)
 
 	conn.SubscribeMessages(ch)
 

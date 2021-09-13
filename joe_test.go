@@ -1,4 +1,4 @@
-package server_test
+package sse_test
 
 import (
 	"context"
@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tmaxmax/go-sse"
+
 	"github.com/stretchr/testify/require"
-	"github.com/tmaxmax/go-sse/server"
 )
 
 type mockReplayProvider struct {
@@ -17,11 +18,11 @@ type mockReplayProvider struct {
 	callsReplay int
 }
 
-func (m *mockReplayProvider) Put(_ **server.Message) {
+func (m *mockReplayProvider) Put(_ **sse.Message) {
 	m.callsPut++
 }
 
-func (m *mockReplayProvider) Replay(_ server.Subscription) {
+func (m *mockReplayProvider) Replay(_ sse.Subscription) {
 	m.callsReplay++
 }
 
@@ -30,11 +31,11 @@ func (m *mockReplayProvider) GC() error {
 	return m.errGC
 }
 
-var _ server.ReplayProvider = (*mockReplayProvider)(nil)
+var _ sse.ReplayProvider = (*mockReplayProvider)(nil)
 
 func TestNewJoe(t *testing.T) {
 	rp := &mockReplayProvider{errGC: errors.New("")}
-	j := server.NewJoe(server.JoeConfig{
+	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider:   rp,
 		ReplayGCInterval: time.Millisecond,
 	})
@@ -46,11 +47,11 @@ func TestNewJoe(t *testing.T) {
 
 	//nolint
 	require.NotPanics(t, func() {
-		s := server.NewJoe(server.JoeConfig{
+		s := sse.NewJoe(sse.JoeConfig{
 			ReplayGCInterval: -5,
 		})
 		defer s.Stop()
-		t := server.NewJoe(server.JoeConfig{
+		t := sse.NewJoe(sse.JoeConfig{
 			ReplayGCInterval: 5,
 		})
 		defer t.Stop()
@@ -59,19 +60,19 @@ func TestNewJoe(t *testing.T) {
 
 func TestJoe_Stop(t *testing.T) {
 	rp := &mockReplayProvider{errGC: errors.New("")}
-	j := server.NewJoe(server.JoeConfig{
+	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider: rp,
 	})
 
 	require.NoError(t, j.Stop())
-	require.ErrorIs(t, j.Stop(), server.ErrProviderClosed)
-	require.ErrorIs(t, j.Subscribe(context.Background(), server.Subscription{}), server.ErrProviderClosed)
-	require.ErrorIs(t, j.Publish(nil), server.ErrProviderClosed)
+	require.ErrorIs(t, j.Stop(), sse.ErrProviderClosed)
+	require.ErrorIs(t, j.Subscribe(context.Background(), sse.Subscription{}), sse.ErrProviderClosed)
+	require.ErrorIs(t, j.Publish(nil), sse.ErrProviderClosed)
 	require.Zero(t, rp.callsPut)
 	require.Zero(t, rp.callsReplay)
 	require.Zero(t, rp.callsGC)
 
-	j = server.NewJoe()
+	j = sse.NewJoe()
 	//nolint
 	require.NotPanics(t, func() {
 		go j.Stop()
@@ -81,27 +82,27 @@ func TestJoe_Stop(t *testing.T) {
 
 func TestJoe_SubscribePublish(t *testing.T) {
 	rp := &mockReplayProvider{errGC: errors.New("")}
-	j := server.NewJoe(server.JoeConfig{
+	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider: rp,
 	})
 
-	ch := make(chan *server.Message, 1)
-	sub := server.Subscription{Channel: ch}
+	ch := make(chan *sse.Message, 1)
+	sub := sse.Subscription{Channel: ch}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	require.NoError(t, j.Subscribe(ctx, sub))
 	require.NoError(t, j.Subscribe(ctx, sub)) // same subscriber, noop
-	require.NoError(t, j.Publish(msg(t, "hello", "", 0, server.DefaultTopic)))
+	require.NoError(t, j.Publish(msg(t, "hello", "", 0, sse.DefaultTopic)))
 	cancel()
 	time.Sleep(time.Millisecond)
-	require.NoError(t, j.Publish(msg(t, "world", "", 0, server.DefaultTopic)))
+	require.NoError(t, j.Publish(msg(t, "world", "", 0, sse.DefaultTopic)))
 	require.Equal(t, "data: hello\n\n", (<-ch).String())
 	_, ok := <-ch
 	require.False(t, ok)
 
-	ch2 := make(chan *server.Message)
-	sub2 := server.Subscription{Channel: ch2}
+	ch2 := make(chan *sse.Message)
+	sub2 := sse.Subscription{Channel: ch2}
 
 	require.NoError(t, j.Subscribe(context.Background(), sub2))
 	require.NoError(t, j.Stop())
@@ -114,7 +115,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 func TestJoe_GCInterval(t *testing.T) {
 	rp := &mockReplayProvider{}
 	interval := time.Millisecond * 6
-	j := server.NewJoe(server.JoeConfig{
+	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider:   rp,
 		ReplayGCInterval: interval,
 	})

@@ -1,4 +1,4 @@
-package client_test
+package sse_test
 
 import (
 	"context"
@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tmaxmax/go-sse"
+
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/require"
-	"github.com/tmaxmax/go-sse/client"
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
@@ -46,7 +47,7 @@ func req(tb testing.TB, method, address string, body io.Reader) *http.Request { 
 	return reqCtx(tb, context.Background(), method, address, body)
 }
 
-func toEv(tb testing.TB, s string) (ev client.Event) {
+func toEv(tb testing.TB, s string) (ev sse.Event) {
 	tb.Helper()
 
 	defer func() {
@@ -80,10 +81,10 @@ func toEv(tb testing.TB, s string) (ev client.Event) {
 
 func TestClient_NewConnection(t *testing.T) {
 	require.Panics(t, func() {
-		client.NewConnection(nil)
+		sse.NewConnection(nil)
 	})
 
-	c := client.Client{}
+	c := sse.Client{}
 	r := req(t, "", "", nil)
 	_ = c.NewConnection(r)
 
@@ -96,7 +97,7 @@ func TestConnection_Connect_retry(t *testing.T) {
 
 	tempErr := temporaryError{errors.New("a temporary error take it or leave it")}
 
-	c := &client.Client{
+	c := &sse.Client{
 		HTTPClient: &http.Client{
 			Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
 				return nil, tempErr
@@ -145,7 +146,7 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 		{
 			name: "Body without GetBody",
 			body: readerWrapper{strings.NewReader("haha")},
-			err:  client.ErrNoGetBody,
+			err:  sse.ErrNoGetBody,
 		},
 		{
 			name: "GetBody that returns error",
@@ -162,9 +163,9 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 	httpClient := ts.Client()
 	rt := httpClient.Transport
 
-	c := &client.Client{
+	c := &sse.Client{
 		HTTPClient:              httpClient,
-		ResponseValidator:       client.NoopValidator,
+		ResponseValidator:       sse.NoopValidator,
 		MaxRetries:              1,
 		DefaultReconnectionTime: time.Nanosecond,
 	}
@@ -197,14 +198,14 @@ func TestConnection_Connect_validator(t *testing.T) {
 
 	type test struct {
 		err       error
-		validator client.ResponseValidator
+		validator sse.ResponseValidator
 		name      string
 	}
 
 	tests := []test{
 		{
 			name:      "No validation error",
-			validator: client.NoopValidator,
+			validator: sse.NoopValidator,
 		},
 		{
 			name: "Validation error",
@@ -218,7 +219,7 @@ func TestConnection_Connect_validator(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer ts.Close()
 
-	c := &client.Client{
+	c := &sse.Client{
 		HTTPClient: ts.Client(),
 	}
 
@@ -269,7 +270,7 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 			ts := httptest.NewServer(test.handler)
 			defer ts.Close()
 
-			c := &client.Client{HTTPClient: ts.Client()}
+			c := &sse.Client{HTTPClient: ts.Client()}
 			err := c.NewConnection(req(t, "", ts.URL, nil)).Connect()
 
 			if test.expectErr {
@@ -279,12 +280,12 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 	}
 }
 
-func events(tb testing.TB, c *client.Connection, topics ...string) (events <-chan []client.Event, unsubscribe func()) {
+func events(tb testing.TB, c *sse.Connection, topics ...string) (events <-chan []sse.Event, unsubscribe func()) {
 	tb.Helper()
 
-	ch := make(chan []client.Event)
+	ch := make(chan []sse.Event)
 	events = ch
-	recv := make(chan client.Event, 1)
+	recv := make(chan sse.Event, 1)
 
 	if l := len(topics); l == 1 {
 		if t := topics[0]; t == "" {
@@ -308,7 +309,7 @@ func events(tb testing.TB, c *client.Connection, topics ...string) (events <-cha
 	go func() {
 		defer close(ch)
 
-		var evs []client.Event
+		var evs []sse.Event
 
 		for ev := range recv {
 			evs = append(evs, ev)
@@ -328,28 +329,28 @@ func TestConnection_Subscriptions(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := &client.Client{
+	c := &sse.Client{
 		HTTPClient:        ts.Client(),
-		ResponseValidator: client.NoopValidator,
+		ResponseValidator: sse.NoopValidator,
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
-	firstEvent := client.Event{}
-	secondEvent := client.Event{Name: "test", Data: []byte("something"), LastEventID: "1"}
-	thirdEvent := client.Event{Name: "test2", Data: []byte("something else"), LastEventID: "1"}
-	fourthEvent := client.Event{Data: []byte("unnamed"), LastEventID: "2"}
+	firstEvent := sse.Event{}
+	secondEvent := sse.Event{Name: "test", Data: []byte("something"), LastEventID: "1"}
+	thirdEvent := sse.Event{Name: "test2", Data: []byte("something else"), LastEventID: "1"}
+	fourthEvent := sse.Event{Data: []byte("unnamed"), LastEventID: "2"}
 
 	all, _ := events(t, conn)
-	expectedAll := []client.Event{firstEvent, secondEvent, thirdEvent, fourthEvent}
+	expectedAll := []sse.Event{firstEvent, secondEvent, thirdEvent, fourthEvent}
 
 	test, _ := events(t, conn, "test")
-	expectedTest := []client.Event{secondEvent}
+	expectedTest := []sse.Event{secondEvent}
 
 	test2, _ := events(t, conn, "test2")
-	expectedTest2 := []client.Event{thirdEvent}
+	expectedTest2 := []sse.Event{thirdEvent}
 
 	messages, _ := events(t, conn, "")
-	expectedMessages := []client.Event{firstEvent, fourthEvent}
+	expectedMessages := []sse.Event{firstEvent, fourthEvent}
 
 	require.NoError(t, conn.Connect(), "unexpected Connect error")
 	require.Equal(t, expectedAll, <-all, "unexpected events for all")
@@ -373,9 +374,9 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := &client.Client{
+	c := &sse.Client{
 		HTTPClient:        ts.Client(),
-		ResponseValidator: client.NoopValidator,
+		ResponseValidator: sse.NoopValidator,
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
@@ -403,10 +404,10 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 	thirdEvent := toEv(t, actions[2].message)
 	fourthEvent := toEv(t, actions[3].message)
 
-	expectedAll := []client.Event{firstEvent, secondEvent, thirdEvent, fourthEvent}
-	expectedSome := []client.Event{secondEvent, thirdEvent}
-	expectedOne := []client.Event{secondEvent}
-	expectedMessages := []client.Event{firstEvent}
+	expectedAll := []sse.Event{firstEvent, secondEvent, thirdEvent, fourthEvent}
+	expectedSome := []sse.Event{secondEvent, thirdEvent}
+	expectedOne := []sse.Event{secondEvent}
+	expectedMessages := []sse.Event{firstEvent}
 
 	go func() {
 		defer close(evs)
@@ -449,9 +450,9 @@ func TestConnection_serverError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := client.Client{
+	c := sse.Client{
 		HTTPClient:        ts.Client(),
-		ResponseValidator: client.NoopValidator,
+		ResponseValidator: sse.NoopValidator,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -464,7 +465,7 @@ func TestConnection_serverError(t *testing.T) {
 		{message: "data: second\n\n", cancel: true},
 		{message: "data: third\n\n"},
 	}
-	expected := []client.Event(nil)
+	expected := []sse.Event(nil)
 
 	go func() {
 		defer close(evs)
@@ -585,7 +586,7 @@ func TestConnection_reconnect(t *testing.T) {
 	}
 
 	rt := newReconnectTransport(t, [3]string{"1", "\000mama", ""}, [3]string{"1", "mama", "2"})
-	c := client.Client{
+	c := sse.Client{
 		HTTPClient: &http.Client{Transport: rt},
 		OnRetry:    onRetry,
 		MaxRetries: reconnectRetries,
@@ -600,10 +601,10 @@ func TestConnection_reconnect(t *testing.T) {
 	}
 }
 
-func drain(tb testing.TB, ch <-chan client.Event) []client.Event {
+func drain(tb testing.TB, ch <-chan sse.Event) []sse.Event {
 	tb.Helper()
 
-	evs := make([]client.Event, 0, len(ch))
+	evs := make([]sse.Event, 0, len(ch))
 	for ev := range ch {
 		evs = append(evs, ev)
 	}
@@ -611,7 +612,7 @@ func drain(tb testing.TB, ch <-chan client.Event) []client.Event {
 }
 
 func TestConnection_Subscriptions_2(t *testing.T) {
-	c := client.Client{
+	c := sse.Client{
 		HTTPClient: &http.Client{
 			Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
 				rec := httptest.NewRecorder()
@@ -619,11 +620,11 @@ func TestConnection_Subscriptions_2(t *testing.T) {
 				return rec.Result(), nil
 			}),
 		},
-		ResponseValidator: client.NoopValidator,
+		ResponseValidator: sse.NoopValidator,
 	}
 	conn := c.NewConnection(req(t, "", "", nil))
 
-	ch, test := make(chan client.Event, 2), make(chan client.Event, 1)
+	ch, test := make(chan sse.Event, 2), make(chan sse.Event, 1)
 	conn.SubscribeEvent("test", ch)      // subscribe to event with unsubscribed channel
 	conn.UnsubscribeEvent("test", test)  // unsubscribe from existent event with unsubscribed channel (noop)
 	conn.SubscribeToAll(ch)              // subscribe to all with already existing subscriptions (should remove previous subscriptions)
@@ -634,7 +635,7 @@ func TestConnection_Subscriptions_2(t *testing.T) {
 	conn.UnsubscribeEvent("af", test)    // unsubscribe from nonexistent event (noop)
 	conn.UnsubscribeEvent("test2", test) // unsubscribe from event with subscriber to multiple events (should not close the channel)
 
-	expected := []client.Event{
+	expected := []sse.Event{
 		{
 			Name: "test",
 			Data: []byte("test data"),
@@ -647,6 +648,6 @@ func TestConnection_Subscriptions_2(t *testing.T) {
 	require.Equal(t, expected, drain(t, ch), "invalid events received")
 	require.Equal(t, expectedTest, drain(t, test), "invalid events received for test")
 	require.NotPanics(t, func() {
-		conn.SubscribeMessages(make(chan client.Event)) // sub/unsub after connection is closed (noop, nonblocking)
+		conn.SubscribeMessages(make(chan sse.Event)) // sub/unsub after connection is closed (noop, nonblocking)
 	})
 }

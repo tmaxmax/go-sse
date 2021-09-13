@@ -1,4 +1,4 @@
-package server
+package sse
 
 import (
 	"time"
@@ -46,7 +46,7 @@ func (f *FiniteReplayProvider) Put(message **Message) {
 // GC is a no-op for this provider.
 func (f *FiniteReplayProvider) GC() error { return nil }
 
-// Replay replays the messages in the buffer to the subscription.
+// Replay replays the messages in the buffer to the listener.
 // It doesn't take into account the messages' expiry times.
 func (f *FiniteReplayProvider) Replay(subscription Subscription) {
 	events := f.b.slice(subscription.LastEventID)
@@ -87,7 +87,7 @@ func (v *ValidReplayProvider) GC() error {
 	return nil
 }
 
-// Replay replays all the valid messages to the subscription.
+// Replay replays all the valid messages to the listener.
 func (v *ValidReplayProvider) Replay(subscription Subscription) {
 	events := v.b.slice(subscription.LastEventID)
 	if events == nil {
@@ -106,3 +106,13 @@ var (
 	_ ReplayProvider = (*FiniteReplayProvider)(nil)
 	_ ReplayProvider = (*ValidReplayProvider)(nil)
 )
+
+// hasTopic returns true if the given topic is inside the given topics slice.
+func hasTopic(topics []string, topic string) bool {
+	for i := 0; i < len(topics); i++ {
+		if topics[i] == topic {
+			return true
+		}
+	}
+	return false
+}

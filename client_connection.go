@@ -1,9 +1,10 @@
-package client
+package sse
 
 import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -13,14 +14,25 @@ import (
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
-type (
-	subscriber chan<- Event
-	eventName  string
-)
+// The Event struct represents an event sent to the client by a server.
+type Event struct {
+	// The last non-empty ID of all the events received. This may not be
+	// the ID of the latest event!
+	LastEventID string
+	// The event's name. It is empty if the eventName is unnamed.
+	Name string
+	// The events's payload in raw form. Use the String method if you need it as a string.
+	Data []byte
+}
 
-type subscription struct {
-	subscriber subscriber
-	event      eventName
+// String copies the data buffer and returns it as a string.
+func (e Event) String() string {
+	return string(e.Data)
+}
+
+type listener struct {
+	subscriber chan<- Event
+	event      string
 	all        bool
 }
 
@@ -31,12 +43,12 @@ type subscription struct {
 type Connection struct {
 	request *http.Request
 
-	subscribe      chan subscription
+	subscribe      chan listener
 	event          chan Event
-	unsubscribe    chan subscription
+	unsubscribe    chan listener
 	done           chan struct{}
-	subscribers    map[eventName]map[subscriber]struct{}
-	subscribersAll map[subscriber]struct{}
+	subscribers    map[string]map[chan<- Event]struct{}
+	subscribersAll map[chan<- Event]struct{}
 
 	reconnectionTime *time.Duration
 	lastEventID      string
@@ -44,7 +56,7 @@ type Connection struct {
 	isRetry          bool
 }
 
-func (c *Connection) send(ch chan<- subscription, s subscription) {
+func (c *Connection) send(ch chan<- listener, s listener) {
 	select {
 	case ch <- s:
 	case <-c.done:
@@ -66,20 +78,20 @@ func (c *Connection) UnsubscribeMessages(ch chan<- Event) {
 // SubscribeEvent subscribes the given channel to all the events with the provided name
 // (the event field has the value given here).
 func (c *Connection) SubscribeEvent(name string, ch chan<- Event) {
-	c.send(c.subscribe, subscription{event: eventName(name), subscriber: ch})
+	c.send(c.subscribe, listener{event: name, subscriber: ch})
 }
 
 // UnsubscribeEvent unsubscribes al already subscribed channel from the events with the provided name.
 // If the channel is not subscribed to any other events, it will be closed.
 // Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
 func (c *Connection) UnsubscribeEvent(name string, ch chan<- Event) {
-	c.send(c.unsubscribe, subscription{event: eventName(name), subscriber: ch})
+	c.send(c.unsubscribe, listener{event: name, subscriber: ch})
 }
 
 // SubscribeToAll subscribes the given channel to all events, named and unnamed. If the channel is already subscribed
 // to some events it won't receive those events twice.
 func (c *Connection) SubscribeToAll(ch chan<- Event) {
-	c.send(c.subscribe, subscription{subscriber: ch, all: true})
+	c.send(c.subscribe, listener{subscriber: ch, all: true})
 }
 
 // UnsubscribeFromAll unsubscribes an already subscribed channel from all the events it is subscribed to.
@@ -87,7 +99,7 @@ func (c *Connection) SubscribeToAll(ch chan<- Event) {
 // the SubscribeToAll method in order for this method to unsubscribe it.
 // Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
 func (c *Connection) UnsubscribeFromAll(ch chan<- Event) {
-	c.send(c.unsubscribe, subscription{subscriber: ch, all: true})
+	c.send(c.unsubscribe, listener{subscriber: ch, all: true})
 }
 
 func (c *Connection) addSubscriberToAll(ch chan<- Event) {
@@ -110,12 +122,12 @@ func (c *Connection) removeSubscriberFromAll(ch chan<- Event) {
 	close(ch)
 }
 
-func (c *Connection) addSubscriber(event eventName, ch chan<- Event) {
+func (c *Connection) addSubscriber(event string, ch chan<- Event) {
 	if _, ok := c.subscribersAll[ch]; ok {
 		return
 	}
 	if _, ok := c.subscribers[event]; !ok {
-		c.subscribers[event] = map[subscriber]struct{}{}
+		c.subscribers[event] = map[chan<- Event]struct{}{}
 	}
 	if _, ok := c.subscribers[event][ch]; ok {
 		return
@@ -123,7 +135,7 @@ func (c *Connection) addSubscriber(event eventName, ch chan<- Event) {
 	c.subscribers[event][ch] = struct{}{}
 }
 
-func (c *Connection) removeSubscriber(name eventName, ch chan<- Event) {
+func (c *Connection) removeSubscriber(name string, ch chan<- Event) {
 	if _, ok := c.subscribers[name]; !ok {
 		return
 	}
@@ -162,7 +174,7 @@ func (c *Connection) run() {
 	for {
 		select {
 		case e := <-c.event:
-			for s := range c.subscribers[eventName(e.Name)] {
+			for s := range c.subscribers[e.Name] {
 				s <- e
 			}
 			for s := range c.subscribersAll {
@@ -186,13 +198,56 @@ func (c *Connection) run() {
 	}
 }
 
+// ConnectionError is the type that wraps all the connection errors that occur.
+type ConnectionError struct {
+	// The request for which the connection failed.
+	Req *http.Request
+	// The reason the operation failed.
+	Err error
+	// The reason why the request failed.
+	Reason string
+}
+
+func (e *ConnectionError) Error() string {
+	return fmt.Sprintf("request failed: %s: %v", e.Reason, e.Err)
+}
+
+func (e *ConnectionError) Unwrap() error {
+	return e.Err
+}
+
+// Temporary returns whether the underlying error is temporary.
+func (e *ConnectionError) Temporary() bool {
+	var t interface{ Temporary() bool }
+	if errors.As(e.Err, &t) {
+		return t.Temporary()
+	}
+	return false
+}
+
+// Timeout returns whether the underlying error is caused by a timeout.
+func (e *ConnectionError) Timeout() bool {
+	var t interface{ Timeout() bool }
+	if errors.As(e.Err, &t) {
+		return t.Timeout()
+	}
+	return false
+}
+
+func (e *ConnectionError) toPermanent() error {
+	if e.Temporary() || e.Timeout() {
+		return e
+	}
+	return backoff.Permanent(e)
+}
+
 func (c *Connection) resetRequest() error {
 	if !c.isRetry {
 		c.isRetry = true
 		return nil
 	}
 	if err := resetRequestBody(c.request); err != nil {
-		return &Error{Req: c.request, Reason: "unable to reset request body", Err: err}
+		return &ConnectionError{Req: c.request, Reason: "unable to reset request body", Err: err}
 	}
 	if c.lastEventID == "" {
 		c.request.Header.Del("Last-Event-ID")
@@ -258,7 +313,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 	if isSuccess(err) {
 		return nil
 	}
-	e := &Error{Req: c.request, Reason: "reading response body failed", Err: err}
+	e := &ConnectionError{Req: c.request, Reason: "reading response body failed", Err: err}
 	return e.toPermanent()
 }
 
@@ -275,7 +330,7 @@ func isSuccess(err error) bool {
 // using an exponential backoff that has the initial time set to either the
 // client's default value or to the retry value received from the server.
 // If an error is permanent (e.g. no internet connection), no retries are done.
-// All errors returned are of type *client.Error.
+// All errors returned are of type *ConnectionError.
 //
 // After Connect returns, all subscriptions will be closed. Make sure to wait
 // for the subscribers' goroutines to exit, as they may still be running after
@@ -297,13 +352,13 @@ func (c *Connection) Connect() error {
 
 		res, err := c.client.do(c.request)
 		if err != nil {
-			e := &Error{Req: c.request, Reason: "unable to execute request", Err: err}
+			e := &ConnectionError{Req: c.request, Reason: "unable to execute request", Err: err}
 			return e.toPermanent()
 		}
 		defer res.Body.Close()
 
 		if err := c.client.ResponseValidator(res); err != nil {
-			e := &Error{Req: c.request, Reason: "response validation failed", Err: err}
+			e := &ConnectionError{Req: c.request, Reason: "response validation failed", Err: err}
 			return e.toPermanent()
 		}
 

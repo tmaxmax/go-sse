@@ -1,9 +1,9 @@
-package server_test
+package sse_test
 
 import (
 	"testing"
 
-	"github.com/tmaxmax/go-sse/server"
+	"github.com/tmaxmax/go-sse"
 
 	"github.com/stretchr/testify/require"
 )
@@ -11,12 +11,12 @@ import (
 func TestNewID(t *testing.T) {
 	t.Parallel()
 
-	id, err := server.NewEventID("")
+	id, err := sse.NewEventID("")
 	require.NoError(t, err, "ID deemed as invalid")
 	require.True(t, id.IsSet(), "ID is not set")
 	require.Equal(t, "", id.String(), "ID incorrectly set")
 
-	id, err = server.NewEventID("in\nvalid")
+	id, err = sse.NewEventID("in\nvalid")
 	require.Error(t, err, "ID deemed as valid")
 	require.Empty(t, id, "ID isn't unset")
 }
@@ -24,8 +24,8 @@ func TestNewID(t *testing.T) {
 func TestMustID(t *testing.T) {
 	t.Parallel()
 
-	require.NotPanics(t, func() { server.MustEventID("") }, "panicked on valid ID")
-	require.Panics(t, func() { server.MustEventID("in\nvalid") }, "no panic on invalid ID")
+	require.NotPanics(t, func() { sse.MustEventID("") }, "panicked on valid ID")
+	require.Panics(t, func() { sse.MustEventID("in\nvalid") }, "no panic on invalid ID")
 }
 
 func TestID_UnmarshalJSON(t *testing.T) {
@@ -34,12 +34,12 @@ func TestID_UnmarshalJSON(t *testing.T) {
 	type test struct {
 		name      string
 		input     []byte
-		output    server.EventID
+		output    sse.EventID
 		expectErr bool
 	}
 
 	tests := []test{
-		{name: "Valid input", input: []byte("\"\""), output: server.MustEventID("")},
+		{name: "Valid input", input: []byte("\"\""), output: sse.MustEventID("")},
 		{name: "Null input", input: []byte("null")},
 		{name: "Invalid JSON value", input: []byte("525482"), expectErr: true},
 		{name: "Invalid input", input: []byte("\"multi\\nline\""), expectErr: true},
@@ -51,7 +51,7 @@ func TestID_UnmarshalJSON(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			id := server.EventID{}
+			id := sse.EventID{}
 			err := id.UnmarshalJSON(test.input)
 
 			if test.expectErr {
@@ -68,10 +68,10 @@ func TestID_UnmarshalJSON(t *testing.T) {
 func TestID_UnmarshalText(t *testing.T) {
 	t.Parallel()
 
-	var id server.EventID
+	var id sse.EventID
 	err := id.UnmarshalText([]byte(""))
 
-	require.Equal(t, server.MustEventID(""), id, "unexpected unmarshal result")
+	require.Equal(t, sse.MustEventID(""), id, "unexpected unmarshal result")
 	require.NoError(t, err, "unexpected error")
 
 	err = id.UnmarshalText([]byte("in\nvalid"))
@@ -83,13 +83,13 @@ func TestID_UnmarshalText(t *testing.T) {
 func TestID_MarshalJSON(t *testing.T) {
 	t.Parallel()
 
-	var id server.EventID
+	var id sse.EventID
 	v, err := id.MarshalJSON()
 
 	require.NoError(t, err, "unexpected error")
 	require.Equal(t, "null", string(v), "invalid JSON result")
 
-	id = server.MustEventID("")
+	id = sse.MustEventID("")
 	v, err = id.MarshalJSON()
 
 	require.NoError(t, err, "unexpected error")
@@ -99,13 +99,13 @@ func TestID_MarshalJSON(t *testing.T) {
 func TestID_MarshalText(t *testing.T) {
 	t.Parallel()
 
-	var id server.EventID
+	var id sse.EventID
 	v, err := id.MarshalText()
 
-	require.ErrorIs(t, err, server.ErrIDUnset, "invalid error")
+	require.ErrorIs(t, err, sse.ErrIDUnset, "invalid error")
 	require.Nil(t, v, "invalid result")
 
-	id = server.MustEventID("")
+	id = sse.MustEventID("")
 	v, err = id.MarshalText()
 
 	require.NoError(t, err, "unexpected error")
@@ -115,7 +115,7 @@ func TestID_MarshalText(t *testing.T) {
 func TestID_Scan(t *testing.T) {
 	t.Parallel()
 
-	var id server.EventID
+	var id sse.EventID
 
 	err := id.Scan(nil)
 	require.NoError(t, err, "unexpected error")
@@ -123,11 +123,11 @@ func TestID_Scan(t *testing.T) {
 
 	err = id.Scan("")
 	require.NoError(t, err, "unexpected error")
-	require.Equal(t, server.MustEventID(""), id, "unexpected result")
+	require.Equal(t, sse.MustEventID(""), id, "unexpected result")
 
 	err = id.Scan([]byte(""))
 	require.NoError(t, err, "unexpected error")
-	require.Equal(t, server.MustEventID(""), id, "unexpected result")
+	require.Equal(t, sse.MustEventID(""), id, "unexpected result")
 
 	err = id.Scan(5)
 	require.Error(t, err, "expected error")
@@ -137,12 +137,12 @@ func TestID_Scan(t *testing.T) {
 func TestID_Value(t *testing.T) {
 	t.Parallel()
 
-	var id server.EventID
+	var id sse.EventID
 	v, err := id.Value()
 	require.NoError(t, err, "unexpected error")
 	require.Nil(t, v, "unexpected value")
 
-	id = server.MustEventID("")
+	id = sse.MustEventID("")
 	v, err = id.Value()
 	require.NoError(t, err, "unexpected error")
 	require.Equal(t, "", v, "unexpected value")

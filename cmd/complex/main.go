@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tmaxmax/go-sse/server"
+	sse2 "github.com/tmaxmax/go-sse"
 )
 
-var sse = server.New()
+var sse = sse2.NewServer()
 
 func cors(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +41,7 @@ func main() {
 		Handler: cors(mux),
 	}
 	s.RegisterOnShutdown(func() {
-		e := &server.Message{}
+		e := &sse2.Message{}
 		e.SetName("close")
 		// Broadcast a close message so clients can gracefully disconnect.
 		_ = sse.Publish(e)
@@ -85,7 +85,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 		case <-ticker.C:
 			v := Inc(metric)
 
-			e := &server.Message{}
+			e := &sse2.Message{}
 			e.SetTTL(frequency)
 			e.SetName(metric)
 			e.AppendData(strconv.AppendInt(nil, v, 10))
@@ -116,8 +116,8 @@ func runServer(ctx context.Context, s *http.Server) error {
 	return <-shutdownError
 }
 
-func generateRandomNumbers() *server.Message {
-	e := &server.Message{}
+func generateRandomNumbers() *sse2.Message {
+	e := &sse2.Message{}
 	count := 1 + rand.Intn(5)
 
 	for i := 0; i < count; i++ {

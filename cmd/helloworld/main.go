@@ -5,22 +5,22 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tmaxmax/go-sse/server"
+	"github.com/tmaxmax/go-sse"
 )
 
 func main() {
-	sse := server.New()
+	s := sse.NewServer()
 
 	go func() {
-		ev := &server.Message{}
+		ev := &sse.Message{}
 		ev.AppendText("Hello world")
 
 		for range time.Tick(time.Second) {
-			_ = sse.Publish(ev)
+			_ = s.Publish(ev)
 		}
 	}()
 
-	if err := http.ListenAndServe(":8000", sse); err != nil {
+	if err := http.ListenAndServe(":8000", s); err != nil {
 		log.Fatalln(err)
 	}
 }

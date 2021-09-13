@@ -1,4 +1,4 @@
-package server
+package sse
 
 import (
 	"context"
@@ -40,12 +40,12 @@ type ReplayProvider interface {
 	// to handle them in a useful manner anyway.
 	Put(message **Message)
 	// Replay sends to a new subscriber all the valid events received by the provider
-	// since the event with the subscription's ID. If the ID the subscription provides
+	// since the event with the listener's ID. If the ID the listener provides
 	// is invalid, the provider should not replay any events.
 	//
 	// Replay operations must be executed in the same goroutine as the one it is called in.
 	// Other goroutines may be launched from inside the Replay method, but the events must
-	// be sent to the subscription in the same goroutine that Replay is called in.
+	// be sent to the listener in the same goroutine that Replay is called in.
 	Replay(subscription Subscription)
 	// GC triggers a cleanup. After GC returns, all the events that are invalid according
 	// to the provider's criteria should be impossible to replay again.
@@ -67,7 +67,7 @@ type (
 
 // Joe is a basic server provider that synchronously executes operations by queueing them in channels.
 // Events are also sent synchronously to subscribers, and Joe waits for them to be received - if a
-// subscriber is misbehaving Joe might wait forever! Make sure the subscription channels are always
+// subscriber is misbehaving Joe might wait forever! Make sure the listener channels are always
 // open for receiving.
 //
 // Joe supports event replaying with the help of a replay provider. As operations are executed
@@ -245,3 +245,41 @@ func (j *Joe) closeSubscribers() {
 }
 
 var _ Provider = (*Joe)(nil)
+
+// joeConfig takes the NewJoe function's input and returns a valid configuration.
+func joeConfig(input []JoeConfig) JoeConfig {
+	cfg := JoeConfig{}
+	if len(input) > 0 {
+		cfg = input[0]
+	}
+
+	if cfg.ReplayProvider == nil {
+		if cfg.ReplayGCInterval > 0 {
+			cfg.ReplayGCInterval = 0
+		}
+		cfg.ReplayProvider = noopReplayProvider{}
+	}
+
+	return cfg
+}
+
+// topics returns a slice containing the default topic if no topics are given.
+// It returns the given slice otherwise.
+func topics(topics []string) []string {
+	if len(topics) == 0 {
+		return []string{DefaultTopic}
+	}
+	return topics
+}
+
+func noop() {}
+
+// ticker creates a time.Ticker, if duration is positive, and returns its channel and stop function.
+// If the duration is negative, it returns a nil channel and a noop function.
+func ticker(duration time.Duration) (ticks <-chan time.Time, stop func()) {
+	if duration <= 0 {
+		return nil, noop
+	}
+	t := time.NewTicker(duration)
+	return t.C, t.Stop
+}
