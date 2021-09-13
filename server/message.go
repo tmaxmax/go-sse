@@ -12,7 +12,6 @@ import (
 	"unsafe"
 
 	"github.com/tmaxmax/go-sse/internal/parser"
-	"github.com/tmaxmax/go-sse/internal/util"
 )
 
 func isSingleLine(p []byte) bool {
@@ -404,7 +403,7 @@ func (e *Message) Clone() *Message {
 	return &Message{
 		expiresAt:  e.expiresAt,
 		chunks:     append([]chunk(nil), e.chunks...),
-		retryValue: util.CloneBytes(e.retryValue),
+		retryValue: append([]byte(nil), e.retryValue...),
 		name:       e.name,
 		id:         e.id,
 	}

@@ -1,6 +1,9 @@
 package parser
 
-import "github.com/tmaxmax/go-sse/internal/util"
+// isNewlineChar returns whether the given character is '\n' or '\r'.
+func isNewlineChar(b byte) bool {
+	return b == '\n' || b == '\r'
+}
 
 // NewlineIndex returns the index of the first occurrence of a newline sequence (\n, \r, or \r\n).
 // It also returns the sequence's length. If no sequence is found, index is equal to len(s)
@@ -9,7 +12,7 @@ func NewlineIndex(s []byte) (index, length int) {
 	for l := len(s); index < l; index++ {
 		b := s[index]
 
-		if util.IsNewlineChar(b) {
+		if isNewlineChar(b) {
 			length++
 			if b == '\r' && index < l-1 && s[index+1] == '\n' {
 				length++

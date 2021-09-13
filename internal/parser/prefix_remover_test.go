@@ -1,11 +1,11 @@
-package util_test
+package parser_test
 
 import (
 	"io"
 	"strings"
 	"testing"
 
-	"github.com/tmaxmax/go-sse/internal/util"
+	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
 func cp(tb testing.TB, dst io.Writer, src io.Reader, bufferSize int) (int, error) {
@@ -85,7 +85,7 @@ func TestRemovePrefix(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := util.RemovePrefix(test.r, test.prefix)
+			r := parser.RemovePrefix(test.r, test.prefix)
 			w := strings.Builder{}
 			n, err := cp(t, &w, r, test.bufferSize)
 
@@ -102,7 +102,7 @@ func TestRemovePrefix(t *testing.T) {
 	}
 }
 
-var benchmarkText = `
+var prefixBenchmarkText = `
 Lorem ipsum dolor sit amet, consectetur adipiscing elit.
 Morbi sit amet ante feugiat, sollicitudin leo iaculis, tincidunt sem.
 Duis feugiat sem vel lobortis blandit.
@@ -213,7 +213,7 @@ func BenchmarkRemovePrefix(b *testing.B) {
 			b.ReportAllocs()
 
 			for n := 0; n < b.N; n++ {
-				r := util.RemovePrefix(strings.NewReader(benchmarkText), benchmark.prefix)
+				r := parser.RemovePrefix(strings.NewReader(prefixBenchmarkText), benchmark.prefix)
 
 				_, _ = io.CopyBuffer(w, r, buf)
 			}

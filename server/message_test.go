@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse/internal/parser"
-	"github.com/tmaxmax/go-sse/internal/util"
 )
 
 func TestNew(t *testing.T) {
@@ -67,15 +66,12 @@ func TestEvent_WriteTo(t *testing.T) {
 
 	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: raw bytes here\n: This test should pass\ndata: Important data\ndata: Important again\rdata: \rdata: Very important\r\n\n"
 	expectedWritten := int64(len(output))
-	expected := util.EscapeNewlines(output)
 
 	w := &strings.Builder{}
 
 	written, _ := e.WriteTo(w)
 
-	got := util.EscapeNewlines(w.String())
-
-	require.Equal(t, expected, got, "event written incorrectly")
+	require.Equal(t, output, w.String(), "event written incorrectly")
 	require.Equal(t, expectedWritten, written, "written byte count wrong")
 }
 

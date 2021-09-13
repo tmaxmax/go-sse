@@ -3,8 +3,6 @@ package parser
 import (
 	"bufio"
 	"io"
-
-	"github.com/tmaxmax/go-sse/internal/util"
 )
 
 var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []byte, err error) {
@@ -19,7 +17,7 @@ var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []
 		if index == 0 {
 			start += endlineLen
 		}
-		if advance == len(data) || (util.IsNewlineChar(data[advance]) && index > 0) {
+		if advance == len(data) || (isNewlineChar(data[advance]) && index > 0) {
 			break
 		}
 	}
@@ -74,7 +72,7 @@ func (r *ReaderParser) Err() error {
 
 // NewReaderParser returns a parser that extracts fields from a reader.
 func NewReaderParser(r io.Reader) *ReaderParser {
-	sc := bufio.NewScanner(util.RemovePrefix(r, "\xEF\xBB\xBF"))
+	sc := bufio.NewScanner(RemovePrefix(r, "\xEF\xBB\xBF"))
 	sc.Split(splitFunc)
 
 	return &ReaderParser{sc: sc, p: NewByteParser(nil)}

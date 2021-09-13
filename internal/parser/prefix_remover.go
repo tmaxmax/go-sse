@@ -1,24 +1,8 @@
-package util
+package parser
 
 import (
 	"io"
-	"strings"
 )
-
-// EscapeNewlines escapes the '\n' and '\r' characters with a backslash.
-func EscapeNewlines(s string) string {
-	return strings.NewReplacer("\n", "\\n", "\r", "\\r").Replace(s)
-}
-
-// IsNewlineChar returns whether the given character is '\n' or '\r'.
-func IsNewlineChar(b byte) bool {
-	return b == '\n' || b == '\r'
-}
-
-// CloneBytes creates a copy of the given byte slice.
-func CloneBytes(p []byte) []byte {
-	return append(make([]byte, 0, len(p)), p...)
-}
 
 type unprefixedReader struct {
 	r      io.Reader
