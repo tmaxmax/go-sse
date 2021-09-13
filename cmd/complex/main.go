@@ -41,7 +41,7 @@ func main() {
 		Handler: cors(mux),
 	}
 	s.RegisterOnShutdown(func() {
-		e := &server.Event{}
+		e := &server.Message{}
 		e.SetName("close")
 		// Broadcast a close message so clients can gracefully disconnect.
 		_ = sse.Publish(e)
@@ -85,7 +85,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 		case <-ticker.C:
 			v := Inc(metric)
 
-			e := &server.Event{}
+			e := &server.Message{}
 			e.SetTTL(frequency)
 			e.SetName(metric)
 			e.AppendData(strconv.AppendInt(nil, v, 10))
@@ -116,8 +116,8 @@ func runServer(ctx context.Context, s *http.Server) error {
 	return <-shutdownError
 }
 
-func generateRandomNumbers() *server.Event {
-	e := &server.Event{}
+func generateRandomNumbers() *server.Message {
+	e := &server.Message{}
 	count := 1 + rand.Intn(5)
 
 	for i := 0; i < count; i++ {

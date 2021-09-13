@@ -35,7 +35,7 @@ type FiniteReplayProvider struct {
 
 // Put puts a message into the provider's buffer. If there are more messages than the maximum
 // number, the oldest message is removed.
-func (f *FiniteReplayProvider) Put(message *Message) {
+func (f *FiniteReplayProvider) Put(message **Message) {
 	if f.b.len() == f.count {
 		f.b.dequeue()
 	}
@@ -56,7 +56,7 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) {
 
 	for _, e := range events[1:] {
 		if hasTopic(subscription.Topics, e.Topic) {
-			subscription.Channel <- e.Event
+			subscription.Channel <- e
 		}
 	}
 }
@@ -67,7 +67,7 @@ type ValidReplayProvider struct {
 }
 
 // Put puts the message into the provider's buffer.
-func (v *ValidReplayProvider) Put(message *Message) {
+func (v *ValidReplayProvider) Put(message **Message) {
 	v.b.queue(message)
 }
 
@@ -75,7 +75,7 @@ func (v *ValidReplayProvider) Put(message *Message) {
 func (v *ValidReplayProvider) GC() error {
 	now := time.Now()
 
-	var e *Event
+	var e *Message
 	for {
 		e = v.b.front()
 		if e == nil || e.ExpiresAt().After(now) {
@@ -96,8 +96,8 @@ func (v *ValidReplayProvider) Replay(subscription Subscription) {
 
 	now := time.Now()
 	for _, e := range events[1:] {
-		if e.Event.ExpiresAt().After(now) && hasTopic(subscription.Topics, e.Topic) {
-			subscription.Channel <- e.Event
+		if e.ExpiresAt().After(now) && hasTopic(subscription.Topics, e.Topic) {
+			subscription.Channel <- e
 		}
 	}
 }

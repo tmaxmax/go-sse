@@ -56,7 +56,7 @@ func TestConnection_Send(t *testing.T) {
 
 	rec.Flushed = false
 
-	ev := server.Event{}
+	ev := server.Message{}
 	ev.AppendText("sarmale")
 	expected, _ := ev.MarshalText()
 
@@ -75,6 +75,6 @@ func TestConnection_Send_error(t *testing.T) {
 
 	rec.Flushed = false
 
-	require.Equal(t, errWriteFailed, conn.Send(&server.Event{}), "invalid Send error")
+	require.Equal(t, errWriteFailed, conn.Send(&server.Message{}), "invalid Send error")
 	require.True(t, rec.Flushed, "writer wasn't flushed")
 }

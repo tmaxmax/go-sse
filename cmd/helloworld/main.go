@@ -12,7 +12,7 @@ func main() {
 	sse := server.New()
 
 	go func() {
-		ev := &server.Event{}
+		ev := &server.Message{}
 		ev.AppendText("Hello world")
 
 		for range time.Tick(time.Second) {

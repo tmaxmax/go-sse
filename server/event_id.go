@@ -7,27 +7,27 @@ import (
 	"fmt"
 )
 
-// The ID struct represents any valid event ID value.
+// The EventID struct represents any valid event ID value.
 // IDs must be passed around as values, not as pointers!
 // They can also safely be used as map keys.
-type ID struct {
+type EventID struct {
 	value string
 	set   bool
 }
 
-// NewID creates an ID value. It also returns a flag that indicates whether the input
+// NewEventID creates an EventID value. It also returns a flag that indicates whether the input
 // is a valid ID. A valid ID must not have any newlines. If the input is not valid,
 // an unset (invalid) ID is returned.
-func NewID(value string) (ID, error) {
+func NewEventID(value string) (EventID, error) {
 	if !isSingleLine([]byte(value)) {
-		return ID{}, fmt.Errorf("input is not a valid ID: %q", value)
+		return EventID{}, fmt.Errorf("input is not a valid EventID: %q", value)
 	}
-	return ID{value: value, set: true}, nil
+	return EventID{value: value, set: true}, nil
 }
 
-// MustID is the same as NewID, but it panics if the input isn't a valid ID.
-func MustID(value string) ID {
-	id, err := NewID(value)
+// MustEventID is the same as NewEventID, but it panics if the input isn't a valid ID.
+func MustEventID(value string) EventID {
+	id, err := NewEventID(value)
 	if err != nil {
 		panic(err)
 	}
@@ -35,22 +35,22 @@ func MustID(value string) ID {
 }
 
 // IsSet returns true if the receiver is a valid (set) ID value.
-func (i ID) IsSet() bool {
+func (i EventID) IsSet() bool {
 	return i.set
 }
 
 // String returns the ID's value. The value may be an empty string,
 // make sure to check if the ID is set before using the value.
-func (i ID) String() string {
+func (i EventID) String() string {
 	return i.value
 }
 
 // UnmarshalText sets the ID's value to the given string, if valid.
 // If the input is invalid, the previous value is discarded.
-func (i *ID) UnmarshalText(data []byte) error {
-	*i = ID{}
+func (i *EventID) UnmarshalText(data []byte) error {
+	*i = EventID{}
 
-	id, err := NewID(string(data))
+	id, err := NewEventID(string(data))
 	if err != nil {
 		return err
 	}
@@ -63,8 +63,8 @@ func (i *ID) UnmarshalText(data []byte) error {
 // UnmarshalJSON sets the ID's value to the given JSON value
 // if the value is a string and it doesn't contain any null bytes.
 // The previous value is discarded if the operation fails.
-func (i *ID) UnmarshalJSON(data []byte) error {
-	*i = ID{}
+func (i *EventID) UnmarshalJSON(data []byte) error {
+	*i = EventID{}
 
 	if string(data) == "null" {
 		return nil
@@ -76,7 +76,7 @@ func (i *ID) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	id, err := NewID(input)
+	id, err := NewEventID(input)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ var ErrIDUnset = errors.New("tried to marshal to text an unset ID")
 
 // MarshalText returns a copy of the ID's value if it is set.
 // It returns an error when trying to marshal an unset ID.
-func (i *ID) MarshalText() ([]byte, error) {
+func (i *EventID) MarshalText() ([]byte, error) {
 	if i.IsSet() {
 		return []byte(i.String()), nil
 	}
@@ -101,7 +101,7 @@ func (i *ID) MarshalText() ([]byte, error) {
 
 // MarshalJSON returns a JSON representation of the ID's value if it is set.
 // It otherwise returns the representation of the JSON null value.
-func (i *ID) MarshalJSON() ([]byte, error) {
+func (i *EventID) MarshalJSON() ([]byte, error) {
 	if i.IsSet() {
 		return json.Marshal(i.String())
 	}
@@ -113,8 +113,8 @@ func (i *ID) MarshalJSON() ([]byte, error) {
 //  - nil interfaces (result: unset ID)
 //  - byte slice
 //  - string
-func (i *ID) Scan(src interface{}) error {
-	*i = ID{}
+func (i *EventID) Scan(src interface{}) error {
+	*i = EventID{}
 
 	if src == nil {
 		return nil
@@ -135,7 +135,7 @@ func (i *ID) Scan(src interface{}) error {
 }
 
 // Value implements the driver.Valuer interface.
-func (i ID) Value() (driver.Value, error) {
+func (i EventID) Value() (driver.Value, error) {
 	if i.IsSet() {
 		return i.String(), nil
 	}

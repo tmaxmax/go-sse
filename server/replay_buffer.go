@@ -7,51 +7,51 @@ import (
 // A buffer is the underlying storage for a provider. Its methods are used by the provider to implement
 // the Provider interface.
 type buffer interface {
-	queue(message *Message)
+	queue(message **Message)
 	dequeue()
-	front() *Event
+	front() *Message
 	len() int
-	slice(ID) []Message
+	slice(EventID) []*Message
 }
 
 type bufferBase struct {
-	buf []Message
+	buf []*Message
 }
 
 func (b *bufferBase) len() int {
 	return len(b.buf)
 }
 
-func (b *bufferBase) front() *Event {
+func (b *bufferBase) front() *Message {
 	if b.len() == 0 {
 		return nil
 	}
-	return b.buf[0].Event
+	return b.buf[0]
 }
 
 type bufferNoID struct {
-	lastRemovedID ID
+	lastRemovedID EventID
 	bufferBase
 }
 
-func (b *bufferNoID) queue(message *Message) {
-	if message.Event.ID().IsSet() {
+func (b *bufferNoID) queue(message **Message) {
+	if (*message).ID().IsSet() {
 		b.buf = append(b.buf, *message)
 	}
 }
 
 func (b *bufferNoID) dequeue() {
-	b.lastRemovedID = b.buf[0].Event.ID()
+	b.lastRemovedID = b.buf[0].ID()
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferNoID) slice(atID ID) []Message {
+func (b *bufferNoID) slice(atID EventID) []*Message {
 	if atID == b.lastRemovedID && len(b.buf) != 0 {
 		return b.buf
 	}
 	index := -1
 	for i := range b.buf {
-		if atID == b.buf[i].Event.ID() {
+		if atID == b.buf[i].ID() {
 			index = i
 			break
 		}
@@ -70,9 +70,9 @@ type bufferAutoID struct {
 
 const autoIDBase = 10
 
-func (b *bufferAutoID) queue(message *Message) {
-	message.Event = message.Event.Clone()
-	message.Event.SetID(MustID(strconv.FormatInt(b.lastID, autoIDBase)))
+func (b *bufferAutoID) queue(message **Message) {
+	*message = (*message).Clone()
+	(*message).SetID(MustEventID(strconv.FormatInt(b.lastID, autoIDBase)))
 	b.lastID++
 	b.buf = append(b.buf, *message)
 }
@@ -82,7 +82,7 @@ func (b *bufferAutoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferAutoID) slice(atID ID) []Message {
+func (b *bufferAutoID) slice(atID EventID) []*Message {
 	id, err := strconv.ParseInt(atID.String(), autoIDBase, 64)
 	if err != nil {
 		return nil
@@ -95,7 +95,7 @@ func (b *bufferAutoID) slice(atID ID) []Message {
 }
 
 func getBuffer(autoIDs bool, capacity int) buffer {
-	base := bufferBase{buf: make([]Message, 0, capacity)}
+	base := bufferBase{buf: make([]*Message, 0, capacity)}
 	if autoIDs {
 		return &bufferAutoID{bufferBase: base}
 	}

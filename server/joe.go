@@ -38,7 +38,7 @@ type ReplayProvider interface {
 	// can be replayed. If an error occurs and retrying the operation would block for too
 	// long, it can be aborted. The errors aren't returned as the server providers won't be able
 	// to handle them in a useful manner anyway.
-	Put(message *Message)
+	Put(message **Message)
 	// Replay sends to a new subscriber all the valid events received by the provider
 	// since the event with the subscription's ID. If the ID the subscription provides
 	// is invalid, the provider should not replay any events.
@@ -61,7 +61,7 @@ type ReplayProvider interface {
 }
 
 type (
-	subscriber  chan<- *Event
+	subscriber  chan<- *Message
 	subscribers map[subscriber]struct{}
 )
 
@@ -80,7 +80,7 @@ type (
 // He serves simple use-cases well, as he's light on resources, and does not require any external
 // services. Also, he is the default provider for Servers.
 type Joe struct {
-	message        chan Message
+	message        chan *Message
 	subscription   chan Subscription
 	unsubscription chan subscriber
 	done           chan struct{}
@@ -108,7 +108,7 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 	gc, stopGCTicker := ticker(config.ReplayGCInterval)
 
 	j := &Joe{
-		message:        make(chan Message),
+		message:        make(chan *Message),
 		subscription:   make(chan Subscription),
 		unsubscription: make(chan subscriber),
 		done:           make(chan struct{}),
@@ -158,7 +158,7 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 }
 
 // Publish tells Joe to send the given message to the subscribers.
-func (j *Joe) Publish(msg Message) error {
+func (j *Joe) Publish(msg *Message) error {
 	// Waiting on done ensures Publish doesn't block the caller goroutine
 	// when Joe is stopped and implements the required Provider behavior.
 	select {
@@ -205,7 +205,7 @@ func (j *Joe) start() {
 			j.replay.Put(&msg)
 
 			for sub := range j.topics[msg.Topic] {
-				sub <- msg.Event
+				sub <- msg
 			}
 		case sub := <-j.subscription:
 			if _, ok := j.subscribers[sub.Channel]; ok {

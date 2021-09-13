@@ -17,7 +17,7 @@ type Connection struct {
 }
 
 // Send sends the given event to the client. It returns any errors that occurred while writing the event.
-func (c *Connection) Send(e *Event) error {
+func (c *Connection) Send(e *Message) error {
 	_, err := e.WriteTo(c.w)
 	c.w.Flush()
 	return err

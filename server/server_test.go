@@ -15,7 +15,7 @@ import (
 type mockProvider struct {
 	SubError   error
 	Closed     chan struct{}
-	Pub        server.Message
+	Pub        *server.Message
 	Sub        server.Subscription
 	Subscribed bool
 	Stopped    bool
@@ -30,7 +30,7 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub server.Subscription) e
 
 	m.Sub = sub
 
-	e := &server.Event{}
+	e := &server.Message{}
 	e.AppendText("hello")
 
 	go func() {
@@ -43,7 +43,7 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub server.Subscription) e
 	return nil
 }
 
-func (m *mockProvider) Publish(msg server.Message) error {
+func (m *mockProvider) Publish(msg *server.Message) error {
 	m.Pub = msg
 	m.Published = true
 	return nil
@@ -81,14 +81,14 @@ func TestServer_ShutdownPublish(t *testing.T) {
 	p := &mockProvider{}
 	s := server.New(server.WithProvider(p))
 
-	require.NoError(t, s.Publish(nil), "unexpected Publish error")
+	require.NoError(t, s.Publish(&server.Message{}), "unexpected Publish error")
 	require.True(t, p.Published, "Publish wasn't called")
-	require.Equal(t, p.Pub, server.Message{Topic: server.DefaultTopic}, "incorrect message")
+	require.Equal(t, *p.Pub, server.Message{Topic: server.DefaultTopic}, "incorrect message")
 
 	p.Published = false
-	require.NoError(t, s.Publish(nil, "topic"), "unexpected Publish error")
+	require.NoError(t, s.Publish(&server.Message{Topic: "topic"}), "unexpected Publish error")
 	require.True(t, p.Published, "Publish wasn't called")
-	require.Equal(t, p.Pub, server.Message{Topic: "topic"}, "incorrect message")
+	require.Equal(t, *p.Pub, server.Message{Topic: "topic"}, "incorrect message")
 
 	require.NoError(t, s.Shutdown(), "unexpected Shutdown error")
 	require.True(t, p.Stopped, "Stop wasn't called")
@@ -117,7 +117,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 	cancel()
 
 	require.True(t, p.Subscribed, "Subscribe wasn't called")
-	require.Equal(t, server.MustID("5"), p.Sub.LastEventID, "Invalid last event ID received")
+	require.Equal(t, server.MustEventID("5"), p.Sub.LastEventID, "Invalid last event ID received")
 	require.Equal(t, "data: hello\n\n", rec.Body.String(), "Invalid response body")
 	require.Equal(t, http.StatusOK, rec.Code, "invalid response code")
 }

@@ -17,7 +17,7 @@ type mockReplayProvider struct {
 	callsReplay int
 }
 
-func (m *mockReplayProvider) Put(_ *server.Message) {
+func (m *mockReplayProvider) Put(_ **server.Message) {
 	m.callsPut++
 }
 
@@ -66,7 +66,7 @@ func TestJoe_Stop(t *testing.T) {
 	require.NoError(t, j.Stop())
 	require.ErrorIs(t, j.Stop(), server.ErrProviderClosed)
 	require.ErrorIs(t, j.Subscribe(context.Background(), server.Subscription{}), server.ErrProviderClosed)
-	require.ErrorIs(t, j.Publish(server.Message{}), server.ErrProviderClosed)
+	require.ErrorIs(t, j.Publish(nil), server.ErrProviderClosed)
 	require.Zero(t, rp.callsPut)
 	require.Zero(t, rp.callsReplay)
 	require.Zero(t, rp.callsGC)
@@ -85,7 +85,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 		ReplayProvider: rp,
 	})
 
-	ch := make(chan *server.Event, 1)
+	ch := make(chan *server.Message, 1)
 	sub := server.Subscription{Channel: ch}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -100,7 +100,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	_, ok := <-ch
 	require.False(t, ok)
 
-	ch2 := make(chan *server.Event)
+	ch2 := make(chan *server.Message)
 	sub2 := server.Subscription{Channel: ch2}
 
 	require.NoError(t, j.Subscribe(context.Background(), sub2))

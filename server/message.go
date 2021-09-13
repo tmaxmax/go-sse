@@ -1,6 +1,3 @@
-/*
-Package event is used for creating events that are sent from the server side.
-*/
 package server
 
 import (
@@ -58,9 +55,9 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 	return int64(n + m), err
 }
 
-// Event is the representation of a single message.
+// Message is the representation of a single message.
 // This representation is used only for sending events - there is another event type for the client.
-type Event struct {
+type Message struct {
 	expiresAt time.Time
 	// DO NOT MUTATE, either original byte slices or unsafely converted from strings
 	chunks     []chunk
@@ -70,9 +67,11 @@ type Event struct {
 	// nil - not set; non-nil, any length: set
 	// DO NOT MUTATE, unsafely converted from string
 	id []byte
+
+	Topic string
 }
 
-func (e *Event) appendText(isComment bool, chunks ...string) {
+func (e *Message) appendText(isComment bool, chunks ...string) {
 	s := parser.ChunkScanner{}
 
 	for _, c := range chunks {
@@ -88,7 +87,7 @@ func (e *Event) appendText(isComment bool, chunks ...string) {
 // AppendText creates multiple data fields from the given strings. It uses the unsafe package
 // to convert the string to a byte slice, so no allocations are made. See the AppendData method's
 // documentation for details about the data field type.
-func (e *Event) AppendText(chunks ...string) {
+func (e *Message) AppendText(chunks ...string) {
 	e.appendText(false, chunks...)
 }
 
@@ -126,7 +125,7 @@ func (e *Event) AppendText(chunks ...string) {
 //
 // Still, if you need to send binary data, you can use a Base64 encoder or any other encoder that does not output
 // any newline characters (\n or \n) and then append the resulted byte slices.
-func (e *Event) AppendData(chunks ...[]byte) {
+func (e *Message) AppendData(chunks ...[]byte) {
 	s := parser.ChunkScanner{}
 
 	for _, c := range chunks {
@@ -141,13 +140,13 @@ func (e *Event) AppendData(chunks ...[]byte) {
 
 // Comment creates an event comment field. If it spans on multiple lines,
 // new comment lines are created.
-func (e *Event) Comment(comments ...string) {
+func (e *Message) Comment(comments ...string) {
 	e.appendText(true, comments...)
 }
 
 // SetRetry creates an event field that tells the client to set the event stream reconnection time to
 // the number of milliseconds it provides.
-func (e *Event) SetRetry(duration time.Duration) {
+func (e *Message) SetRetry(duration time.Duration) {
 	var buf []byte
 	if e.retryValue == nil {
 		buf = e.retryValue[:0]
@@ -157,15 +156,15 @@ func (e *Event) SetRetry(duration time.Duration) {
 }
 
 // ID returns the event's ID.
-func (e *Event) ID() ID {
+func (e *Message) ID() EventID {
 	if e.id == nil {
-		return ID{}
+		return EventID{}
 	}
-	return ID{value: unsafeString(e.id), set: true} // SAFETY: ids are immutable
+	return EventID{value: unsafeString(e.id), set: true} // SAFETY: ids are immutable
 }
 
 // SetID sets the event's ID.
-func (e *Event) SetID(id ID) {
+func (e *Message) SetID(id EventID) {
 	if !id.IsSet() {
 		e.id = nil
 		return
@@ -176,7 +175,7 @@ func (e *Event) SetID(id ID) {
 // SetName sets the event's name.
 //
 // A Name cannot have multiple lines. If it has, the function will return false.
-func (e *Event) SetName(name string) bool {
+func (e *Message) SetName(name string) bool {
 	if !isSingleLine([]byte(name)) {
 		return false
 	}
@@ -188,7 +187,7 @@ func (e *Event) SetName(name string) bool {
 //
 // This is not sent to the clients. The expiry time can be used when implementing
 // event replay providers, to see if an event is still valid for replay.
-func (e *Event) SetExpiry(t time.Time) {
+func (e *Message) SetExpiry(t time.Time) {
 	e.expiresAt = t
 }
 
@@ -196,16 +195,16 @@ func (e *Event) SetExpiry(t time.Time) {
 //
 // This is not sent to the clients. The expiry time can be used when implementing
 // event replay providers, to see if an event is still valid for replay.
-func (e *Event) SetTTL(d time.Duration) {
+func (e *Message) SetTTL(d time.Duration) {
 	e.SetExpiry(time.Now().Add(d))
 }
 
 // ExpiresAt returns the timestamp when the event expires.
-func (e *Event) ExpiresAt() time.Time {
+func (e *Message) ExpiresAt() time.Time {
 	return e.expiresAt
 }
 
-func (e *Event) writeID(w io.Writer) (int64, error) {
+func (e *Message) writeID(w io.Writer) (int64, error) {
 	if e.id == nil {
 		return 0, nil
 	}
@@ -223,7 +222,7 @@ func (e *Event) writeID(w io.Writer) (int64, error) {
 	return int64(n + m), err
 }
 
-func (e *Event) writeName(w io.Writer) (int64, error) {
+func (e *Message) writeName(w io.Writer) (int64, error) {
 	if len(e.name) == 0 {
 		return 0, nil
 	}
@@ -241,7 +240,7 @@ func (e *Event) writeName(w io.Writer) (int64, error) {
 	return int64(n + m), err
 }
 
-func (e *Event) writeRetry(w io.Writer) (int64, error) {
+func (e *Message) writeRetry(w io.Writer) (int64, error) {
 	if len(e.retryValue) == 0 {
 		return 0, nil
 	}
@@ -257,7 +256,7 @@ func (e *Event) writeRetry(w io.Writer) (int64, error) {
 // WriteTo writes the standard textual representation of an event to an io.Writer.
 // This operation is heavily optimized and does zero allocations, so it is strongly preferred
 // over MarshalText or String.
-func (e *Event) WriteTo(w io.Writer) (int64, error) {
+func (e *Message) WriteTo(w io.Writer) (int64, error) {
 	n, err := e.writeID(w)
 	if err != nil {
 		return n, err
@@ -292,7 +291,7 @@ func (e *Event) WriteTo(w io.Writer) (int64, error) {
 // The representation is written to a bytes.Buffer, which means the error is always nil.
 // If the buffer grows to a size bigger than the maximum allowed, MarshalText will panic.
 // See the bytes.Buffer documentation for more info.
-func (e *Event) MarshalText() ([]byte, error) {
+func (e *Message) MarshalText() ([]byte, error) {
 	b := bytes.Buffer{}
 	_, err := e.WriteTo(&b)
 	return b.Bytes(), err
@@ -302,7 +301,7 @@ func (e *Event) MarshalText() ([]byte, error) {
 // It may panic if the representation is too long to be buffered.
 //
 // Use the WriteTo method if you don't actually need the string representation.
-func (e *Event) String() string {
+func (e *Message) String() string {
 	s := strings.Builder{}
 	_, _ = e.WriteTo(&s)
 	return s.String()
@@ -333,7 +332,7 @@ func (u *UnmarshalError) Unwrap() error {
 // ErrUnexpectedEOF is returned when UnmarshalText isn't provided a byte slice that ends in a newline.
 var ErrUnexpectedEOF = parser.ErrUnexpectedEOF
 
-func (e *Event) reset() {
+func (e *Message) reset() {
 	e.chunks = nil
 	e.name = []byte{}
 	e.id = nil
@@ -343,14 +342,14 @@ func (e *Event) reset() {
 
 // UnmarshalText extracts the first event found in the given byte slice into the
 // receiver. The receiver is always reset to the event's default value before unmarshaling,
-// so always use a new Event instance if you don't want to overwrite data.
+// so always use a new Message instance if you don't want to overwrite data.
 //
 // Unmarshaling ignores comments and fields with invalid names. If no valid fields are found,
 // an error is returned. For a field to be valid it must end in a newline - if the last
 // field of the event doesn't end in one, an error is returned.
 //
 // All returned errors are of type UnmarshalError.
-func (e *Event) UnmarshalText(p []byte) error {
+func (e *Message) UnmarshalText(p []byte) error {
 	e.reset()
 
 	s := parser.NewByteParser(p)
@@ -401,8 +400,8 @@ loop:
 }
 
 // Clone returns a copy of the event.
-func (e *Event) Clone() *Event {
-	return &Event{
+func (e *Message) Clone() *Message {
+	return &Message{
 		expiresAt:  e.expiresAt,
 		chunks:     append([]chunk(nil), e.chunks...),
 		retryValue: util.CloneBytes(e.retryValue),

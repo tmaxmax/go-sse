@@ -8,40 +8,37 @@ import (
 	"github.com/tmaxmax/go-sse/server"
 )
 
-func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) server.Message {
+func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) *server.Message {
 	tb.Helper()
 
-	e := &server.Event{}
+	e := &server.Message{Topic: topic}
 	e.AppendText(data)
 	e.SetTTL(expiry)
 	if id != "" {
-		e.SetID(server.MustID(id))
+		e.SetID(server.MustEventID(id))
 	}
 
-	return server.Message{
-		Event: e,
-		Topic: topic,
-	}
+	return e
 }
 
-func putMessages(p server.ReplayProvider, msgs ...server.Message) {
+func putMessages(p server.ReplayProvider, msgs ...*server.Message) {
 	for i := range msgs {
 		p.Put(&msgs[i])
 	}
 }
 
-func testNoopReplays(p server.ReplayProvider, ch chan<- *server.Event) {
+func testNoopReplays(p server.ReplayProvider, ch chan<- *server.Message) {
 	p.Replay(server.Subscription{ // unset ID, noop
 		Channel:     ch,
-		LastEventID: server.ID{},
+		LastEventID: server.EventID{},
 	})
 	p.Replay(server.Subscription{ // invalid ID, noop
 		Channel:     ch,
-		LastEventID: server.MustID("mama"),
+		LastEventID: server.MustEventID("mama"),
 	})
 	p.Replay(server.Subscription{ // nonexistent ID, noop
 		Channel:     ch,
-		LastEventID: server.MustID("10"),
+		LastEventID: server.MustEventID("10"),
 	})
 }
 
@@ -49,7 +46,7 @@ func TestValidReplayProvider(t *testing.T) {
 	t.Parallel()
 
 	p := server.NewValidReplayProvider(true)
-	ch := make(chan *server.Event, 2)
+	ch := make(chan *server.Message, 2)
 
 	require.NoError(t, p.GC(), "unexpected GC error") // no elements, noop
 
@@ -72,7 +69,7 @@ func TestValidReplayProvider(t *testing.T) {
 
 	p.Replay(server.Subscription{
 		Channel:     ch,
-		LastEventID: server.MustID("3"),
+		LastEventID: server.MustEventID("3"),
 		Topics:      []string{server.DefaultTopic},
 	})
 	testNoopReplays(p, ch)
@@ -86,7 +83,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
 	p := server.NewFiniteReplayProvider(3)
-	ch := make(chan *server.Event, 1)
+	ch := make(chan *server.Message, 1)
 
 	require.NoError(t, p.GC(), "unexpected GC error") // GC is not required, noop
 
@@ -99,7 +96,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 
 	p.Replay(server.Subscription{
 		Channel:     ch,
-		LastEventID: server.MustID("2"),
+		LastEventID: server.MustEventID("2"),
 		Topics:      []string{server.DefaultTopic},
 	})
 	testNoopReplays(p, ch)
@@ -116,7 +113,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 
 	p.Replay(server.Subscription{
 		Channel:     ch,
-		LastEventID: server.MustID("4"),
+		LastEventID: server.MustEventID("4"),
 		Topics:      []string{server.DefaultTopic},
 	})
 

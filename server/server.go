@@ -30,22 +30,14 @@ type Subscription struct {
 	// Subsequent subscriptions that use the same channel are ignored by providers.
 	//
 	// Only the provider is allowed to close this channel. Closing it yourself may cause the program to panic!
-	Channel chan<- *Event
+	Channel chan<- *Message
 	// An optional last event ID indicating the event to resume the stream from.
 	// The events will replay starting from the first valid event sent after the one with the given ID.
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
-	LastEventID ID
+	LastEventID EventID
 	// The topics to receive message from. If no topic is specified, a default topic is implied.
 	// Topics are orthogonal to event names. They are used to filter what the server sends to each client.
 	Topics []string
-}
-
-// The Message struct is used to publish a message to a given provider.
-type Message struct {
-	// The event to publish.
-	Event *Event
-	// The topic to publish the event to. If no topic is specified the default topic is implied.
-	Topic string
 }
 
 // A Provider is a publish-subscribe system that can be used to implement a HTML5 server-sent events
@@ -61,7 +53,7 @@ type Provider interface {
 	// when the subscriber stops receiving messages.
 	Subscribe(ctx context.Context, subscription Subscription) error
 	// Publish a message to all the subscribers that are subscribed to the message's topic.
-	Publish(message Message) error
+	Publish(message *Message) error
 	// Stop the provider. Calling Stop will clean up all the provider's resources and
 	// make Subscribe and Publish fail with an error. All the subscription channels will be
 	// closed and any ongoing publishes will be aborted.
@@ -131,13 +123,13 @@ func (s *Server) Provider() Provider {
 //
 // If you need different behavior, you can create a custom handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	events, id := make(chan *Event), ID{}
-	// Clients must not send empty Last-Event-ID headers:
+	events, id := make(chan *Message), EventID{}
+	// Clients must not send empty Last-Message-ID headers:
 	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
 	if h := r.Header.Get("Last-Event-ID"); h != "" {
 		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
 		// which providers are required to ignore.
-		id, _ = NewID(h)
+		id, _ = NewEventID(h)
 	}
 	err := s.Subscribe(r.Context(), events, id)
 	if err != nil {
@@ -161,7 +153,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Subscribe subscribes the given channel to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
-func (s *Server) Subscribe(ctx context.Context, ch chan<- *Event, lastEventID ID, topics ...string) error {
+func (s *Server) Subscribe(ctx context.Context, ch chan<- *Message, lastEventID EventID, topics ...string) error {
 	return s.Provider().Subscribe(ctx, Subscription{
 		Channel:     ch,
 		LastEventID: lastEventID,
@@ -171,13 +163,8 @@ func (s *Server) Subscribe(ctx context.Context, ch chan<- *Event, lastEventID ID
 
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topic is optional - if none is specified, the event is published to the default topic.
-func (s *Server) Publish(e *Event, topic ...string) error {
-	msg := Message{Event: e}
-	if len(topic) > 0 {
-		msg.Topic = topic[0]
-	}
-
-	return s.Provider().Publish(msg)
+func (s *Server) Publish(e *Message) error {
+	return s.Provider().Publish(e)
 }
 
 // Shutdown closes all the connections and stops the server. Publish operations will fail

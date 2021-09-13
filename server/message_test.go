@@ -15,14 +15,14 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	e := Event{}
+	e := Message{}
 	e.AppendText("whatever", "input", "will\nbe\nchunked")
 	e.AppendData([]byte("amazing"))
 	e.SetRetry(30)
 	e.SetRetry(time.Second)
 
-	e.SetID(MustID("again"))
-	e.SetID(MustID("lol"))
+	e.SetID(MustEventID("again"))
+	e.SetID(MustEventID("lol"))
 
 	require.Truef(t, e.SetName("whatever"), "name %q regarded as invalid", "whatever")
 	require.Truef(t, e.SetName("x"), "name %q regarded as invalid", "x")
@@ -31,7 +31,7 @@ func TestNew(t *testing.T) {
 	now := time.Now()
 	e.SetExpiry(now)
 
-	expected := Event{
+	expected := Message{
 		expiresAt: now,
 		chunks: []chunk{
 			{data: []byte("whatever")},
@@ -48,7 +48,7 @@ func TestNew(t *testing.T) {
 
 	require.Equal(t, expected, e, "invalid event")
 
-	e.SetID(ID{})
+	e.SetID(EventID{})
 
 	require.Nil(t, e.id, "id was not unset")
 }
@@ -56,14 +56,14 @@ func TestNew(t *testing.T) {
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
-	e := Event{}
+	e := Message{}
 	e.AppendText("This is an example\nOf an event", "")
 	e.AppendData([]byte("raw bytes here"))
 	e.Comment("This test should pass")
 	e.AppendText("Important data\nImportant again\r\rVery important\r\n")
 	e.SetName("test_event")
 	e.SetRetry(time.Second * 5)
-	e.SetID(MustID("example_id"))
+	e.SetID(MustEventID("example_id"))
 
 	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: raw bytes here\n: This test should pass\ndata: Important data\ndata: Important again\rdata: \rdata: Very important\r\n\n"
 	expectedWritten := int64(len(output))
@@ -86,10 +86,10 @@ func TestEvent_UnmarshalText(t *testing.T) {
 		name        string
 		input       string
 		expectedErr error
-		expected    Event
+		expected    Message
 	}
 
-	nilEvent := Event{}
+	nilEvent := Message{}
 	nilEvent.reset()
 
 	tests := []test{
@@ -117,7 +117,7 @@ func TestEvent_UnmarshalText(t *testing.T) {
 		{
 			name:  "Valid input",
 			input: "data: raw bytes here\nretry: 500\nretry: 1000\nid: 1000\nid: 2000\n: no comments\ndata: again raw bytes\ndata: from multiple lines\nevent: overwritten name\nevent: my name here\n\ndata: I should be ignored",
-			expected: Event{
+			expected: Message{
 				chunks: []chunk{
 					{data: []byte("raw bytes here\n"), endsInNewline: true},
 					{data: []byte("again raw bytes\n"), endsInNewline: true},
@@ -132,7 +132,7 @@ func TestEvent_UnmarshalText(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			e := Event{}
+			e := Message{}
 
 			if err := e.UnmarshalText([]byte(test.input)); (test.expectedErr != nil && err.Error() != test.expectedErr.Error()) || (test.expectedErr == nil && err != nil) {
 				t.Fatalf("Invalid unmarshal error: got %q, want %q", err, test.expectedErr)
@@ -143,19 +143,19 @@ func TestEvent_UnmarshalText(t *testing.T) {
 }
 
 func TestEvent_ID(t *testing.T) {
-	e := Event{}
-	require.Equal(t, ID{}, e.ID(), "invalid default ID")
-	id := MustID("idk")
+	e := Message{}
+	require.Equal(t, EventID{}, e.ID(), "invalid default ID")
+	id := MustEventID("idk")
 	e.SetID(id)
 	require.Equal(t, id, e.ID(), "invalid received ID")
 }
 
-func newBenchmarkEvent() *Event {
-	e := Event{}
+func newBenchmarkEvent() *Message {
+	e := Message{}
 	e.AppendText("Example data\nWith multiple rows\r\nThis is interesting")
 	e.Comment("An useless comment here that spans\non\n\nmultiple\nlines")
 	e.SetName("This is the event's name")
-	e.SetID(MustID("example_id"))
+	e.SetID(MustEventID("example_id"))
 	e.SetRetry(time.Minute)
 	return &e
 }
@@ -195,7 +195,7 @@ var benchmarkText = []string{
 }
 
 func BenchmarkEvent_WriteTo_text(b *testing.B) {
-	ev := Event{}
+	ev := Message{}
 	ev.AppendText(benchmarkText...)
 
 	for n := 0; n < b.N; n++ {
