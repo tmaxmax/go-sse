@@ -375,7 +375,7 @@ func (c *Connection) Connect() error {
 var ErrNoGetBody = errors.New("the GetBody function doesn't exist on the request")
 
 func resetRequestBody(r *http.Request) error {
-	if r.Body == nil {
+	if r.Body == nil || r.Body == http.NoBody {
 		return nil
 	}
 	if r.GetBody == nil {
