@@ -12,10 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmaxmax/go-sse"
-
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/require"
+	"github.com/tmaxmax/go-sse"
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 

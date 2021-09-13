@@ -4,9 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmaxmax/go-sse"
-
 	"github.com/stretchr/testify/require"
+	"github.com/tmaxmax/go-sse"
 )
 
 func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) *sse.Message {

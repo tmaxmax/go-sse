@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmaxmax/go-sse"
-
 	"github.com/stretchr/testify/require"
+	"github.com/tmaxmax/go-sse"
 )
 
 type mockReplayProvider struct {

@@ -8,9 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/tmaxmax/go-sse"
-
 	"github.com/stretchr/testify/require"
+	"github.com/tmaxmax/go-sse"
 )
 
 type mockProvider struct {
