@@ -38,7 +38,7 @@ go get -u github.com/tmaxmax/go-sse
 
 It is strongly recommended to use tagged versions of `go-sse` in your projects. The `master` branch has tested but unreleased and maybe undocumented changes, which may break backwards compatibility - use with caution.
 
-The library is split into two subpackages, named suggestively: `server` and `client`. The implementations are completely decoupled and unopinionated: you can connect to a server created using `go-sse` from the browser and you can connect to any server that emits events using the client!
+The library provides both server-side and client-side implementations of the protocol. The implementations are completely decoupled and unopinionated: you can connect to a server created using `go-sse` from the browser and you can connect to any server that emits events using the client!
 
 If you are not familiar with the protocol or not sure how it works, read [MDN's guide for using server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events). [The spec](https://html.spec.whatwg.org/multipage/server-sent-events.html) is also useful read!
 
@@ -49,19 +49,19 @@ If you are not familiar with the protocol or not sure how it works, read [MDN's 
 First, a server instance has to be created:
 
 ```go
-import "github.com/tmaxmax/go-sse/server"
+import "github.com/tmaxmax/go-sse"
 
-sse := server.New()
+s := sse.NewServer()
 ```
 
-The `server.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L118) to learn how to implement your own custom logic.
+The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L165) to learn how to implement your own custom logic.
 
-The `New` constructor actually takes in additional options:
+The `NewServer` constructor actually takes in additional options:
 
 ```go
-package server
+package sse
 
-func New(options ...Option) *Server
+func NewServer(options ...ServerOption) *Server
 ```
 
 One of them is the `WithProvider` option:
@@ -99,9 +99,9 @@ But in most cases the power and scalability that these external systems bring is
 The server still works by default, without a provider. `go-sse` brings you Joe: the trusty, pure Go pub-sub pattern, who handles all your events by default! Befriend Joe as following:
 
 ```go
-import "github.com/tmaxmax/go-sse/server"
+import "github.com/tmaxmax/go-sse"
 
-joe := server.NewJoe()
+joe := sse.NewJoe()
 ```
 
 and he'll dispatch events all day! By default, he has no memory of what events he has received, but you can help him remember and replay older messages to new clients using a `ReplayProvider`:
@@ -120,7 +120,7 @@ type ReplayProvider interface {
 `go-sse` provides two replay providers by default, which both hold the events in-memory: the `ValidReplayProvider` and `FiniteReplayProvider`. The first replays events that are valid, not expired, the second replays a finite number of the most recent events. For example:
 
 ```go
-server.NewJoe(server.JoeConfig{
+sse.NewJoe(sse.JoeConfig{
     ReplayProvider: server.NewValidReplayProvider(),
     ReplayGCInterval: time.Minute,
 })
@@ -134,21 +134,21 @@ You can also implement your own replay providers: maybe you need persistent stor
 
 ### Publish your first event
 
-The `server` package has a nimble subpackage named `event`. Let's create an event:
+To publish events from the server, we use the `sse.Message` struct:
 
 ```go
-import "github.com/tmaxmax/go-sse/server/event"
+import "github.com/tmaxmax/go-sse"
 
-e := event.Event{}
-e.AppendText("Hello world!", "Nice\nto see you.")
+m := sse.Message{}
+m.AppendText("Hello world!", "Nice\nto see you.")
 ```
 
 Now let's send it to our clients:
 
 ```go
-var sse *server.Server
+var s *sse.Server
 
-sse.Publish(&e)
+s.Publish(&m)
 ```
 
 This is how clients will receive our event:
@@ -162,8 +162,8 @@ data: to see you.
 If we use a replay provider, such as `ValidReplayProvider`, this event will expire immediately and it also doesn't have an ID. Let's solve this:
 
 ```go
-e.SetID(event.MustID("unique"))
-e.SetTTL(5 * time.Minute)
+m.SetID(sse.MustEventID("unique"))
+m.SetTTL(5 * time.Minute)
 ```
 
 Now the event will look like this:
@@ -177,29 +177,27 @@ data: to see you.
 
 And the ValidReplayProvider will stop replaying it after 5 minutes!
 
-The `event` package also exposes an `ID` type, which is a special type that denotes an event's ID. An ID must not have newlines, so we use a special function that validates the ID beforehand. `MustID` panics, but there's also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
+An `EventID` type is also exposed, which is a special type that denotes an event's ID. An ID must not have newlines, so we use a special function that validates the ID beforehand. `MustEventID` panics, but there's also `NewEventID`, which returns an error indicating whether the value was successfully converted to an ID or not:
 
 ```go
-id, err := event.NewID("invalid\nID")
+id, err := sse.NewEventID("invalid\nID")
 ```
 
 Here, `err` will be non-nil and `id` will be an invalid value: nothing will be sent to clients if you set an event's ID using that value!
 
-Either way, IDs and expiry times can also be retrieved, so replay providers can use them to determine which IDs to replay and which are still valid:
+Either way, IDs and expiry times can also be retrieved, so replay providers can use them to determine from which IDs to replay messages and which messages are still valid:
 
 ```go
-fmt.Println(e.ID(), e.ExpiresAt())
+fmt.Println(m.ID(), m.ExpiresAt())
 ```
 
 Setting the event's name (or type) is equally easy:
 
 ```go
-ok := e.SetName("The event's name")
+ok := m.SetName("The event's name")
 ```
 
-Names cannot have newlines, so the returned boolean flag indicates whether the name was valid and set.
-
-Note that the `Event` type used on the server-side is different from the one used by the client - we'll present it later. Read the [docs][4] to find out more about events and how to use them!
+Names cannot have newlines, so the returned boolean flag indicates whether the name was valid and set. Read the [docs][4] to find out more about messages and how to use them!
 
 ### The server-side "Hello world"
 
@@ -213,23 +211,22 @@ import (
     "net/http"
     "time"
 
-    "github.com/tmaxmax/go-sse/server"
-    "github.com/tmaxmax/go-sse/server/event"
+    "github.com/tmaxmax/go-sse"
 )
 
 func main() {
-    sse := server.New()
+    s := sse.NewServer()
 
     go func() {
-        ev := &event.Event{}
-        ev.AppendText("Hello world")
+        m := sse.Message{}
+        m.AppendText("Hello world")
 
         for range time.Tick(time.Second) {
-            _ = sse.Publish(ev)
+            _ = s.Publish(&m)
         }
     }()
 
-    if err := http.ListenAndServe(":8000", sse); err != nil {
+    if err := http.ListenAndServe(":8000", s); err != nil {
         log.Fatalln(err)
     }
 }
@@ -245,7 +242,7 @@ This is by far a complete presentation, make sure to read the docs in order to u
 
 ### Creating a client
 
-Under the `client` package, we find the `Client` type:
+We will use the `sse.Client` type for connecting to event streams:
 
 ```go
 type Client struct {
@@ -271,9 +268,9 @@ Any kind of request is valid as long as your server handler supports it: you can
 Let's initiate a connection with this request:
 
 ```go
-import "github.com/tmaxmax/go-sse/client"
+import "github.com/tmaxmax/go-sse"
 
-conn := client.DefaultClient.NewConnection(req)
+conn := sse.DefaultClient.NewConnection(req)
 // you can also do client.NewConnection(req)
 // it is an utility function that calls the
 // NewConnection method on the default client
@@ -296,21 +293,21 @@ data: some data
 To receive the unnamed events, we subscribe to them as following:
 
 ```go
-unnamedEvents := make(chan client.Event)
+unnamedEvents := make(chan sse.Event)
 conn.SubscribeMessages(unnamedEvents)
 ```
 
 To receive the events named "I have a name":
 
 ```go
-namedEvents := make(chan client.Event)
+namedEvents := make(chan sse.Event)
 conn.SubscribeEvent("I have a name", namedEvents)
 ```
 
 We can susbcribe to multiple event types using the same channel:
 
 ```go
-all := make(chan client.Event)
+all := make(chan sse.Event)
 conn.SubscribeMessages(all)
 conn.SubscribeEvent("I have a name", all)
 conn.SubscribeEvent("Another name", all)
@@ -396,13 +393,13 @@ import (
     "log"
     "net/http"
 
-    "github.com/tmaxmax/go-sse/client"
+    "github.com/tmaxmax/go-sse"
 )
 
 func main() {
     r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", nil)
-    conn := client.NewConnection(r)
-    ch := make(chan client.Event)
+    conn := sse.NewConnection(r)
+    ch := make(chan sse.Event)
 
     conn.SubscribeMessages(ch)
 
@@ -445,8 +442,8 @@ The library's in its early stages, so contributions are vital - I'm so glad you 
 Thank you for contributing!
 
 [1]: https://github.com/cenkalti/backoff
-[2]: https://pkg.go.dev/github.com/tmaxmax/go-sse/server#Provider
-[3]: https://pkg.go.dev/github.com/tmaxmax/go-sse/server#ReplayProvider
-[4]: https://pkg.go.dev/github.com/tmaxmax/go-sse/server/event
-[5]: https://pkg.go.dev/github.com/tmaxmax/go-sse/client
-[6]: https://pkg.go.dev/github.com/tmaxmax/go-sse/client#Event
+[2]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Provider
+[3]: https://pkg.go.dev/github.com/tmaxmax/go-sse#ReplayProvider
+[4]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Message
+[5]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Client
+[6]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Event

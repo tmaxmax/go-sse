@@ -163,6 +163,8 @@ var ErrUpgradeUnsupported = errors.New("go-sse.server.connection: unsupported")
 //
 // If you need different behavior, you can create a custom handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Make sure to keep the ServeHTTP implementation line number in sync with the number in the README!
+
 	events, id := make(chan *Message), EventID{}
 	// Clients must not send empty Last-Message-ID headers:
 	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
