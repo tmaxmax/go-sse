@@ -9,6 +9,10 @@ The default provider will work for simple use-cases, but where scalability is re
 look at a more suitable solution. Adapters that satisfy the Provider interface can easily be created,
 and then plugged into the server instance.
 Events themselves are represented using the Message type.
+
+On the client-side, we use the Client struct to create connections to event streams. Using an `http.Request`
+we instantiate a Connection. Then we subscribe to incoming events using channels and when subscribed
+we establish the connection by calling the Conenction's Connect method.
 */
 package sse
 
