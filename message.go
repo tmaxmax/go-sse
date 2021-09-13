@@ -57,6 +57,8 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 // Message is the representation of a single message sent from the server to its clients.
 // It holds the topic of the message and all the data associated to the actual event.
 type Message struct {
+	Topic string
+
 	expiresAt time.Time
 	// DO NOT MUTATE, either original byte slices or unsafely converted from strings
 	chunks     []chunk
@@ -66,8 +68,6 @@ type Message struct {
 	// nil - not set; non-nil, any length: set
 	// DO NOT MUTATE, unsafely converted from string
 	id []byte
-
-	Topic string
 }
 
 func (e *Message) appendText(isComment bool, chunks ...string) {
