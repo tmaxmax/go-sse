@@ -6,8 +6,8 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ### Added
 
-- Text/JSON marshalers and unmarshalers, and SQL scanners and valuers for the EventID type (previously event.ID)
-- Check for http.NoBody before resetting the request body on client reconnect
+- Text/JSON marshalers and unmarshalers, and SQL scanners and valuers for the EventID type (previously event.ID).
+- Check for http.NoBody before resetting the request body on client reconnect.
 
 ### Changed
 
