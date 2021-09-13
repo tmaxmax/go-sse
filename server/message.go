@@ -54,8 +54,8 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 	return int64(n + m), err
 }
 
-// Message is the representation of a single message.
-// This representation is used only for sending events - there is another event type for the client.
+// Message is the representation of a single message sent from the server to its clients.
+// It holds the topic of the message and all the data associated to the actual event.
 type Message struct {
 	expiresAt time.Time
 	// DO NOT MUTATE, either original byte slices or unsafely converted from strings

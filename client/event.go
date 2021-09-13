@@ -1,6 +1,6 @@
 package client
 
-// The Event struct represents an event sent to the helloworld_client by the server.
+// The Event struct represents an event sent to the client by a server.
 type Event struct {
 	// The last non-empty ID of all the events received. This may not be
 	// the ID of the latest event!
