@@ -21,7 +21,6 @@ Lightweight, fully spec-compliant HTML5 server-sent events library.
     - [Creating a client](#creating-a-client)
     - [Initiating a connection](#initiating-a-connection)
     - [Subscribing to events](#subscribing-to-events)
-    - [Receiving events](#receiving-events)
     - [Establishing the connection](#establishing-the-connection)
     - [Connection lost?](#connection-lost)
     - [The "Hello world" server's client](#the-hello-world-servers-client)
@@ -293,37 +292,30 @@ data: some data
 To receive the unnamed events, we subscribe to them as following:
 
 ```go
-unnamedEvents := make(chan sse.Event)
-conn.SubscribeMessages(unnamedEvents)
+unsubscribe := conn.SubscribeMessages(func (event sse.Event) {
+    // do something with the event
+})
 ```
 
 To receive the events named "I have a name":
 
 ```go
-namedEvents := make(chan sse.Event)
-conn.SubscribeEvent("I have a name", namedEvents)
+unsubscribe := conn.SubscribeEvent("I have a name", func (event sse.Event) {
+    // do something with the event
+})
 ```
 
-We can susbcribe to multiple event types using the same channel:
+If you want to subscribe to all events, regardless of their name:
 
 ```go
-all := make(chan sse.Event)
-conn.SubscribeMessages(all)
-conn.SubscribeEvent("I have a name", all)
-conn.SubscribeEvent("Another name", all)
+unsubscribe := conn.SubscribeToAll(func (event sse.Event) {
+    // do something with the event
+})
 ```
 
-The code above will subscribe the channel to all events. But there's a shorthand for this, which is useful especially when you don't know all event names:
+All `Susbcribe` methods return a function that when called tells the connection to stop calling the corresponding callback.
 
-```go
-conn.SubscribeToAll(all)
-```
-
-### Receiving events
-
-Before we establish the connection, we must setup some goroutines to receive the events from the channels.
-
-Let's start with the client's `Event` type:
+In order to work with events, the `sse.Event` type has some fields and methods exposed:
 
 ```go
 type Event struct {
@@ -337,17 +329,17 @@ func (e Event) String() { return string(e.Data) }
 
 Pretty self-explanatory, but make sure to read the [docs][6]!
 
-Let's start a goroutine that receives from the `unnamedEvents` channel created above:
+Now, with this knowledge, let's subscribe to all unnamed events and, when the connection is established, print their data to `os.Stdout`:
 
 ```go
-go func() {
-    for e := range unnamedEvents {
-        fmt.Printf("Received an unnamed event: %s": e)
-    }
-}()
+out := log.New(os.Stdout, "", 0)
+
+unsubscribe := conn.SubscribeMessages(func(event sse.Event) {
+    out.Printf("Received an unnamed event: %s\n", event)
+})
 ```
 
-This will print the data from each unnamed event to `os.Stdout`. Don't forget to syncronize access to shared resources that are not thread-safe, as `os.Stdout` is!
+We use a `log.Logger` instance because it synchronizes prints with a mutex: for each event the callback is called in a separate goroutine, so access to shared resources must be synchronized by the client.
 
 ### Establishing the connection
 
@@ -357,15 +349,8 @@ Great, we are subscribed now! Let's start receiving events:
 err := conn.Connect()
 ```
 
-By calling `Connect`, the request created above will be sent to the server, and if successful, the subscribed channels will start receiving new events.
-
-Let's say we want to stop receiving events named "Another name", we can unsubscribe:
-
-```go
-conn.UnsubscribeEvent("Another name", ch)
-```
-
-If `ch` is a channel that's subscribed using `SubscribeToAll` or is not subscribed to "Another name" events nothing will happen. Make sure to call `Unsubscribe` methods from a different goroutine than the one that receives from the channel, as it might result in a deadlock! If you don't know to what events a channel is subscribed to, but want to unsubscribe from all of them, use `UnsubscribeFromAll`.
+By calling `Connect`, the request created above will be sent to the server, and if successful, the subscribed callbacks will be called when new events are received. `Connect` returns only after all callbacks have finished executing.
+To stop calling a certain callback, call the unsubscribe function returned when subscribing. You can also subscribe new callbacks after calling Connect from a different goroutine.
 
 ### Connection lost?
 
@@ -399,15 +384,11 @@ import (
 func main() {
     r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", nil)
     conn := sse.NewConnection(r)
-    ch := make(chan sse.Event)
+    out := log.New(os.Stdout, "", 0)
 
-    conn.SubscribeMessages(ch)
-
-    go func() {
-        for ev := range ch {
-            fmt.Printf("%s\n\n", ev.Data)
-        }
-    }()
+    conn.SubscribeMessages(func(ev sse.Event) {
+        fmt.Printf("%s\n\n", ev)
+    })
 
     if err := conn.Connect(); err != nil {
         log.Println(err)

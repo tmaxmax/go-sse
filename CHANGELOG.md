@@ -16,6 +16,8 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 - Providers' Subscribe method now blocks until the subscriber is removed.
 - Server's Subscribe method automatically adds the default topic if no topic is specified.
 - ReplayProvider does not require for GC to be implemented.
+- Client connections take callback functions instead of channels as event listeners.
+- Client connections' Unsubscribe methods are replaced by functions returned by their Subscribe counterparts.
 
 ### Fixed
 

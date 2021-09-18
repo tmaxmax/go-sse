@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -30,170 +31,86 @@ func (e Event) String() string {
 	return string(e.Data)
 }
 
-type listener struct {
-	subscriber chan<- Event
-	event      string
-	all        bool
-}
+// EventCallback is a function that is used to receive events from a Connection.
+type EventCallback func(Event)
+
+// EventCallbackRemover is a function that removes an already registered callback
+// from a connection. Calling it multiple times is a no-op.
+type EventCallbackRemover func()
 
 // Connection is a connection to an events stream. Created using the Client struct,
 // a Connection processes the incoming events and sends them to the subscribed channels.
 // If the connection to the server temporarily fails, the connection will be reattempted.
 // Retry values received from servers will be taken into account.
+//
+// Connections must not be copied after they are created.
 type Connection struct {
-	request *http.Request
-
-	subscribe      chan listener
-	event          chan Event
-	unsubscribe    chan listener
-	done           chan struct{}
-	subscribers    map[string]map[chan<- Event]struct{}
-	subscribersAll map[chan<- Event]struct{}
-
+	mu               sync.RWMutex
+	wg               sync.WaitGroup
+	request          *http.Request
+	callbacks        map[string]map[int]EventCallback
+	callbacksAll     map[int]EventCallback
 	reconnectionTime *time.Duration
 	lastEventID      string
 	client           Client
+	callbackID       int
 	isRetry          bool
 }
 
-func (c *Connection) send(ch chan<- listener, s listener) {
-	select {
-	case ch <- s:
-	case <-c.done:
-	}
+// SubscribeMessages subscribes the given callback to all unnamed events (none or empty event field).
+// Remove the callback by calling the returned function.
+func (c *Connection) SubscribeMessages(cb EventCallback) EventCallbackRemover {
+	return c.SubscribeEvent("", cb)
 }
 
-// SubscribeMessages subscribes the given channel to all events that are unnamed (no event field is present).
-func (c *Connection) SubscribeMessages(ch chan<- Event) {
-	c.SubscribeEvent("", ch)
-}
-
-// UnsubscribeMessages unsubscribes an already subscribed channel from unnamed events.
-// If the channel is not subscribed to any other events, it will be closed.
-// Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
-func (c *Connection) UnsubscribeMessages(ch chan<- Event) {
-	c.UnsubscribeEvent("", ch)
-}
-
-// SubscribeEvent subscribes the given channel to all the events with the provided name
+// SubscribeEvent subscribes the given callback to all the events with the provided name
 // (the event field has the value given here).
-func (c *Connection) SubscribeEvent(name string, ch chan<- Event) {
-	c.send(c.subscribe, listener{event: name, subscriber: ch})
+// Remove the callback by calling the returned function.
+func (c *Connection) SubscribeEvent(name string, cb EventCallback) EventCallbackRemover {
+	return c.addSubscriber(name, cb)
 }
 
-// UnsubscribeEvent unsubscribes al already subscribed channel from the events with the provided name.
-// If the channel is not subscribed to any other events, it will be closed.
-// Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
-func (c *Connection) UnsubscribeEvent(name string, ch chan<- Event) {
-	c.send(c.unsubscribe, listener{event: name, subscriber: ch})
+// SubscribeToAll subscribes the given callbcak to all events, named and unnamed.
+// Remove the callback by calling the returned function.
+func (c *Connection) SubscribeToAll(cb EventCallback) EventCallbackRemover {
+	return c.addSubscriberToAll(cb)
 }
 
-// SubscribeToAll subscribes the given channel to all events, named and unnamed. If the channel is already subscribed
-// to some events it won't receive those events twice.
-func (c *Connection) SubscribeToAll(ch chan<- Event) {
-	c.send(c.subscribe, listener{subscriber: ch, all: true})
-}
+func (c *Connection) addSubscriberToAll(cb EventCallback) EventCallbackRemover {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-// UnsubscribeFromAll unsubscribes an already subscribed channel from all the events it is subscribed to.
-// After unsubscription the channel will be closed. The channel doesn't have to be subscribed using
-// the SubscribeToAll method in order for this method to unsubscribe it.
-// Don't call this method from the goroutine that receives from the channel, as it may result in a deadlock!
-func (c *Connection) UnsubscribeFromAll(ch chan<- Event) {
-	c.send(c.unsubscribe, listener{subscriber: ch, all: true})
-}
+	id := c.callbackID
+	c.callbacksAll[id] = cb
+	c.callbackID++
 
-func (c *Connection) addSubscriberToAll(ch chan<- Event) {
-	for _, subs := range c.subscribers {
-		delete(subs, ch)
-	}
+	return func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
 
-	c.subscribersAll[ch] = struct{}{}
-}
-
-func (c *Connection) removeSubscriberFromAll(ch chan<- Event) {
-	for event, subs := range c.subscribers {
-		delete(subs, ch)
-		if len(subs) == 0 {
-			delete(c.subscribers, event)
-		}
-	}
-
-	delete(c.subscribersAll, ch)
-	close(ch)
-}
-
-func (c *Connection) addSubscriber(event string, ch chan<- Event) {
-	if _, ok := c.subscribersAll[ch]; ok {
-		return
-	}
-	if _, ok := c.subscribers[event]; !ok {
-		c.subscribers[event] = map[chan<- Event]struct{}{}
-	}
-	if _, ok := c.subscribers[event][ch]; ok {
-		return
-	}
-	c.subscribers[event][ch] = struct{}{}
-}
-
-func (c *Connection) removeSubscriber(name string, ch chan<- Event) {
-	if _, ok := c.subscribers[name]; !ok {
-		return
-	}
-	if _, ok := c.subscribers[name][ch]; !ok {
-		return
-	}
-
-	delete(c.subscribers[name], ch)
-	if len(c.subscribers[name]) == 0 {
-		delete(c.subscribers, name)
-	}
-
-	for _, listeners := range c.subscribers {
-		if _, ok := listeners[ch]; ok {
-			return
-		}
-	}
-
-	close(ch)
-}
-
-func (c *Connection) closeSubscribers() {
-	for _, subs := range c.subscribers {
-		for s := range subs {
-			c.subscribersAll[s] = struct{}{}
-		}
-	}
-	for sub := range c.subscribersAll {
-		close(sub)
+		delete(c.callbacksAll, id)
 	}
 }
 
-func (c *Connection) run() {
-	defer c.closeSubscribers()
+func (c *Connection) addSubscriber(event string, cb EventCallback) EventCallbackRemover {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	for {
-		select {
-		case e := <-c.event:
-			for s := range c.subscribers[e.Name] {
-				s <- e
-			}
-			for s := range c.subscribersAll {
-				s <- e
-			}
-		case s := <-c.subscribe:
-			if s.all {
-				c.addSubscriberToAll(s.subscriber)
-			} else {
-				c.addSubscriber(s.event, s.subscriber)
-			}
-		case s := <-c.unsubscribe:
-			if s.all {
-				c.removeSubscriberFromAll(s.subscriber)
-			} else {
-				c.removeSubscriber(s.event, s.subscriber)
-			}
-		case <-c.done:
-			return
+	if _, ok := c.callbacks[event]; !ok {
+		c.callbacks[event] = map[int]EventCallback{}
+	}
+
+	id := c.callbackID
+	c.callbacks[event][id] = cb
+	c.callbackID++
+
+	return func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		delete(c.callbacks[event], id)
+		if len(c.callbacks[event]) == 0 {
+			delete(c.callbacks, event)
 		}
 	}
 }
@@ -257,12 +174,35 @@ func (c *Connection) resetRequest() error {
 	return nil
 }
 
+func (c *Connection) executeCallback(cb EventCallback, ev Event) {
+	go func() {
+		defer c.wg.Done()
+		cb(ev)
+	}()
+}
+
 func (c *Connection) dispatch(ev Event) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	cbs := c.callbacks[ev.Name]
+	cbCount := len(cbs) + len(c.callbacksAll)
+	if cbCount == 0 {
+		return
+	}
+
 	if l := len(ev.Data); l > 0 {
 		ev.Data = ev.Data[:l-1]
 	}
 	ev.LastEventID = c.lastEventID
-	c.event <- ev
+
+	c.wg.Add(cbCount)
+	for _, cb := range c.callbacks[ev.Name] {
+		c.executeCallback(cb, ev)
+	}
+	for _, cb := range c.callbacksAll {
+		c.executeCallback(cb, ev)
+	}
 }
 
 func (c *Connection) read(r io.Reader, reset func()) error {
@@ -336,8 +276,6 @@ func isSuccess(err error) bool {
 // for the subscribers' goroutines to exit, as they may still be running after
 // Connect has returned. Connect cannot be called twice for the same connection.
 func (c *Connection) Connect() error {
-	defer close(c.done)
-
 	b, interval := c.client.newBackoff(c.request.Context())
 
 	c.reconnectionTime = interval
@@ -367,7 +305,10 @@ func (c *Connection) Connect() error {
 		return c.read(res.Body, b.Reset)
 	}
 
-	return backoff.RetryNotify(op, b, c.client.OnRetry)
+	err := backoff.RetryNotify(op, b, c.client.OnRetry)
+	c.wg.Wait()
+
+	return err
 }
 
 // ErrNoGetBody is a sentinel error returned when the connection cannot be reattempted

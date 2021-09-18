@@ -279,30 +279,48 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 	}
 }
 
-func events(tb testing.TB, c *sse.Connection, topics ...string) (events <-chan []sse.Event, unsubscribe func()) {
+func events(tb testing.TB, c *sse.Connection, topics ...string) (events <-chan []sse.Event, unsubscribe sse.EventCallbackRemover) {
 	tb.Helper()
 
 	ch := make(chan []sse.Event)
-	events = ch
 	recv := make(chan sse.Event, 1)
+	done := make(chan struct{})
+	var unsub sse.EventCallbackRemover
+	cb := func(e sse.Event) {
+		select {
+		case <-done:
+		case recv <- e:
+		}
+	}
+	events = ch
 
 	if l := len(topics); l == 1 {
 		if t := topics[0]; t == "" {
-			c.SubscribeMessages(recv) // for coverage, SubscribeEvent("", recv) would be equivalent
-			unsubscribe = func() { c.UnsubscribeMessages(recv) }
+			unsub = c.SubscribeMessages(cb) // for coverage, SubscribeEvent("", recv) would be equivalent
 		} else {
-			c.SubscribeEvent(t, recv)
-			unsubscribe = func() { c.UnsubscribeEvent(t, recv) }
+			unsub = c.SubscribeEvent(t, cb)
 		}
 	} else {
-		unsubscribe = func() { c.UnsubscribeFromAll(recv) }
 		if l == 0 {
-			c.SubscribeToAll(recv)
+			unsub = c.SubscribeToAll(cb)
 		} else {
+			unsubFns := make([]sse.EventCallbackRemover, 0, len(topics))
 			for _, t := range topics {
-				c.SubscribeEvent(t, recv)
+				unsubFns = append(unsubFns, c.SubscribeEvent(t, cb))
+			}
+
+			unsub = func() {
+				for _, fn := range unsubFns {
+					fn()
+				}
 			}
 		}
+	}
+
+	unsubscribe = func() {
+		defer func() { _ = recover() }()
+		defer close(done)
+		unsub()
 	}
 
 	go func() {
@@ -310,11 +328,15 @@ func events(tb testing.TB, c *sse.Connection, topics ...string) (events <-chan [
 
 		var evs []sse.Event
 
-		for ev := range recv {
-			evs = append(evs, ev)
+		for {
+			select {
+			case ev := <-recv:
+				evs = append(evs, ev)
+			case <-done:
+				ch <- evs
+				return
+			}
 		}
-
-		ch <- evs
 	}()
 
 	return
@@ -324,7 +346,11 @@ func TestConnection_Subscriptions(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		data := "retry: 1000\n\nevent: test\ndata: something\nid: 1\n\nevent: test2\ndata: something else\n\ndata: unnamed\nid: 2\n\ndata: this shouldn't be received"
 
-		_, _ = io.WriteString(w, data)
+		for _, s := range strings.SplitAfter(data, "\n\n") {
+			_, _ = io.WriteString(w, s)
+			w.(http.Flusher).Flush()
+			time.Sleep(time.Millisecond)
+		}
 	}))
 	defer ts.Close()
 
@@ -339,22 +365,30 @@ func TestConnection_Subscriptions(t *testing.T) {
 	thirdEvent := sse.Event{Name: "test2", Data: []byte("something else"), LastEventID: "1"}
 	fourthEvent := sse.Event{Data: []byte("unnamed"), LastEventID: "2"}
 
-	all, _ := events(t, conn)
+	all, unsubAll := events(t, conn)
+	defer unsubAll()
 	expectedAll := []sse.Event{firstEvent, secondEvent, thirdEvent, fourthEvent}
 
-	test, _ := events(t, conn, "test")
+	test, unsubTest := events(t, conn, "test")
+	defer unsubTest()
 	expectedTest := []sse.Event{secondEvent}
 
-	test2, _ := events(t, conn, "test2")
+	test2, unsubTest2 := events(t, conn, "test2")
+	defer unsubTest2()
 	expectedTest2 := []sse.Event{thirdEvent}
 
-	messages, _ := events(t, conn, "")
+	messages, unsubMessages := events(t, conn, "")
+	defer unsubMessages()
 	expectedMessages := []sse.Event{firstEvent, fourthEvent}
 
 	require.NoError(t, conn.Connect(), "unexpected Connect error")
+	unsubAll()
 	require.Equal(t, expectedAll, <-all, "unexpected events for all")
+	unsubTest()
 	require.Equal(t, expectedTest, <-test, "unexpected events for test")
+	unsubTest2()
 	require.Equal(t, expectedTest2, <-test2, "unexpected events for test2")
+	unsubMessages()
 	require.Equal(t, expectedMessages, <-messages, "unexpected events for messages")
 }
 
@@ -413,7 +447,7 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 		for _, action := range actions {
 			evs <- action.message
 			// we wait for the subscribers to receive the event
-			time.Sleep(time.Millisecond)
+			time.Sleep(time.Millisecond * 5)
 			if action.unsub != nil {
 				action.unsub()
 			}
@@ -457,7 +491,8 @@ func TestConnection_serverError(t *testing.T) {
 	defer cancel()
 	conn := c.NewConnection(reqCtx(t, ctx, "", ts.URL, nil))
 
-	all, _ := events(t, conn)
+	all, unsubAll := events(t, conn)
+	defer unsubAll()
 
 	actions := []action{
 		{message: "data: first\n"},
@@ -478,6 +513,7 @@ func TestConnection_serverError(t *testing.T) {
 	}()
 
 	require.Error(t, conn.Connect(), "expected Connect error")
+	unsubAll()
 	require.Equal(t, expected, <-all, "unexpected values for all")
 }
 
@@ -598,55 +634,4 @@ func TestConnection_reconnect(t *testing.T) {
 	for i := range expectedRetries {
 		require.InEpsilon(t, expectedRetries[i], recvRetries[i], backoff.DefaultRandomizationFactor, "invalid retry value")
 	}
-}
-
-func drain(tb testing.TB, ch <-chan sse.Event) []sse.Event {
-	tb.Helper()
-
-	evs := make([]sse.Event, 0, len(ch))
-	for ev := range ch {
-		evs = append(evs, ev)
-	}
-	return evs
-}
-
-func TestConnection_Subscriptions_2(t *testing.T) {
-	c := sse.Client{
-		HTTPClient: &http.Client{
-			Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
-				rec := httptest.NewRecorder()
-				_, _ = io.WriteString(rec, "event: test\ndata: test data\n\ndata: unnamed\n")
-				return rec.Result(), nil
-			}),
-		},
-		ResponseValidator: sse.NoopValidator,
-	}
-	conn := c.NewConnection(req(t, "", "", nil))
-
-	ch, test := make(chan sse.Event, 2), make(chan sse.Event, 1)
-	conn.SubscribeEvent("test", ch)      // subscribe to event with unsubscribed channel
-	conn.UnsubscribeEvent("test", test)  // unsubscribe from existent event with unsubscribed channel (noop)
-	conn.SubscribeToAll(ch)              // subscribe to all with already existing subscriptions (should remove previous subscriptions)
-	conn.SubscribeEvent("test", ch)      // subscribe to event with subscriber to all (noop)
-	conn.SubscribeEvent("test", test)    // subscribe to event with unsubscribed channel
-	conn.SubscribeEvent("test", test)    // subscribe to event with channel already subscribed to it (noop)
-	conn.SubscribeEvent("test2", test)   // subscribe to event with unsubscribed channel
-	conn.UnsubscribeEvent("af", test)    // unsubscribe from nonexistent event (noop)
-	conn.UnsubscribeEvent("test2", test) // unsubscribe from event with subscriber to multiple events (should not close the channel)
-
-	expected := []sse.Event{
-		{
-			Name: "test",
-			Data: []byte("test data"),
-		},
-		{Data: []byte("unnamed")},
-	}
-	expectedTest := expected[:1]
-
-	require.NoError(t, conn.Connect(), "unexpected Connect error")
-	require.Equal(t, expected, drain(t, ch), "invalid events received")
-	require.Equal(t, expectedTest, drain(t, test), "invalid events received for test")
-	require.NotPanics(t, func() {
-		conn.SubscribeMessages(make(chan sse.Event)) // sub/unsub after connection is closed (noop, nonblocking)
-	})
 }

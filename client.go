@@ -59,17 +59,11 @@ func (c *Client) NewConnection(r *http.Request) *Connection {
 	mergeDefaults(c)
 
 	conn := &Connection{
-		client:         *c,                   // we clone the client so the config cannot be modified from outside
-		request:        r.Clone(r.Context()), // we clone the request so its fields cannot be modified from outside
-		subscribers:    map[string]map[chan<- Event]struct{}{},
-		subscribersAll: map[chan<- Event]struct{}{},
-		event:          make(chan Event),
-		subscribe:      make(chan listener),
-		unsubscribe:    make(chan listener),
-		done:           make(chan struct{}),
+		client:       *c,                   // we clone the client so the config cannot be modified from outside
+		request:      r.Clone(r.Context()), // we clone the request so its fields cannot be modified from outside
+		callbacks:    map[string]map[int]EventCallback{},
+		callbacksAll: map[int]EventCallback{},
 	}
-
-	go conn.run()
 
 	return conn
 }
