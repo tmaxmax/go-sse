@@ -24,17 +24,23 @@ import (
 	"sync"
 )
 
+// SubscriptionCallback is a function that is called when a subscriber receives a message.
+type SubscriptionCallback func(message *Message) error
+
 // The Subscription struct is used to subscribe to a given provider.
 type Subscription struct {
 	// A non-nil function that is called for each new event. The callback of a single subscription will
 	// never be called in parallel, but callbacks from multiple subscriptions may be called in parallel.
-	Callback func(message *Message) error
+	Callback SubscriptionCallback
 	// An optional last event ID indicating the event to resume the stream from.
 	// The events will replay starting from the first valid event sent after the one with the given ID.
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
 	LastEventID EventID
 	// The topics to receive message from. If no topic is specified, a default topic is implied.
 	// Topics are orthogonal to event names. They are used to filter what the server sends to each client.
+	//
+	// If using a Provider directly, without a Server instance, you must specify at least one topic.
+	// The Server automatically adds the default topic if no topic is specified.
 	Topics []string
 }
 
@@ -50,6 +56,8 @@ type Provider interface {
 	// Subscribe to the provider. The context is used to remove the subscriber automatically
 	// when it is done. Errors returned by the subscription's callback function must be returned
 	// by Subscribe.
+	//
+	// Providers can assume that the topics list for a subscription has at least one topic.
 	Subscribe(ctx context.Context, subscription Subscription) error
 	// Publish a message to all the subscribers that are subscribed to the message's topic.
 	Publish(message *Message) error
@@ -216,6 +224,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Subscribe subscribes the given channel to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
 func (s *Server) Subscribe(ctx context.Context, callback func(*Message) error, lastEventID EventID, topics ...string) error {
+	if len(topics) == 0 {
+		topics = []string{DefaultTopic}
+	}
+
 	return s.Provider().Subscribe(ctx, Subscription{
 		Callback:    callback,
 		LastEventID: lastEventID,
