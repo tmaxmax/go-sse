@@ -84,7 +84,7 @@ func TestJoe_Stop(t *testing.T) {
 	})
 }
 
-func subscribe(t testing.TB, p sse.Provider, ctx context.Context, topics ...string) <-chan []*sse.Message {
+func subscribe(t testing.TB, p sse.Provider, ctx context.Context, topics ...string) <-chan []*sse.Message { //nolint
 	t.Helper()
 
 	if len(topics) == 0 {
@@ -137,7 +137,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider: rp,
 	})
-	defer j.Stop()
+	defer j.Stop() //nolint:errcheck // irrelevant
 
 	ctx, cancel := newMockContext(t)
 	defer cancel()
@@ -167,7 +167,7 @@ func TestJoe_Subscribe_multipleTopics(t *testing.T) {
 	t.Parallel()
 
 	j := sse.NewJoe()
-	defer j.Stop()
+	defer j.Stop() //nolint:errcheck // irrelevant
 
 	ctx, cancel := newMockContext(t)
 	defer cancel()
@@ -196,7 +196,7 @@ func TestJoe_errors(t *testing.T) {
 	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider: sse.NewFiniteReplayProvider(1),
 	})
-	defer j.Stop()
+	defer j.Stop() // nolint:errcheck // irrelevant
 
 	_ = j.Publish(msg(t, "hello", "0", 0, sse.DefaultTopic))
 	_ = j.Publish(msg(t, "hello", "1", 0, sse.DefaultTopic))

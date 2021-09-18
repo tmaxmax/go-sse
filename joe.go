@@ -71,8 +71,8 @@ type (
 	subscriber   chan<- error
 	subscribers  map[subscriber]SubscriptionCallback
 	subscription struct {
-		Subscription
 		errors chan<- error
+		Subscription
 	}
 )
 

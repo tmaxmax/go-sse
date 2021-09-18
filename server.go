@@ -128,8 +128,8 @@ type writeFlusher interface {
 // An UpgradedRequest is used to send events to the client.
 // Create one using the Upgrade function.
 type UpgradedRequest struct {
-	w         writeFlusher
 	doUpgrade sync.Once
+	w         writeFlusher
 }
 
 func (u *UpgradedRequest) setHeaders() {
@@ -154,8 +154,7 @@ func (s SendError) Unwrap() error {
 // Send sends the given event to the client. It returns any errors that occurred while writing the event.
 func (u *UpgradedRequest) Send(e *Message) error {
 	u.doUpgrade.Do(u.setHeaders)
-	_, err := e.WriteTo(u.w)
-	if err != nil {
+	if _, err := e.WriteTo(u.w); err != nil {
 		return SendError{err}
 	}
 	u.w.Flush()

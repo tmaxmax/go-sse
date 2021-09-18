@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
