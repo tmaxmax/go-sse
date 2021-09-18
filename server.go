@@ -136,7 +136,6 @@ func (u *UpgradedRequest) setHeaders() {
 	u.w.Header().Set("Content-Type", "text/event-stream")
 	u.w.Header().Set("Cache-Control", "no-cache")
 	u.w.Header().Set("Connection", "keep-alive")
-	u.w.Header().Set("Transfer-Encoding", "chunked")
 	u.w.Flush()
 }
 
