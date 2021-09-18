@@ -43,22 +43,23 @@ func (f *FiniteReplayProvider) Put(message **Message) {
 	f.b.queue(message)
 }
 
-// GC is a no-op for this provider.
-func (f *FiniteReplayProvider) GC() error { return nil }
-
 // Replay replays the messages in the buffer to the listener.
 // It doesn't take into account the messages' expiry times.
-func (f *FiniteReplayProvider) Replay(subscription Subscription) {
+func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 	events := f.b.slice(subscription.LastEventID)
 	if events == nil {
-		return
+		return nil
 	}
 
 	for _, e := range events[1:] {
 		if hasTopic(subscription.Topics, e.Topic) {
-			subscription.Channel <- e
+			if err := subscription.Callback(e); err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
 }
 
 // ValidReplayProvider is a replay provider that replays all the valid (not expired) previous events.
@@ -88,18 +89,22 @@ func (v *ValidReplayProvider) GC() error {
 }
 
 // Replay replays all the valid messages to the listener.
-func (v *ValidReplayProvider) Replay(subscription Subscription) {
+func (v *ValidReplayProvider) Replay(subscription Subscription) error {
 	events := v.b.slice(subscription.LastEventID)
 	if events == nil {
-		return
+		return nil
 	}
 
 	now := time.Now()
 	for _, e := range events[1:] {
 		if e.ExpiresAt().After(now) && hasTopic(subscription.Topics, e.Topic) {
-			subscription.Channel <- e
+			if err := subscription.Callback(e); err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
 }
 
 var (

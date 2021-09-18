@@ -46,15 +46,22 @@ type ReplayProvider interface {
 	// Replay operations must be executed in the same goroutine as the one it is called in.
 	// Other goroutines may be launched from inside the Replay method, but the events must
 	// be sent to the listener in the same goroutine that Replay is called in.
-	Replay(subscription Subscription)
-	// GC triggers a cleanup. After GC returns, all the events that are invalid according
+	Replay(subscription Subscription) error
+}
+
+// ReplayProviderWithGC is a ReplayProvider that must have invalid messages cleaned up from time to time.
+// This may be the case for a provider that replays messages that are not expired: at a certain interval,
+// expired messages must be removed from the provider to free up resources.
+//
+// Providers must check if replay providers implement this interface, so they can call GC accordingly.
+type ReplayProviderWithGC interface {
+	ReplayProvider
+	// GC triggers a cleanup. After GC returns, all the messages that are invalid according
 	// to the provider's criteria should be impossible to replay again.
 	//
 	// If GC returns an error, the provider is not required to try to trigger another
 	// GC ever again. Make sure that before you return a non-nil value you handle
 	// temporary errors accordingly, with blocking as shortly as possible.
-	// If your implementation does not require GC, return a non-nil error from this method.
-	// This way server providers won't try to GC at all, improving their performance.
 	//
 	// If the replay provider implementation is thread-safe the GC operation can be executed in another goroutine.
 	GC() error
@@ -95,6 +102,7 @@ type Joe struct {
 	closed         chan struct{}
 	gc             <-chan time.Time
 	stopGC         func()
+	gcFn           func() error
 	topics         map[string]subscribers
 	subscribers    subscribers
 	replay         ReplayProvider
@@ -114,6 +122,14 @@ type JoeConfig struct {
 func NewJoe(configuration ...JoeConfig) *Joe {
 	config := joeConfig(configuration)
 
+	var gcFn func() error
+	provider, hasGC := config.ReplayProvider.(ReplayProviderWithGC)
+	if hasGC {
+		gcFn = provider.GC
+	} else {
+		config.ReplayGCInterval = 0
+	}
+
 	gc, stopGCTicker := ticker(config.ReplayGCInterval)
 
 	j := &Joe{
@@ -124,6 +140,7 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 		closed:         make(chan struct{}),
 		gc:             gc,
 		stopGC:         stopGCTicker,
+		gcFn:           gcFn,
 		topics:         map[string]subscribers{},
 		subscribers:    subscribers{},
 		replay:         config.ReplayProvider,
@@ -237,7 +254,7 @@ func (j *Joe) start() {
 			delete(j.subscribers, unsub)
 			close(unsub)
 		case <-j.gc:
-			if err := j.replay.GC(); err != nil {
+			if err := j.gcFn(); err != nil {
 				j.stopGC()
 			}
 		case <-j.done:

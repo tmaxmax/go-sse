@@ -21,8 +21,9 @@ func (m *mockReplayProvider) Put(_ **sse.Message) {
 	m.callsPut++
 }
 
-func (m *mockReplayProvider) Replay(_ sse.Subscription) {
+func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
 	m.callsReplay++
+	return nil
 }
 
 func (m *mockReplayProvider) GC() error {
