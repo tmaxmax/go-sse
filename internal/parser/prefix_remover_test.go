@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
@@ -22,6 +24,8 @@ func cp(tb testing.TB, dst io.Writer, src io.Reader, bufferSize int) (int, error
 
 func TestRemovePrefix(t *testing.T) {
 	t.Parallel()
+
+	require.Nil(t, parser.RemovePrefix(nil, ""), "empty prefix didn't return input reader")
 
 	type testCase struct {
 		name          string
