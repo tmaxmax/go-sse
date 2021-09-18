@@ -185,16 +185,17 @@ func (j *Joe) Publish(msg *Message) error {
 // It returns when all the subscribers are closed.
 //
 // Further calls to Stop will return ErrProviderClosed.
-func (j *Joe) Stop() error {
-	// Waiting on Stop here prevents double-closing and implements the required Provider behavior.
-	select {
-	case <-j.done:
-		return ErrProviderClosed
-	default:
-		close(j.done)
-		<-j.closed
-		return nil
-	}
+func (j *Joe) Stop() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = ErrProviderClosed
+		}
+	}()
+
+	close(j.done)
+	<-j.closed
+
+	return
 }
 
 func (j *Joe) topic(identifier string) subscribers {
