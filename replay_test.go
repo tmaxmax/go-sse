@@ -1,6 +1,7 @@
 package sse_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -21,28 +22,69 @@ func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) *ss
 	return e
 }
 
+func replay(tb testing.TB, p sse.ReplayProvider, lastEventID sse.EventID, topics ...string) []*sse.Message {
+	tb.Helper()
+
+	if len(topics) == 0 {
+		topics = []string{sse.DefaultTopic}
+	}
+
+	var replayed []*sse.Message
+	cb := func(m *sse.Message) error {
+		replayed = append(replayed, m)
+		return nil
+	}
+
+	sub := sse.Subscription{
+		Callback:    cb,
+		LastEventID: lastEventID,
+		Topics:      topics,
+	}
+
+	_ = p.Replay(sub)
+
+	sub.LastEventID = sse.EventID{}
+	_ = p.Replay(sub)
+
+	sub.LastEventID = sse.MustEventID("mama")
+	_ = p.Replay(sub)
+
+	sub.LastEventID = sse.MustEventID("10")
+	_ = p.Replay(sub)
+
+	return replayed
+}
+
+func testReplayError(tb testing.TB, p sse.ReplayProvider) {
+	tb.Helper()
+
+	putMessages(p,
+		msg(tb, "a", "1", time.Hour, sse.DefaultTopic),
+		msg(tb, "b", "2", time.Hour, sse.DefaultTopic),
+	)
+
+	expectedErr := errors.New("")
+
+	cb := func(_ *sse.Message) error {
+		return expectedErr
+	}
+
+	err := p.Replay(sse.Subscription{
+		Callback:    cb,
+		LastEventID: sse.MustEventID("1"),
+		Topics:      []string{sse.DefaultTopic},
+	})
+
+	require.Equal(tb, expectedErr, err, "received invalid error")
+}
+
 func putMessages(p sse.ReplayProvider, msgs ...*sse.Message) {
 	for i := range msgs {
 		p.Put(&msgs[i])
 	}
 }
 
-func testNoopReplays(p sse.ReplayProvider) {
-	p.Replay(sse.Subscription{ // unset ID, noop
-		LastEventID: sse.EventID{},
-	})
-	p.Replay(sse.Subscription{ // invalid ID, noop
-		LastEventID: sse.MustEventID("mama"),
-	})
-	p.Replay(sse.Subscription{ // nonexistent ID, noop
-		LastEventID: sse.MustEventID("10"),
-	})
-}
-
-// TODO: fix tests and cover subscription callback error case
-
 func TestValidReplayProvider(t *testing.T) {
-	t.SkipNow()
 	t.Parallel()
 
 	p := sse.NewValidReplayProvider(true)
@@ -57,7 +99,8 @@ func TestValidReplayProvider(t *testing.T) {
 		msg(t, "world", "", exp*2, sse.DefaultTopic),
 		msg(t, "again", "", exp*2, "t"),
 		msg(t, "world", "", exp*5, sse.DefaultTopic),
-		msg(t, "again", "", exp*5, "t"),
+		msg(t, "x", "", exp*5, "t"),
+		msg(t, "again", "", exp*10, "t"),
 	)
 
 	time.Sleep(exp)
@@ -66,19 +109,13 @@ func TestValidReplayProvider(t *testing.T) {
 
 	time.Sleep(exp)
 
-	p.Replay(sse.Subscription{
-		LastEventID: sse.MustEventID("3"),
-		Topics:      []string{sse.DefaultTopic},
-	})
-	testNoopReplays(p)
+	replayed := replay(t, p, sse.MustEventID("3"))[0]
+	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
 
-	//data := (<-ch).String()
-	//
-	//require.Equal(t, "id: 4\ndata: world\n\n", data)
+	testReplayError(t, sse.NewValidReplayProvider())
 }
 
 func TestFiniteReplayProvider(t *testing.T) {
-	t.SkipNow()
 	t.Parallel()
 
 	p := sse.NewFiniteReplayProvider(3)
@@ -90,15 +127,8 @@ func TestFiniteReplayProvider(t *testing.T) {
 		msg(t, "world", "4", 0, sse.DefaultTopic),
 	)
 
-	p.Replay(sse.Subscription{
-		LastEventID: sse.MustEventID("2"),
-		Topics:      []string{sse.DefaultTopic},
-	})
-	testNoopReplays(p)
-
-	//data := (<-ch).String()
-	//
-	//require.Equal(t, "id: 4\ndata: world\n\n", data)
+	replayed := replay(t, p, sse.MustEventID("2"))[0]
+	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
 
 	putMessages(p,
 		msg(t, "", "5", 0, "t"),
@@ -106,12 +136,8 @@ func TestFiniteReplayProvider(t *testing.T) {
 		msg(t, "again", "7", 0, sse.DefaultTopic),
 	)
 
-	p.Replay(sse.Subscription{
-		LastEventID: sse.MustEventID("4"),
-		Topics:      []string{sse.DefaultTopic},
-	})
+	replayed = replay(t, p, sse.MustEventID("4"))[0]
+	require.Equal(t, "id: 7\ndata: again\n\n", replayed.String())
 
-	//data = (<-ch).String()
-	//
-	//require.Equal(t, "id: 7\ndata: again\n\n", data)
+	testReplayError(t, sse.NewFiniteReplayProvider(10))
 }
