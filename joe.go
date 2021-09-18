@@ -61,8 +61,16 @@ type ReplayProvider interface {
 }
 
 type (
-	subscriber  chan<- *Message
-	subscribers map[subscriber]struct{}
+	subscriber   chan<- message
+	subscribers  map[subscriber]struct{}
+	subscription struct {
+		ch      subscriber
+		details Subscription
+	}
+	message struct {
+		err error
+		msg *Message
+	}
 )
 
 // Joe is a basic server provider that synchronously executes operations by queueing them in channels.
@@ -81,7 +89,7 @@ type (
 // services. Also, he is the default provider for Servers.
 type Joe struct {
 	message        chan *Message
-	subscription   chan Subscription
+	subscription   chan subscription
 	unsubscription chan subscriber
 	done           chan struct{}
 	closed         chan struct{}
@@ -110,7 +118,7 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 
 	j := &Joe{
 		message:        make(chan *Message),
-		subscription:   make(chan Subscription),
+		subscription:   make(chan subscription),
 		unsubscription: make(chan subscriber),
 		done:           make(chan struct{}),
 		closed:         make(chan struct{}),
@@ -129,32 +137,35 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 // Subscribe tells Joe to send new messages to the given channel. The subscriber is removed when the context is done.
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	sub.Topics = topics(sub.Topics)
+	ch := make(chan message, 1)
 
-	go func() {
-		// We are also waiting on done here so if Joe is stopped but not the HTTP server that
-		// serves the request this goroutine isn't hanging.
-		select {
-		case <-ctx.Done():
-		case <-j.done:
-			return
-		}
-
-		// We are waiting on done here so the goroutine isn't blocked if Joe is stopped when
-		// this point is reached.
-		select {
-		case j.unsubscription <- sub.Channel:
-		case <-j.done:
-		}
-	}()
-
-	// Waiting on done ensures Subscribe behaves as required by the Provider interface
-	// if Stop was called. It also ensures Subscribe doesn't block if a new request arrives
-	// after Joe is stopped, which would otherwise result in a client waiting forever.
 	select {
-	case j.subscription <- sub:
-		return nil
 	case <-j.done:
 		return ErrProviderClosed
+	case j.subscription <- subscription{ch: ch, details: sub}:
+		defer func() {
+			select {
+			case <-j.done:
+			case j.unsubscription <- ch:
+			}
+		}()
+	}
+
+	for {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if msg.err != nil {
+				return msg.err
+			}
+			if err := sub.Callback(msg.msg); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return nil
+		}
 	}
 }
 
@@ -206,23 +217,19 @@ func (j *Joe) start() {
 			j.replay.Put(&msg)
 
 			for sub := range j.topics[msg.Topic] {
-				sub <- msg
+				sub <- message{msg: msg}
 			}
 		case sub := <-j.subscription:
-			if _, ok := j.subscribers[sub.Channel]; ok {
+			if err := j.replay.Replay(sub.details); err != nil {
+				sub.ch <- message{err: err}
 				continue
 			}
 
-			j.replay.Replay(sub)
-
-			for _, topic := range sub.Topics {
-				j.topic(topic)[sub.Channel] = struct{}{}
+			for _, topic := range sub.details.Topics {
+				j.topic(topic)[sub.ch] = struct{}{}
 			}
-			j.subscribers[sub.Channel] = struct{}{}
+			j.subscribers[sub.ch] = struct{}{}
 		case unsub := <-j.unsubscription:
-			if _, ok := j.subscribers[unsub]; !ok {
-				continue
-			}
 			for _, subs := range j.topics {
 				delete(subs, unsub)
 			}

@@ -28,17 +28,17 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub sse.Subscription) erro
 		return m.SubError
 	}
 
+	defer close(m.Closed)
 	m.Sub = sub
 
 	e := &sse.Message{}
 	e.AppendText("hello")
 
-	go func() {
-		sub.Channel <- e
-		<-ctx.Done()
-		close(sub.Channel)
-		close(m.Closed)
-	}()
+	if err := sub.Callback(e); err != nil {
+		return err
+	}
+
+	<-ctx.Done()
 
 	return nil
 }
@@ -112,9 +112,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 	req.Header.Set("Last-Event-ID", "5")
 
 	go cancel()
-
 	sse.NewServer(sse.WithProvider(p)).ServeHTTP(rec, req)
-	cancel()
 
 	require.True(t, p.Subscribed, "Subscribe wasn't called")
 	require.Equal(t, sse.MustEventID("5"), p.Sub.LastEventID, "Invalid last event ID received")
@@ -135,7 +133,6 @@ func TestServer_ServeHTTP_unsupportedRespWriter(t *testing.T) {
 	p := newMockProvider(t, nil)
 
 	sse.NewServer(sse.WithProvider(p)).ServeHTTP(noFlusher{rec}, req)
-	cancel()
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
 	require.Equal(t, "Server-sent events unsupported\n", rec.Body.String(), "invalid response body")
@@ -145,12 +142,10 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 	t.Parallel()
 
 	rec := httptest.NewRecorder()
-	req, cancel := request(t, "", "http://localhost", nil)
-	defer cancel()
+	req, _ := http.NewRequest("", "http://localhost", nil)
 	p := newMockProvider(t, errors.New("can't subscribe"))
 
 	sse.NewServer(sse.WithProvider(p)).ServeHTTP(rec, req)
-	cancel()
 
 	require.Equal(t, p.SubError.Error()+"\n", rec.Body.String(), "invalid response body")
 	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
@@ -174,12 +169,10 @@ func TestServer_ServeHTTP_connectionError(t *testing.T) {
 	t.Parallel()
 
 	rec := httptest.NewRecorder()
-	req, cancel := request(t, "", "http://localhost", nil)
-	defer cancel()
+	req, _ := http.NewRequest("", "http://localhost", nil)
 	p := newMockProvider(t, nil)
 
 	sse.NewServer(sse.WithProvider(p)).ServeHTTP(&responseWriterErr{rec}, req)
-	cancel()
 	_, ok := <-p.Closed
 	require.False(t, ok)
 }

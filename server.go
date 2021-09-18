@@ -26,14 +26,9 @@ import (
 
 // The Subscription struct is used to subscribe to a given provider.
 type Subscription struct {
-	// A non-nil, open channel to send events on. The provider may wait when sending on this channel
-	// until the event is received, so start receiving immediately after the provider's Subscribe
-	// method returned.
-	//
-	// Subsequent subscriptions that use the same channel are ignored by providers.
-	//
-	// Only the provider is allowed to close this channel. Closing it yourself may cause the program to panic!
-	Channel chan<- *Message
+	// A non-nil function that is called for each new event. The callback of a single subscription will
+	// never be called in parallel, but callbacks from multiple subscriptions may be called in parallel.
+	Callback func(message *Message) error
 	// An optional last event ID indicating the event to resume the stream from.
 	// The events will replay starting from the first valid event sent after the one with the given ID.
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
@@ -52,8 +47,9 @@ type Subscription struct {
 // may return other implementation-specific errors too, but the close error is guaranteed to be the same across
 // providers.
 type Provider interface {
-	// Subscribe to the provider. The context is used to remove the listener automatically
-	// when the subscriber stops receiving messages.
+	// Subscribe to the provider. The context is used to remove the subscriber automatically
+	// when it is done. Errors returned by the subscription's callback function must be returned
+	// by Subscribe.
 	Subscribe(ctx context.Context, subscription Subscription) error
 	// Publish a message to all the subscribers that are subscribed to the message's topic.
 	Publish(message *Message) error
@@ -170,39 +166,36 @@ var ErrUpgradeUnsupported = errors.New("go-sse.server.connection: unsupported")
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Make sure to keep the ServeHTTP implementation line number in sync with the number in the README!
 
-	events, id := make(chan *Message), EventID{}
-	// Clients must not send empty Last-Message-ID headers:
-	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
-	if h := r.Header.Get("Last-Event-ID"); h != "" {
-		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
-		// which providers are required to ignore.
-		id, _ = NewEventID(h)
-	}
-	err := s.Subscribe(r.Context(), events, id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	conn, err := Upgrade(w)
 	if err != nil {
 		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
 		return
 	}
 
-	for e := range events {
-		if err = conn.Send(e); err != nil {
-			log.Println("go-sse.handler: send error:", err)
-			break
+	id := EventID{}
+	// Clients must not send empty Last-Event-ID headers:
+	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
+	if h := r.Header.Get("Last-Event-ID"); h != "" {
+		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
+		// which providers are required to ignore.
+		id, _ = NewEventID(h)
+	}
+
+	if err = s.Subscribe(r.Context(), conn.Send, id); err != nil {
+		var sendErr SendError
+		if errors.As(err, &sendErr) {
+			log.Println("go-sse.handler: send error:", sendErr)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
 
 // Subscribe subscribes the given channel to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
-func (s *Server) Subscribe(ctx context.Context, ch chan<- *Message, lastEventID EventID, topics ...string) error {
+func (s *Server) Subscribe(ctx context.Context, callback func(*Message) error, lastEventID EventID, topics ...string) error {
 	return s.Provider().Subscribe(ctx, Subscription{
-		Channel:     ch,
+		Callback:    callback,
 		LastEventID: lastEventID,
 		Topics:      topics,
 	})
