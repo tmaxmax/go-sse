@@ -77,16 +77,13 @@ type (
 )
 
 // Joe is a basic server provider that synchronously executes operations by queueing them in channels.
-// Events are also sent synchronously to subscribers, and Joe waits for them to be received - if a
-// subscriber is misbehaving Joe might wait forever! Make sure the listener channels are always
-// open for receiving.
+// Events are also sent synchronously to subscribers, so if a subscriber's callback blocks, the others
+// have to wait.
 //
-// Joe supports event replaying with the help of a replay provider. As operations are executed
-// synchronously, it is guaranteed that no new events will be omitted from sending to a new subscriber
-// because older events are still replaying when the event is sent to Joe.
+// Joe optionally supports event replaying with the help of a replay provider.
 //
 // If due to some unexpected scenario (the replay provider has a bug, for example) a panic occurs,
-// Joe will close all the subscribers' channels, so requests aren't closed abruptly.
+// Joe will remove all subscribers, so requests don't hang.
 //
 // He serves simple use-cases well, as he's light on resources, and does not require any external
 // services. Also, he is the default provider for Servers.
@@ -145,7 +142,9 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 	return j
 }
 
-// Subscribe tells Joe to send new messages to the given channel. The subscriber is removed when the context is done.
+// Subscribe tells Joe to send new messages to this subscriber. The subscription
+// is automatically removed when the context is done, a callback error occurs
+// or Joe is stopped.
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	errors := make(chan error)
 
