@@ -69,11 +69,11 @@ One of them is the `WithProvider` option:
 func WithProvider(provider Provider) Option
 ```
 
-A provider is an implmenetation of the publish-subscribe messaging pattern:
+A provider is an implmenetation of the publish-subscribe messaging system:
 
 ```go
 type Provider interface {
-    // Publish a message to all subscribers.
+    // Publish a message to all subscribers. A message contains the event and some additional information - read further and see the documentation.
     Publish(msg *Message) error
     // Add a new subscriber that is unsubscribed when the context is done.
     Subscribe(ctx context.Context, sub Subscription) error
@@ -82,12 +82,12 @@ type Provider interface {
 }
 ```
 
-The messaging system is valid for your application: it determines the maximum number of clients your server can handle, the latency between broadcasting events and receiving them client-side and the maximum message throughput supported by your server. As different use cases have different needs, `go-sse` allows to plug in your own system. Some examples of such external systems are:
+The provider is what dispatches events to clients. When you publish a message (an event), the provider distributes it to all connections (subscribers). It is the central piece of the server: it determines the maximum number of clients your server can handle, the latency between broadcasting events and receiving them client-side and the maximum message throughput supported by your server. As different use cases have different needs, `go-sse` allows to plug in your own system. Some examples of such external systems are:
 
 - [RabbitMQ streams](https://blog.rabbitmq.com/posts/2021/07/rabbitmq-streams-overview/)
 - [Redis pub-sub](https://redis.io/topics/pubsub)
 - [Apache Kafka](https://kafka.apache.org/)
-- Your own!
+- Your own! For example, you can mock providers in testing.
 
 If an external system is required, an adapter that satisfies the `Provider` interface must be created so it can then be used with `go-sse`. To implement such an adapter, read [the Provider documentation][2] for implementation requirements! And maybe share them with others: `go-sse` is built with reusability in mind!
 
@@ -95,7 +95,7 @@ But in most cases the power and scalability that these external systems bring is
 
 ### Meet Joe, the default provider
 
-The server still works by default, without a provider. `go-sse` brings you Joe: the trusty, pure Go pub-sub pattern, who handles all your events by default! Befriend Joe as following:
+The server still works by default, without a provider. `go-sse` brings you Joe: the trusty, pure Go pub-sub implementation, who handles all your events by default! Befriend Joe as following:
 
 ```go
 import "github.com/tmaxmax/go-sse"
