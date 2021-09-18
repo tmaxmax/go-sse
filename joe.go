@@ -68,15 +68,11 @@ type ReplayProviderWithGC interface {
 }
 
 type (
-	subscriber   chan<- message
-	subscribers  map[subscriber]struct{}
+	subscriber   chan<- error
+	subscribers  map[subscriber]SubscriptionCallback
 	subscription struct {
-		ch      subscriber
-		details Subscription
-	}
-	message struct {
-		err error
-		msg *Message
+		Subscription
+		errors chan<- error
 	}
 )
 
@@ -104,7 +100,6 @@ type Joe struct {
 	stopGC         func()
 	gcFn           func() error
 	topics         map[string]subscribers
-	subscribers    subscribers
 	replay         ReplayProvider
 }
 
@@ -142,7 +137,6 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 		stopGC:         stopGCTicker,
 		gcFn:           gcFn,
 		topics:         map[string]subscribers{},
-		subscribers:    subscribers{},
 		replay:         config.ReplayProvider,
 	}
 
@@ -153,36 +147,25 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 
 // Subscribe tells Joe to send new messages to the given channel. The subscriber is removed when the context is done.
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
-	sub.Topics = topics(sub.Topics)
-	ch := make(chan message, 1)
+	errors := make(chan error)
 
 	select {
 	case <-j.done:
 		return ErrProviderClosed
-	case j.subscription <- subscription{ch: ch, details: sub}:
-		defer func() {
-			select {
-			case <-j.done:
-			case j.unsubscription <- ch:
-			}
-		}()
+	case j.subscription <- subscription{errors: errors, Subscription: sub}:
 	}
 
-	for {
-		select {
-		case msg, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			if msg.err != nil {
-				return msg.err
-			}
-			if err := sub.Callback(msg.msg); err != nil {
-				return err
-			}
-		case <-ctx.Done():
-			return nil
-		}
+	select {
+	case err := <-errors:
+		return err
+	case <-ctx.Done():
+	}
+
+	select {
+	case err := <-errors:
+		return err
+	case j.unsubscription <- errors:
+		return nil
 	}
 }
 
@@ -221,6 +204,14 @@ func (j *Joe) topic(identifier string) subscribers {
 	return j.topics[identifier]
 }
 
+func (j *Joe) removeSubscriber(sub subscriber) {
+	for _, subs := range j.topics {
+		delete(subs, sub)
+	}
+
+	close(sub)
+}
+
 func (j *Joe) start() {
 	defer close(j.closed)
 	// defer closing all subscribers instead of closing them when done is closed
@@ -233,26 +224,23 @@ func (j *Joe) start() {
 		case msg := <-j.message:
 			j.replay.Put(&msg)
 
-			for sub := range j.topics[msg.Topic] {
-				sub <- message{msg: msg}
+			for errors, cb := range j.topics[msg.Topic] {
+				if err := cb(msg); err != nil {
+					errors <- err
+					j.removeSubscriber(errors)
+				}
 			}
 		case sub := <-j.subscription:
-			if err := j.replay.Replay(sub.details); err != nil {
-				sub.ch <- message{err: err}
+			if err := j.replay.Replay(sub.Subscription); err != nil {
+				sub.errors <- err
 				continue
 			}
 
-			for _, topic := range sub.details.Topics {
-				j.topic(topic)[sub.ch] = struct{}{}
+			for _, topic := range sub.Topics {
+				j.topic(topic)[sub.errors] = sub.Callback
 			}
-			j.subscribers[sub.ch] = struct{}{}
-		case unsub := <-j.unsubscription:
-			for _, subs := range j.topics {
-				delete(subs, unsub)
-			}
-
-			delete(j.subscribers, unsub)
-			close(unsub)
+		case sub := <-j.unsubscription:
+			j.removeSubscriber(sub)
 		case <-j.gc:
 			if err := j.gcFn(); err != nil {
 				j.stopGC()
@@ -264,8 +252,17 @@ func (j *Joe) start() {
 }
 
 func (j *Joe) closeSubscribers() {
-	for sub := range j.subscribers {
-		close(sub)
+	seen := map[subscriber]struct{}{}
+
+	for _, subs := range j.topics {
+		for sub := range subs {
+			if _, ok := seen[sub]; ok {
+				continue
+			}
+
+			seen[sub] = struct{}{}
+			close(sub)
+		}
 	}
 }
 
@@ -288,22 +285,11 @@ func joeConfig(input []JoeConfig) JoeConfig {
 	return cfg
 }
 
-// topics returns a slice containing the default topic if no topics are given.
-// It returns the given slice otherwise.
-func topics(topics []string) []string {
-	if len(topics) == 0 {
-		return []string{DefaultTopic}
-	}
-	return topics
-}
-
-func noop() {}
-
 // ticker creates a time.Ticker, if duration is positive, and returns its channel and stop function.
 // If the duration is negative, it returns a nil channel and a noop function.
 func ticker(duration time.Duration) (ticks <-chan time.Time, stop func()) {
 	if duration <= 0 {
-		return nil, noop
+		return nil, func() {}
 	}
 	t := time.NewTicker(duration)
 	return t.C, t.Stop
