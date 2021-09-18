@@ -182,9 +182,10 @@ func TestUpgrade(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	_, err := sse.Upgrade(rec)
+	conn, err := sse.Upgrade(rec)
 	require.NoError(t, err, "unexpected NewConnection error")
-	require.True(t, rec.Flushed, "writer wasn't flushed")
+	require.False(t, rec.Flushed, "response writer was flushed")
+	require.NoError(t, conn.Send(&sse.Message{}), "unexpected Send error")
 
 	r := rec.Result()
 	defer r.Body.Close()
@@ -242,6 +243,6 @@ func TestUpgradedRequest_Send_error(t *testing.T) {
 
 	rec.Flushed = false
 
-	require.Equal(t, errWriteFailed, conn.Send(&sse.Message{}), "invalid Send error")
+	require.ErrorIs(t, conn.Send(&sse.Message{}), errWriteFailed, "invalid Send error")
 	require.True(t, rec.Flushed, "writer wasn't flushed")
 }

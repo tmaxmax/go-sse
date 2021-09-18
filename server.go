@@ -19,9 +19,9 @@ package sse
 import (
 	"context"
 	"errors"
-	"io"
 	"log"
 	"net/http"
+	"sync"
 )
 
 // The Subscription struct is used to subscribe to a given provider.
@@ -113,43 +113,65 @@ func (s *Server) Provider() Provider {
 }
 
 type writeFlusher interface {
-	io.Writer
+	http.ResponseWriter
 	http.Flusher
 }
 
 // An UpgradedRequest is used to send events to the client.
 // Create one using the Upgrade function.
 type UpgradedRequest struct {
-	w writeFlusher
+	w         writeFlusher
+	doUpgrade sync.Once
+}
+
+func (u *UpgradedRequest) setHeaders() {
+	u.w.Header().Set("Content-Type", "text/event-stream")
+	u.w.Header().Set("Cache-Control", "no-cache")
+	u.w.Header().Set("Connection", "keep-alive")
+	u.w.Header().Set("Transfer-Encoding", "chunked")
+	u.w.Flush()
+}
+
+// SendError is the error type returned by an UpgradedRequest's Send method.
+// It is used to discriminate between subscription errors or write errors returned
+// by a provider's Subscribe method.
+type SendError struct {
+	error
+}
+
+func (s SendError) Unwrap() error {
+	return s.error
 }
 
 // Send sends the given event to the client. It returns any errors that occurred while writing the event.
 func (u *UpgradedRequest) Send(e *Message) error {
+	u.doUpgrade.Do(u.setHeaders)
 	_, err := e.WriteTo(u.w)
+	if err != nil {
+		return SendError{err}
+	}
 	u.w.Flush()
-	return err
+	return nil
 }
 
 // Upgrade upgrades an HTTP request to support server-sent events.
 // It returns a Connection that's used to send events to the client or an
 // error if the upgrade failed.
+//
+// The headers required by the SSE protocol are only sent when calling
+// the Send method for the first time. If other operations are done before
+// sending messages, other headers and status codes can safely be set.
 func Upgrade(w http.ResponseWriter) (*UpgradedRequest, error) {
 	fw, ok := w.(writeFlusher)
 	if !ok {
 		return nil, ErrUpgradeUnsupported
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Transfer-Encoding", "chunked")
-	fw.Flush()
-
 	return &UpgradedRequest{w: fw}, nil
 }
 
 // ErrUpgradeUnsupported is returned when a request can't be upgraded to support server-sent events.
-var ErrUpgradeUnsupported = errors.New("go-sse.server.connection: unsupported")
+var ErrUpgradeUnsupported = errors.New("go-sse.server: upgrade unsupported")
 
 // ServeHTTP implements a default HTTP handler for a server.
 //
