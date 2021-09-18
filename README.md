@@ -374,9 +374,9 @@ Let's use what we know to create a client for the prevoius server example:
 package main
 
 import (
-    "fmt"
     "log"
     "net/http"
+    "os"
 
     "github.com/tmaxmax/go-sse"
 )
@@ -387,11 +387,11 @@ func main() {
     out := log.New(os.Stdout, "", 0)
 
     conn.SubscribeMessages(func(ev sse.Event) {
-        fmt.Printf("%s\n\n", ev)
+        out.Printf("%s\n\n", ev)
     })
 
     if err := conn.Connect(); err != nil {
-        log.Println(err)
+        out.Println(err)
     }
 }
 ```
