@@ -51,7 +51,7 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 		return nil
 	}
 
-	for _, e := range events[1:] {
+	for _, e := range events {
 		if hasTopic(subscription.Topics, e.Topic) {
 			if err := subscription.Callback(e); err != nil {
 				return err
@@ -96,7 +96,7 @@ func (v *ValidReplayProvider) Replay(subscription Subscription) error {
 	}
 
 	now := time.Now()
-	for _, e := range events[1:] {
+	for _, e := range events {
 		if e.ExpiresAt().After(now) && hasTopic(subscription.Topics, e.Topic) {
 			if err := subscription.Callback(e); err != nil {
 				return err

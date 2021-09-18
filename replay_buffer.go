@@ -46,7 +46,10 @@ func (b *bufferNoID) dequeue() {
 }
 
 func (b *bufferNoID) slice(atID EventID) []*Message {
-	if atID == b.lastRemovedID && len(b.buf) != 0 {
+	if !atID.IsSet() {
+		return nil
+	}
+	if atID == b.lastRemovedID {
 		return b.buf
 	}
 	index := -1
@@ -59,7 +62,8 @@ func (b *bufferNoID) slice(atID EventID) []*Message {
 	if index == -1 {
 		return nil
 	}
-	return b.buf[index:]
+
+	return b.buf[index+1:]
 }
 
 type bufferAutoID struct {
@@ -88,10 +92,10 @@ func (b *bufferAutoID) slice(atID EventID) []*Message {
 		return nil
 	}
 	index := id - b.firstID
-	if index < 0 || index >= int64(len(b.buf)) {
+	if index < -1 || index >= int64(len(b.buf)) {
 		return nil
 	}
-	return b.buf[index:]
+	return b.buf[index+1:]
 }
 
 func getBuffer(autoIDs bool, capacity int) buffer {
