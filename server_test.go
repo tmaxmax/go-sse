@@ -3,7 +3,6 @@ package sse_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -278,16 +277,13 @@ func getRequest(tb testing.TB) (w *discardResponseWriter, r *http.Request) {
 	return
 }
 
-func benchmarkServer(b *testing.B, conns, messages int) {
+func benchmarkServer(b *testing.B, conns int) {
 	b.Helper()
 
 	s := sse.NewServer()
 	b.Cleanup(func() { _ = s.Shutdown() })
 
-	msgs := make([]*sse.Message, 0, messages)
-	for i := 0; i < messages; i++ {
-		msgs = append(msgs, getMessage(b))
-	}
+	m := getMessage(b)
 
 	for i := 0; i < conns; i++ {
 		w, r := getRequest(b)
@@ -298,21 +294,16 @@ func benchmarkServer(b *testing.B, conns, messages int) {
 	b.ReportAllocs()
 
 	for n := 0; n < b.N; n++ {
-		for _, m := range msgs {
-			_ = s.Publish(m)
-		}
+		_ = s.Publish(m)
 	}
 }
 
 func BenchmarkServer(b *testing.B) {
-	conns := [...]int{10, 100, 1000, 10000, 100000 /*, 1000000*/}
-	msgs := [...]int{1, 10, 100, 1000, 10000, 100000, 1000000}
+	conns := [...]int{10, 100, 1000, 10000, 20000, 50000, 100000}
 
 	for _, c := range conns {
-		for _, m := range msgs[:1] {
-			b.Run(fmt.Sprintf("%d conns, %d msgs", c, m), func(b *testing.B) {
-				benchmarkServer(b, c, m)
-			})
-		}
+		b.Run(strconv.Itoa(c), func(b *testing.B) {
+			benchmarkServer(b, c)
+		})
 	}
 }
