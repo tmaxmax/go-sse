@@ -271,7 +271,7 @@ func (d *discardResponseWriter) Write(b []byte) (int, error) { return d.w.Write(
 func (d *discardResponseWriter) WriteHeader(code int)        { d.c = code }
 func (d *discardResponseWriter) Flush()                      {}
 
-func getRequest(tb testing.TB) (w http.ResponseWriter, r *http.Request) {
+func getRequest(tb testing.TB) (w *discardResponseWriter, r *http.Request) {
 	tb.Helper()
 
 	w = &discardResponseWriter{w: io.Discard, h: make(http.Header)}
@@ -281,8 +281,10 @@ func getRequest(tb testing.TB) (w http.ResponseWriter, r *http.Request) {
 }
 
 func benchmarkServer(b *testing.B, conns, messages int) {
+	b.Helper()
+
 	s := sse.NewServer()
-	defer s.Shutdown()
+	b.Cleanup(func() { _ = s.Shutdown() })
 
 	msgs := make([]*sse.Message, 0, messages)
 	for i := 0; i < messages; i++ {
