@@ -307,7 +307,7 @@ func benchmarkServer(b *testing.B, conns, messages int) {
 }
 
 func BenchmarkServer(b *testing.B) {
-	conns := [...]int{10, 100, 1000, 10000, 100000, 1000000}
+	conns := [...]int{10, 100, 1000, 10000, 100000 /*, 1000000*/}
 	msgs := [...]int{1, 10, 100, 1000, 10000, 100000, 1000000}
 
 	for _, c := range conns {
