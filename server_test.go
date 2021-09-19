@@ -37,7 +37,9 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub sse.Subscription) erro
 	e := &sse.Message{}
 	e.AppendText("hello")
 
-	sub.Callback(e)
+	if !sub.Callback(e) {
+		return errors.New("callback failed")
+	}
 
 	<-ctx.Done()
 
