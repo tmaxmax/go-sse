@@ -189,10 +189,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := EventID{}
 	// Clients must not send empty Last-Event-Id headers:
 	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
-	if h := getHeader(r.Header, headerLastEventID); h != "" {
+	if h := r.Header[headerLastEventID]; len(h) != 0 && h[0] != "" {
 		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
 		// which providers are required to ignore.
-		id, _ = NewEventID(h)
+		id, _ = NewEventID(h[0])
 	}
 
 	if err = s.Provider().Subscribe(r.Context(), Subscription{
@@ -218,21 +218,6 @@ const (
 
 // Pre-allocated header value
 var headerContentTypeValue = []string{"text/event-stream"}
-
-// getHeader retrieves a header's value without canonicalizing the key.
-// Make sure the key is in canonical form before using this function!
-func getHeader(header http.Header, key string) string {
-	if header == nil {
-		return ""
-	}
-
-	v := header[key]
-	if len(v) == 0 {
-		return ""
-	}
-
-	return v[0]
-}
 
 var defaultTopicSlice = []string{DefaultTopic}
 
