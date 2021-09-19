@@ -406,7 +406,7 @@ loop:
 	return nil
 }
 
-// Clone returns a deep copy of the message.
+// Clone returns a copy of the message. It does not copy the appended data.
 func (e *Message) Clone() *Message {
 	return &Message{
 		expiresAt:  e.expiresAt,

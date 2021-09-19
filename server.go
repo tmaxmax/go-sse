@@ -11,8 +11,8 @@ and then plugged into the server instance.
 Events themselves are represented using the Message type.
 
 On the client-side, we use the Client struct to create connections to event streams. Using an `http.Request`
-we instantiate a Connection. Then we subscribe to incoming events using channels and when subscribed
-we establish the connection by calling the Conenction's Connect method.
+we instantiate a Connection. Then we subscribe to incoming events using callback functions, and then
+we establish the connection by calling the Connection's Connect method.
 */
 package sse
 
