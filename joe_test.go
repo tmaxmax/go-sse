@@ -21,9 +21,9 @@ func (m *mockReplayProvider) Put(_ **sse.Message) {
 	m.callsPut++
 }
 
-func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
+func (m *mockReplayProvider) Replay(_ sse.Subscription) bool {
 	m.callsReplay++
-	return nil
+	return true
 }
 
 func (m *mockReplayProvider) GC() error {
@@ -98,9 +98,9 @@ func subscribe(t testing.TB, p sse.Provider, ctx context.Context, topics ...stri
 
 		var msgs []*sse.Message
 
-		fn := func(m *sse.Message) error {
+		fn := func(m *sse.Message) bool {
 			msgs = append(msgs, m)
-			return nil
+			return true
 		}
 
 		_ = p.Subscribe(ctx, sse.Subscription{Callback: fn, Topics: topics})
@@ -201,11 +201,10 @@ func TestJoe_errors(t *testing.T) {
 	_ = j.Publish(msg(t, "hello", "0", 0, sse.DefaultTopic))
 	_ = j.Publish(msg(t, "hello", "1", 0, sse.DefaultTopic))
 
-	expectedErr := errors.New("")
 	var called int
-	cb := func(_ *sse.Message) error {
+	cb := func(_ *sse.Message) bool {
 		called++
-		return expectedErr
+		return false
 	}
 
 	err := j.Subscribe(context.Background(), sse.Subscription{
@@ -213,7 +212,7 @@ func TestJoe_errors(t *testing.T) {
 		LastEventID: sse.MustEventID("0"),
 		Topics:      []string{sse.DefaultTopic},
 	})
-	require.Equal(t, expectedErr, err, "error not received from replay")
+	require.NoError(t, err, "error not received from replay")
 
 	_ = j.Publish(msg(t, "world", "2", 0, sse.DefaultTopic))
 
@@ -234,7 +233,7 @@ func TestJoe_errors(t *testing.T) {
 	}()
 
 	err = j.Subscribe(ctx, sse.Subscription{Callback: cb, Topics: []string{sse.DefaultTopic}})
-	require.Equal(t, expectedErr, err, "error not received from send")
+	require.NoError(t, err, "error not received from send")
 	require.Equal(t, 1, called, "callback was called after subscribe returned")
 
 	<-done

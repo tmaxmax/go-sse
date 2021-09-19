@@ -24,7 +24,8 @@ import (
 )
 
 // SubscriptionCallback is a function that is called when a subscriber receives a message.
-type SubscriptionCallback func(message *Message) error
+// If this callback returns false, the provider must remove the subscription.
+type SubscriptionCallback func(message *Message) bool
 
 // The Subscription struct is used to subscribe to a given provider.
 type Subscription struct {
@@ -129,10 +130,6 @@ type writeFlusher interface {
 type UpgradedRequest struct {
 	w          writeFlusher
 	didUpgrade bool
-	// DidError indicates whether a write error has occurred.
-	// You can use it to detect if the error returned by the Subscribe function
-	// is a write error instead of a provider error.
-	DidError bool
 }
 
 // Send sends the given event to the client. It returns any errors that occurred while writing the event.
@@ -143,7 +140,6 @@ func (u *UpgradedRequest) Send(e *Message) error {
 		u.didUpgrade = true
 	}
 	if _, err := e.WriteTo(u.w); err != nil {
-		u.DidError = true
 		return err
 	}
 	u.w.Flush()
@@ -199,12 +195,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		id, _ = NewEventID(h)
 	}
 
-	if err = s.Subscribe(r.Context(), conn.Send, id); err != nil {
-		if conn.DidError {
-			log.Println("go-sse.handler: send error:", err)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+	if err = s.Provider().Subscribe(r.Context(), Subscription{
+		Callback: func(m *Message) bool {
+			if err := conn.Send(m); err != nil {
+				log.Println("go-sse.handler: send error:", err)
+				return false
+			}
+			return true
+		},
+		LastEventID: id,
+		Topics:      defaultTopicSlice,
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -236,17 +238,17 @@ var defaultTopicSlice = []string{DefaultTopic}
 
 // Subscribe subscribes the given callback to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
-func (s *Server) Subscribe(ctx context.Context, callback SubscriptionCallback, lastEventID EventID, topics ...string) error {
-	if len(topics) == 0 {
-		topics = defaultTopicSlice
-	}
-
-	return s.Provider().Subscribe(ctx, Subscription{
-		Callback:    callback,
-		LastEventID: lastEventID,
-		Topics:      topics,
-	})
-}
+//func (s *Server) Subscribe(ctx context.Context, callback SubscriptionCallback, lastEventID EventID, topics ...string) error {
+//	if len(topics) == 0 {
+//		topics = defaultTopicSlice
+//	}
+//
+//	return s.Provider().Subscribe(ctx, Subscription{
+//		Callback:    callback,
+//		LastEventID: lastEventID,
+//		Topics:      topics,
+//	})
+//}
 
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topic is optional - if none is specified, the event is published to the default topic.

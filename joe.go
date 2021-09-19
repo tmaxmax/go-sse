@@ -46,7 +46,11 @@ type ReplayProvider interface {
 	// Replay operations must be executed in the same goroutine as the one it is called in.
 	// Other goroutines may be launched from inside the Replay method, but the events must
 	// be sent to the listener in the same goroutine that Replay is called in.
-	Replay(subscription Subscription) error
+	//
+	// The returned value indicates whether messages were replayed successfully. If no messages
+	// were replayed (invalid ID or no messages to replay) it must return true. It returns false
+	// only if the subscription's callback returns false.
+	Replay(subscription Subscription) bool
 }
 
 // ReplayProviderWithGC is a ReplayProvider that must have invalid messages cleaned up from time to time.
@@ -68,10 +72,10 @@ type ReplayProviderWithGC interface {
 }
 
 type (
-	subscriber   chan<- error
+	subscriber   chan<- struct{}
 	subscribers  map[subscriber]SubscriptionCallback
 	subscription struct {
-		errors chan<- error
+		done subscriber
 		Subscription
 	}
 )
@@ -146,26 +150,26 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 // is automatically removed when the context is done, a callback error occurs
 // or Joe is stopped.
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
-	errors := make(chan error)
+	done := make(chan struct{})
 
 	select {
 	case <-j.done:
 		return ErrProviderClosed
-	case j.subscription <- subscription{errors: errors, Subscription: sub}:
+	case j.subscription <- subscription{done: done, Subscription: sub}:
 	}
 
 	select {
-	case err := <-errors:
-		return err
+	case <-done:
+		return nil
 	case <-ctx.Done():
 	}
 
 	select {
-	case err := <-errors:
-		return err
-	case j.unsubscription <- errors:
-		return nil
+	case <-done:
+	case j.unsubscription <- done:
 	}
+
+	return nil
 }
 
 // Publish tells Joe to send the given message to the subscribers.
@@ -224,20 +228,19 @@ func (j *Joe) start() {
 		case msg := <-j.message:
 			j.replay.Put(&msg)
 
-			for errors, cb := range j.topics[msg.Topic] {
-				if err := cb(msg); err != nil {
-					errors <- err
-					j.removeSubscriber(errors)
+			for done, cb := range j.topics[msg.Topic] {
+				if !cb(msg) {
+					j.removeSubscriber(done)
 				}
 			}
 		case sub := <-j.subscription:
-			if err := j.replay.Replay(sub.Subscription); err != nil {
-				sub.errors <- err
+			if !j.replay.Replay(sub.Subscription) {
+				close(sub.done)
 				continue
 			}
 
 			for _, topic := range sub.Topics {
-				j.topic(topic)[sub.errors] = sub.Callback
+				j.topic(topic)[sub.done] = sub.Callback
 			}
 		case sub := <-j.unsubscription:
 			j.removeSubscriber(sub)

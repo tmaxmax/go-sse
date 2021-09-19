@@ -1,7 +1,6 @@
 package sse_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -30,9 +29,9 @@ func replay(tb testing.TB, p sse.ReplayProvider, lastEventID sse.EventID, topics
 	}
 
 	var replayed []*sse.Message
-	cb := func(m *sse.Message) error {
+	cb := func(m *sse.Message) bool {
 		replayed = append(replayed, m)
-		return nil
+		return true
 	}
 
 	sub := sse.Subscription{
@@ -63,19 +62,15 @@ func testReplayError(tb testing.TB, p sse.ReplayProvider) {
 		msg(tb, "b", "2", time.Hour, sse.DefaultTopic),
 	)
 
-	expectedErr := errors.New("")
+	cb := func(_ *sse.Message) bool { return false }
 
-	cb := func(_ *sse.Message) error {
-		return expectedErr
-	}
-
-	err := p.Replay(sse.Subscription{
+	success := p.Replay(sse.Subscription{
 		Callback:    cb,
 		LastEventID: sse.MustEventID("1"),
 		Topics:      []string{sse.DefaultTopic},
 	})
 
-	require.Equal(tb, expectedErr, err, "received invalid error")
+	require.False(tb, success, "received invalid error")
 }
 
 func putMessages(p sse.ReplayProvider, msgs ...*sse.Message) {

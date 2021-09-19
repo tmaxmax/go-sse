@@ -37,9 +37,7 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub sse.Subscription) erro
 	e := &sse.Message{}
 	e.AppendText("hello")
 
-	if err := sub.Callback(e); err != nil {
-		return err
-	}
+	sub.Callback(e)
 
 	<-ctx.Done()
 
@@ -84,16 +82,16 @@ func TestServer_ShutdownPublish(t *testing.T) {
 	p := &mockProvider{}
 	s := sse.NewServer(sse.WithProvider(p))
 
-	require.NoError(t, s.Publish(&sse.Message{}), "unexpected Publish error")
+	_ = s.Publish(&sse.Message{})
 	require.True(t, p.Published, "Publish wasn't called")
 	require.Equal(t, *p.Pub, sse.Message{Topic: sse.DefaultTopic}, "incorrect message")
 
 	p.Published = false
-	require.NoError(t, s.Publish(&sse.Message{Topic: "topic"}), "unexpected Publish error")
+	_ = s.Publish(&sse.Message{Topic: "topic"})
 	require.True(t, p.Published, "Publish wasn't called")
 	require.Equal(t, *p.Pub, sse.Message{Topic: "topic"}, "incorrect message")
 
-	require.NoError(t, s.Shutdown(), "unexpected Shutdown error")
+	_ = s.Shutdown()
 	require.True(t, p.Stopped, "Stop wasn't called")
 }
 
