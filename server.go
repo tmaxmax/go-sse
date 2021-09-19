@@ -234,9 +234,9 @@ func getHeader(header http.Header, key string) string {
 
 var defaultTopicSlice = []string{DefaultTopic}
 
-// Subscribe subscribes the given channel to the specified topics. It is unsubscribed when the context is closed
+// Subscribe subscribes the given callback to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
-func (s *Server) Subscribe(ctx context.Context, callback func(*Message) error, lastEventID EventID, topics ...string) error {
+func (s *Server) Subscribe(ctx context.Context, callback SubscriptionCallback, lastEventID EventID, topics ...string) error {
 	if len(topics) == 0 {
 		topics = defaultTopicSlice
 	}
