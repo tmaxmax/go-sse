@@ -400,6 +400,29 @@ func TestConnection_Subscriptions(t *testing.T) {
 	require.Equal(t, expectedMessages, <-messages, "unexpected events for messages")
 }
 
+func TestConnection_dispatchDirty(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "data: hello\ndata: world\n")
+	}))
+	defer ts.Close()
+
+	c := &sse.Client{
+		HTTPClient:        ts.Client(),
+		ResponseValidator: sse.NoopValidator,
+		MaxRetries:        -1, // for coverage, test will fail if a retry is actually made
+	}
+	conn := c.NewConnection(req(t, "", ts.URL, nil))
+	expected := sse.Event{Data: []byte("hello\nworld")}
+	var got sse.Event
+
+	conn.SubscribeMessages(func(e sse.Event) {
+		got = e
+	})
+
+	require.NoError(t, conn.Connect(), "unexpected Connect error")
+	require.Equal(t, expected, got, "unexpected event received")
+}
+
 func TestConnection_Unsubscriptions(t *testing.T) {
 	evs := make(chan string)
 
