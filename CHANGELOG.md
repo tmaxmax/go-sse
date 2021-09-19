@@ -4,9 +4,14 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## Unreleased
 
+### Added
+
+- UpgradedRequest now has a flag that indicates whether a write error has occurred. This removes the need of the SendError type.
+
 ### Changed
 
 - Server does not set the Transfer-Encoding header anymore.
+- UpgradedRequest does not return a SendError anymore when Write errors.
 
 ### Fixed
 

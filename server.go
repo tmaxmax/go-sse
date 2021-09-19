@@ -21,7 +21,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"sync"
 )
 
 // SubscriptionCallback is a function that is called when a subscriber receives a message.
@@ -128,33 +127,32 @@ type writeFlusher interface {
 // An UpgradedRequest is used to send events to the client.
 // Create one using the Upgrade function.
 type UpgradedRequest struct {
-	doUpgrade sync.Once
-	w         writeFlusher
+	w          writeFlusher
+	didUpgrade bool
+	// DidError indicates whether a write error has occurred.
+	// You can use it to detect if the error returned by the Subscribe function
+	// is a write error instead of a provider error.
+	DidError bool
 }
 
 func (u *UpgradedRequest) setHeaders() {
+	if u.didUpgrade {
+		return
+	}
+
+	u.didUpgrade = true
 	u.w.Header().Set("Content-Type", "text/event-stream")
 	u.w.Header().Set("Cache-Control", "no-cache")
 	u.w.Header().Set("Connection", "keep-alive")
 	u.w.Flush()
 }
 
-// SendError is the error type returned by an UpgradedRequest's Send method.
-// It is used to discriminate between subscription errors or write errors returned
-// by a provider's Subscribe method.
-type SendError struct {
-	error
-}
-
-func (s SendError) Unwrap() error {
-	return s.error
-}
-
 // Send sends the given event to the client. It returns any errors that occurred while writing the event.
 func (u *UpgradedRequest) Send(e *Message) error {
-	u.doUpgrade.Do(u.setHeaders)
+	u.setHeaders()
 	if _, err := e.WriteTo(u.w); err != nil {
-		return SendError{err}
+		u.DidError = true
+		return err
 	}
 	u.w.Flush()
 	return nil
@@ -167,13 +165,13 @@ func (u *UpgradedRequest) Send(e *Message) error {
 // The headers required by the SSE protocol are only sent when calling
 // the Send method for the first time. If other operations are done before
 // sending messages, other headers and status codes can safely be set.
-func Upgrade(w http.ResponseWriter) (*UpgradedRequest, error) {
+func Upgrade(w http.ResponseWriter) (UpgradedRequest, error) {
 	fw, ok := w.(writeFlusher)
 	if !ok {
-		return nil, ErrUpgradeUnsupported
+		return UpgradedRequest{}, ErrUpgradeUnsupported
 	}
 
-	return &UpgradedRequest{w: fw}, nil
+	return UpgradedRequest{w: fw}, nil
 }
 
 // ErrUpgradeUnsupported is returned when a request can't be upgraded to support server-sent events.
@@ -210,20 +208,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = s.Subscribe(r.Context(), conn.Send, id); err != nil {
-		var sendErr SendError
-		if errors.As(err, &sendErr) {
-			log.Println("go-sse.handler: send error:", sendErr)
+		if conn.DidError {
+			log.Println("go-sse.handler: send error:", err)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
 
+var defaultTopicSlice = []string{DefaultTopic}
+
 // Subscribe subscribes the given channel to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
 func (s *Server) Subscribe(ctx context.Context, callback func(*Message) error, lastEventID EventID, topics ...string) error {
 	if len(topics) == 0 {
-		topics = []string{DefaultTopic}
+		topics = defaultTopicSlice
 	}
 
 	return s.Provider().Subscribe(ctx, Subscription{
