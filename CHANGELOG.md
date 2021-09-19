@@ -8,6 +8,10 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 - Server does not set the Transfer-Encoding header anymore.
 
+### Fixed
+
+- Client's default response validator now ignores `Content-Type` parameters when checking if the response's content type is `text/event-stream`.
+
 ## [0.3.0] - 2021-09-18
 
 ### Added

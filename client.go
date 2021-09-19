@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/cenkalti/backoff/v4"
 )
@@ -12,6 +14,10 @@ import (
 // The ResponseValidator type defines the type of the function
 // that checks whether server responses are valid, before starting
 // to read events from them. See the Client's documentation for more info.
+//
+// Returning an error type that implements the Temporary method will
+// tell the client to reattempt the connection. This can be useful if
+// you're being rate limited (response code 429), for example.
 type ResponseValidator func(*http.Response) error
 
 // The Client struct is used to initialize new connections to different servers.
@@ -83,14 +89,30 @@ func (c *Client) newBackoff(ctx context.Context) (backoff.BackOff, *time.Duratio
 	return b, initialReconnectionTime
 }
 
-// DefaultValidator is the default client response validation function. It checks the content type to be
-// text/event-stream and the response status code to be 200 OK.
+func contentType(header string) string {
+	cts := strings.FieldsFunc(header, func(r rune) bool {
+		return unicode.IsSpace(r) || r == ';' || r == ','
+	})
+	if len(cts) == 0 {
+		return ""
+	}
+	return strings.ToLower(cts[0])
+}
+
+// DefaultValidator is the default client response validation function. As per the spec,
+// It checks the content type to be text/event-stream and the response status code to be 200 OK.
+//
+// If this validator fails, errors are considered permanent. No retry attempts are made.
+//
+// See https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model.
 var DefaultValidator ResponseValidator = func(r *http.Response) error {
 	if r.StatusCode != http.StatusOK {
-		return fmt.Errorf("expected status code %d, received %d", http.StatusOK, r.StatusCode)
+		return fmt.Errorf("expected status code %d %s, received %d %s", http.StatusOK, http.StatusText(http.StatusOK), r.StatusCode, http.StatusText(r.StatusCode))
 	}
-	if rc, ec := r.Header.Get("Content-Type"), "text/event-stream"; rc != ec {
-		return fmt.Errorf("expected content type %q, received %q", ec, rc)
+	cts := r.Header.Get("Content-Type")
+	ct := contentType(cts)
+	if expected := "text/event-stream"; ct != expected {
+		return fmt.Errorf("expected content type to have %q, received %q", expected, cts)
 	}
 	return nil
 }

@@ -243,7 +243,7 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 		{
 			name: "Valid request",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 				w.WriteHeader(http.StatusOK)
 			}),
 		},
@@ -251,6 +251,14 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 			name: "Invalid content type",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = io.WriteString(w, "plain text")
+			}),
+			expectErr: true,
+		},
+		{
+			name: "Empty content type",
+			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "")
+				w.WriteHeader(http.StatusOK)
 			}),
 			expectErr: true,
 		},
