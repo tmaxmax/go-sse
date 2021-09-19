@@ -208,13 +208,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Canonicalized header keys
+// Canonicalized header keys.
 const (
 	headerLastEventID = "Last-Event-Id"
 	headerContentType = "Content-Type"
 )
 
-// Pre-allocated header value
+// Pre-allocated header value.
 var headerContentTypeValue = []string{"text/event-stream"}
 
 var defaultTopicSlice = []string{DefaultTopic}
