@@ -3,9 +3,12 @@ package sse_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -244,4 +247,72 @@ func TestUpgradedRequest_Send_error(t *testing.T) {
 
 	require.ErrorIs(t, conn.Send(&sse.Message{}), errWriteFailed, "invalid Send error")
 	require.True(t, rec.Flushed, "writer wasn't flushed")
+}
+
+func getMessage(tb testing.TB) *sse.Message {
+	tb.Helper()
+
+	m := &sse.Message{}
+	m.AppendText("Hello world!", "Nice to see you all.")
+	m.SetID(sse.MustEventID(strconv.Itoa(rand.Int())))
+	m.SetName("test")
+
+	return m
+}
+
+type discardResponseWriter struct {
+	w io.Writer
+	h http.Header
+	c int
+}
+
+func (d *discardResponseWriter) Header() http.Header         { return d.h }
+func (d *discardResponseWriter) Write(b []byte) (int, error) { return d.w.Write(b) }
+func (d *discardResponseWriter) WriteHeader(code int)        { d.c = code }
+func (d *discardResponseWriter) Flush()                      {}
+
+func getRequest(tb testing.TB) (w http.ResponseWriter, r *http.Request) {
+	tb.Helper()
+
+	w = &discardResponseWriter{w: io.Discard, h: make(http.Header)}
+	r = httptest.NewRequest("", "http://localhost", nil)
+
+	return
+}
+
+func benchmarkServer(b *testing.B, conns, messages int) {
+	s := sse.NewServer()
+	defer s.Shutdown()
+
+	msgs := make([]*sse.Message, 0, messages)
+	for i := 0; i < messages; i++ {
+		msgs = append(msgs, getMessage(b))
+	}
+
+	for i := 0; i < conns; i++ {
+		w, r := getRequest(b)
+		go s.ServeHTTP(w, r)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for n := 0; n < b.N; n++ {
+		for _, m := range msgs {
+			_ = s.Publish(m)
+		}
+	}
+}
+
+func BenchmarkServer(b *testing.B) {
+	conns := [...]int{10, 100, 1000, 10000, 100000, 1000000}
+	msgs := [...]int{1, 10, 100, 1000, 10000, 100000, 1000000}
+
+	for _, c := range conns {
+		for _, m := range msgs[:1] {
+			b.Run(fmt.Sprintf("%d conns, %d msgs", c, m), func(b *testing.B) {
+				benchmarkServer(b, c, m)
+			})
+		}
+	}
 }
