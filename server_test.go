@@ -194,9 +194,7 @@ func TestUpgrade(t *testing.T) {
 	defer r.Body.Close()
 
 	expectedHeaders := http.Header{
-		"Content-Type":  []string{"text/event-stream"},
-		"Cache-Control": []string{"no-cache"},
-		"Connection":    []string{"keep-alive"},
+		"Content-Type": []string{"text/event-stream"},
 	}
 
 	require.Equal(t, expectedHeaders, r.Header, "invalid response headers")

@@ -135,21 +135,13 @@ type UpgradedRequest struct {
 	DidError bool
 }
 
-func (u *UpgradedRequest) setHeaders() {
-	if u.didUpgrade {
-		return
-	}
-
-	u.didUpgrade = true
-	u.w.Header().Set("Content-Type", "text/event-stream")
-	u.w.Header().Set("Cache-Control", "no-cache")
-	u.w.Header().Set("Connection", "keep-alive")
-	u.w.Flush()
-}
-
 // Send sends the given event to the client. It returns any errors that occurred while writing the event.
 func (u *UpgradedRequest) Send(e *Message) error {
-	u.setHeaders()
+	if !u.didUpgrade {
+		u.w.Header()[headerContentType] = headerContentTypeValue
+		u.w.Flush()
+		u.didUpgrade = true
+	}
 	if _, err := e.WriteTo(u.w); err != nil {
 		u.DidError = true
 		return err
@@ -199,9 +191,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := EventID{}
-	// Clients must not send empty Last-Event-ID headers:
+	// Clients must not send empty Last-Event-Id headers:
 	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
-	if h := r.Header.Get("Last-Event-ID"); h != "" {
+	if h := getHeader(r.Header, headerLastEventID); h != "" {
 		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
 		// which providers are required to ignore.
 		id, _ = NewEventID(h)
@@ -214,6 +206,30 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
+}
+
+// Canonicalized header keys
+const (
+	headerLastEventID = "Last-Event-Id"
+	headerContentType = "Content-Type"
+)
+
+// Pre-allocated header value
+var headerContentTypeValue = []string{"text/event-stream"}
+
+// getHeader retrieves a header's value without canonicalizing the key.
+// Make sure the key is in canonical form before using this function!
+func getHeader(header http.Header, key string) string {
+	if header == nil {
+		return ""
+	}
+
+	v := header[key]
+	if len(v) == 0 {
+		return ""
+	}
+
+	return v[0]
 }
 
 var defaultTopicSlice = []string{DefaultTopic}

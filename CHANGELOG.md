@@ -10,7 +10,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ### Changed
 
-- Server does not set the Transfer-Encoding header anymore.
+- Server does not set any other headers besides `Content-Type`.
 - UpgradedRequest does not return a SendError anymore when Write errors.
 
 ### Fixed
