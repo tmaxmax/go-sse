@@ -195,17 +195,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		id, _ = NewEventID(h[0])
 	}
 
-	if err = s.Provider().Subscribe(r.Context(), Subscription{
-		Callback: func(m *Message) bool {
-			if err := conn.Send(m); err != nil {
-				log.Println("go-sse.handler: send error:", err)
-				return false
-			}
-			return true
-		},
-		LastEventID: id,
-		Topics:      defaultTopicSlice,
-	}); err != nil {
+	cb := func(m *Message) bool {
+		if err := conn.Send(m); err != nil {
+			log.Println("go-sse.handler: send error:", err)
+			return false
+		}
+		return true
+	}
+
+	if err = s.Subscribe(r.Context(), cb, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -223,17 +221,17 @@ var defaultTopicSlice = []string{DefaultTopic}
 
 // Subscribe subscribes the given callback to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
-//func (s *Server) Subscribe(ctx context.Context, callback SubscriptionCallback, lastEventID EventID, topics ...string) error {
-//	if len(topics) == 0 {
-//		topics = defaultTopicSlice
-//	}
-//
-//	return s.Provider().Subscribe(ctx, Subscription{
-//		Callback:    callback,
-//		LastEventID: lastEventID,
-//		Topics:      topics,
-//	})
-//}
+func (s *Server) Subscribe(ctx context.Context, callback SubscriptionCallback, lastEventID EventID, topics ...string) error {
+	if len(topics) == 0 {
+		topics = defaultTopicSlice
+	}
+
+	return s.Provider().Subscribe(ctx, Subscription{
+		Callback:    callback,
+		LastEventID: lastEventID,
+		Topics:      topics,
+	})
+}
 
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topic is optional - if none is specified, the event is published to the default topic.
