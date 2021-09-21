@@ -69,7 +69,7 @@ One of them is the `WithProvider` option:
 func WithProvider(provider Provider) Option
 ```
 
-A provider is an implmenetation of the publish-subscribe messaging system:
+A provider is an implementation of the publish-subscribe messaging system:
 
 ```go
 type Provider interface {
