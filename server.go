@@ -21,6 +21,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 )
 
 // SubscriptionCallback is a function that is called when a subscriber receives a message.
@@ -90,6 +91,21 @@ func WithProvider(provider Provider) ServerOption {
 	}
 }
 
+// The Logger interface describes an object that can be used for logging.
+type Logger interface {
+	Printf(format string, args ...interface{})
+}
+
+// WithLogger is an option that sets a custom logger for a given Server.
+// The default logger is the one provided by the standard log package.
+func WithLogger(logger Logger) ServerOption {
+	return func(s *Server) {
+		if logger != nil {
+			s.logger = logger
+		}
+	}
+}
+
 // A Server is mostly a convenience wrapper around a provider.
 // It implements the http.Handler interface and has some methods
 // for calling the underlying provider's methods.
@@ -98,6 +114,7 @@ func WithProvider(provider Provider) ServerOption {
 // option, the Joe provider found in this package with no replay provider is used.
 type Server struct {
 	provider Provider
+	logger   Logger
 }
 
 // NewServer creates a new server using the specified provider. If no provider is given, Joe with no replay provider is used.
@@ -110,6 +127,10 @@ func NewServer(options ...ServerOption) *Server {
 
 	if s.provider == nil {
 		s.provider = NewJoe()
+	}
+
+	if s.logger == nil {
+		s.logger = log.New(os.Stderr, "go-sse: ", log.LstdFlags)
 	}
 
 	return s
@@ -197,7 +218,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	cb := func(m *Message) bool {
 		if err := conn.Send(m); err != nil {
-			log.Println("go-sse.handler: send error:", err)
+			s.logger.Printf("send error: %v", err)
 			return false
 		}
 		return true
