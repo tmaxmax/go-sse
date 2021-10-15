@@ -65,7 +65,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## [0.1.0] - 2021-09-11 First release
 
-[0.4.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.3.0
+[0.4.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.4.0
 [0.3.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.3.0
 [0.2.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.2.0
 [0.1.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.1.0
