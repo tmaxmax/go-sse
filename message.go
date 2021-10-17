@@ -171,6 +171,10 @@ func (e *Message) ID() EventID {
 	return EventID{value: unsafeString(e.id), set: true} // SAFETY: ids are immutable
 }
 
+func (e *Message) Name() string {
+	return unsafeString(e.name)
+}
+
 // SetID sets the message's event's ID.
 func (e *Message) SetID(id EventID) {
 	if !id.IsSet() {
