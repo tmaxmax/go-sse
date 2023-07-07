@@ -10,10 +10,10 @@ import (
 func TestSplitFunc(t *testing.T) {
 	t.Parallel()
 
-	text := "mama mea e super\nce genial\nsincer n-am ce sa zic\r\n\r\n\nmama tata bunica bunicul\nsarmale\r\n\r\r\naualeu\nce taraboi"
+	text := "\xEF\xBB\xBFmama mea e super\nce genial\nsincer n-am ce sa zic\r\n\r\n\nmama tata bunica bunicul\nsarmale\r\n\r\r\naualeu\nce taraboi"
 	r := strings.NewReader(text)
 	s := bufio.NewScanner(r)
-	s.Split(splitFunc)
+	s.Split(newSplitFunc())
 
 	expected := []string{
 		"mama mea e super\nce genial\nsincer n-am ce sa zic\r\n\r\n",
@@ -42,7 +42,7 @@ func TestSplitFuncWithLongLine(t *testing.T) {
 	text := longString + "\n\n" + longString + "\r\r" + longString + "\r\n\r\n" + longString
 	r := strings.NewReader(text)
 	s := bufio.NewScanner(r)
-	s.Split(splitFunc)
+	s.Split(newSplitFunc())
 
 	expected := []string{
 		longString + "\n\n",
