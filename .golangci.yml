@@ -6,12 +6,10 @@ linters:
     - ineffassign
     - staticcheck
     - typecheck
-    # - cyclop
     - dogsled
     - dupl
     - errorlint
     - exhaustive
-    # - gocognit
     - nestif
     - goconst
     - gocritic
@@ -28,7 +26,7 @@ linters:
     - importas
     - makezero
     - misspell
-    # - prealloc
+    - prealloc
     - promlinter
     - predeclared
     - nolintlint
@@ -39,7 +37,6 @@ linters:
     - unparam
     - unused
     - whitespace
-    # - wrapcheck
 linters-settings:
   gosec:
     excludes:
