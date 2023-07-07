@@ -1,19 +1,14 @@
 linters:
   enable:
-    - deadcode
     - errcheck
     - gosimple
     - govet
     - ineffassign
     - staticcheck
-    - structcheck
     - typecheck
-    - unused
-    - varcheck
     # - cyclop
     - dogsled
     - dupl
-    - errcheck
     - errorlint
     - exhaustive
     - gci
@@ -31,10 +26,6 @@ linters:
     - gomoddirectives
     - gomodguard
     - gosec
-    - gosimple
-    - govet
-    - depguard
-    - ifshort
     - importas
     - makezero
     - misspell
@@ -42,9 +33,7 @@ linters:
     - promlinter
     - predeclared
     - nolintlint
-    - rowserrcheck
     - revive
-    - staticcheck
     - stylecheck
     - tagliatelle
     - thelper
