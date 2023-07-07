@@ -111,7 +111,7 @@ func TestConnection_Connect_retry(t *testing.T) {
 		MaxRetries:              3,
 		DefaultReconnectionTime: time.Millisecond,
 	}
-	r, err := http.NewRequest("", "", nil)
+	r, err := http.NewRequest("", "", http.NoBody)
 	require.NoError(t, err, "failed to create request")
 	err = c.NewConnection(r).Connect()
 

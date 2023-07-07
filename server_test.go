@@ -144,7 +144,7 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 	t.Parallel()
 
 	rec := httptest.NewRecorder()
-	req, _ := http.NewRequest("", "http://localhost", nil)
+	req, _ := http.NewRequest("", "http://localhost", http.NoBody)
 	p := newMockProvider(t, errors.New("can't subscribe"))
 
 	sse.NewServer(sse.WithProvider(p)).ServeHTTP(rec, req)
@@ -171,7 +171,7 @@ func TestServer_ServeHTTP_connectionError(t *testing.T) {
 	t.Parallel()
 
 	rec := httptest.NewRecorder()
-	req, _ := http.NewRequest("", "http://localhost", nil)
+	req, _ := http.NewRequest("", "http://localhost", http.NoBody)
 	p := newMockProvider(t, nil)
 
 	sse.NewServer(sse.WithProvider(p)).ServeHTTP(&responseWriterErr{rec}, req)
@@ -272,7 +272,7 @@ func getRequest(tb testing.TB) (w *discardResponseWriter, r *http.Request) {
 	tb.Helper()
 
 	w = &discardResponseWriter{w: io.Discard, h: make(http.Header)}
-	r = httptest.NewRequest("", "http://localhost", nil)
+	r = httptest.NewRequest("", "http://localhost", http.NoBody)
 
 	return
 }

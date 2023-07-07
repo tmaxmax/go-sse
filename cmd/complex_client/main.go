@@ -17,7 +17,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/events", nil)
+	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/events", http.NoBody)
 	conn := sse.NewConnection(r)
 	// Callbacks are called from separate goroutines, we must synchronize access to stdout.
 	// log.Logger does that automatically for us, so we create one that writes to stdout without any prefix or flags.

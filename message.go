@@ -105,25 +105,25 @@ func (e *Message) AppendText(chunks ...string) {
 // where a newline can be a LF, CR or CRLF sequence. When the client interprets the fields,
 // it joins multiple data fields using LF, so information is altered. Here's an example:
 //
-//   initial payload: This is a\r\nmultiline\rtext.\nIt has multiple\nnewline\r\nvariations.
-//   data sent over the wire:
-//     data: This is a
-//     data: multiline
-//     data: text.
-//     data: It has multiple
-//     data: newline
-//     data: variations
-//   data received by client: This is a\nmultiline\ntext.\nIt has multiple\nnewline\nvariations.
+//	initial payload: This is a\r\nmultiline\rtext.\nIt has multiple\nnewline\r\nvariations.
+//	data sent over the wire:
+//		data: This is a
+//		data: multiline
+//		data: text.
+//		data: It has multiple
+//		data: newline
+//		data: variations
+//	data received by client: This is a\nmultiline\ntext.\nIt has multiple\nnewline\nvariations.
 //
 // Each line prepended with "data:" is a field; multiple data fields are joined together using LF as the delimiter.
 // If you attempted to send the same payload without prepending the "data:" prefix, like so:
 //
-//   data: This is a
-//   multiline
-//   text.
-//   It has multiple
-//   newline
-//   variations
+//	data: This is a
+//	multiline
+//	text.
+//	It has multiple
+//	newline
+//	variations
 //
 // there would be only one data field (the first one). The rest would be different fields, named "multiline", "text.",
 // "It has multiple" etc., which are invalid fields according to the protocol.

@@ -20,6 +20,7 @@ func main() {
 		}
 	}()
 
+	//nolint:gosec // Use http.Server in your code instead, to be able to set timeouts.
 	if err := http.ListenAndServe(":8000", s); err != nil {
 		log.Fatalln(err)
 	}

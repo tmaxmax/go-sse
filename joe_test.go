@@ -196,7 +196,7 @@ func TestJoe_errors(t *testing.T) {
 	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider: sse.NewFiniteReplayProvider(1),
 	})
-	defer j.Stop() // nolint:errcheck // irrelevant
+	defer j.Stop() //nolint:errcheck // irrelevant
 
 	_ = j.Publish(msg(t, "hello", "0", 0, sse.DefaultTopic))
 	_ = j.Publish(msg(t, "hello", "1", 0, sse.DefaultTopic))

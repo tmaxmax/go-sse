@@ -110,9 +110,9 @@ func (i *EventID) MarshalJSON() ([]byte, error) {
 }
 
 // Scan implements the sql.Scanner interface. IDs can be scanned from:
-//  - nil interfaces (result: unset ID)
-//  - byte slice
-//  - string
+//   - nil interfaces (result: unset ID)
+//   - byte slice
+//   - string
 func (i *EventID) Scan(src interface{}) error {
 	*i = EventID{}
 

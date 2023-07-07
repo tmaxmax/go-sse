@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", nil)
+	r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", http.NoBody)
 	conn := sse.NewConnection(r)
 	// Callbacks are called from separate goroutines, we must synchronize access to stdout.
 	// log.Logger does that automatically for us, so we create one that writes to stdout without any prefix or flags.

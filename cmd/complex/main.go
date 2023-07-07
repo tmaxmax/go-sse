@@ -37,8 +37,9 @@ func main() {
 	mux.Handle("/events", sseHandler)
 
 	s := &http.Server{
-		Addr:    "0.0.0.0:8080",
-		Handler: cors(mux),
+		Addr:              "0.0.0.0:8080",
+		Handler:           cors(mux),
+		ReadHeaderTimeout: time.Second * 10,
 	}
 	s.RegisterOnShutdown(func() {
 		e := &sse.Message{}
