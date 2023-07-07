@@ -87,7 +87,7 @@ func (b *ByteParser) Err() error {
 
 func trimNewline(c []byte) []byte {
 	l := len(c)
-	if c[l-1] == '\n' {
+	if l > 0 && c[l-1] == '\n' {
 		c = c[:l-1]
 		l--
 	}
@@ -99,6 +99,9 @@ func trimNewline(c []byte) []byte {
 }
 
 func trimFirstSpace(c []byte) []byte {
+	if len(c) == 0 {
+		return nil
+	}
 	if c[0] == ' ' {
 		return c[1:]
 	}
@@ -106,9 +109,6 @@ func trimFirstSpace(c []byte) []byte {
 }
 
 func trimChunk(c []byte) []byte {
-	if len(c) == 0 {
-		return nil
-	}
 	return trimFirstSpace(trimNewline(c))
 }
 

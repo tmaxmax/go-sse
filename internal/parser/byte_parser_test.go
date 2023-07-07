@@ -34,12 +34,13 @@ func TestByteParser(t *testing.T) {
 			err:  parser.ErrUnexpectedEOF,
 		},
 		{
-			name: "Fields without colon",
-			data: "data\ndata\ndata: some data\n\n",
+			name: "Fields without data",
+			data: "data\ndata  \ndata:\n\n",
 			expected: []parser.Field{
 				newDataField(t, ""),
+				// The second `data  ` should be ignored, as it is not a valid field name
+				// (it would be valid without trailing spaces).
 				newDataField(t, ""),
-				newDataField(t, "some data"),
 				{},
 			},
 		},
