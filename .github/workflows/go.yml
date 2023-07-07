@@ -26,9 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: 1.17
+          go-version: '~1.17.13'
       - name: Test
         run: go test -v -timeout=1s -coverprofile=coverage.txt -covermode=atomic ./...
       - name: Test (race)
@@ -43,9 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: 1.16
+          go-version: '~1.16.15'
       - name: Test
         run: go test -v -timeout=1s ./...
       - name: Test (race)
