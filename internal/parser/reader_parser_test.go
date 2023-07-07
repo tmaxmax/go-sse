@@ -30,6 +30,8 @@ func TestReaderParser(t *testing.T) {
 		expected []parser.Field
 	}
 
+	longString := strings.Repeat("abcdefghijklmnopqrstuvwxyz", 193)
+
 	tests := []test{
 		{
 			name: "Valid input",
@@ -65,6 +67,14 @@ data: still, here's some data: you deserve it
 				{},
 				newEventField(t, "something glitched before why are there two newlines"),
 				newDataField(t, "still, here's some data: you deserve it"),
+			},
+		},
+		{
+			name:  "Valid input with long string",
+			input: strings.NewReader("\nid:2\ndata:" + longString + "\n"),
+			expected: []parser.Field{
+				newIDField(t, "2"),
+				newDataField(t, longString),
 			},
 		},
 		{

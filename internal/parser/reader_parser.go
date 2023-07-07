@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []byte, err error) {
+var splitFunc bufio.SplitFunc = func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if len(data) == 0 {
 		return
 	}
@@ -20,6 +20,12 @@ var splitFunc bufio.SplitFunc = func(data []byte, _ bool) (advance int, token []
 		if advance == len(data) || (isNewlineChar(data[advance]) && index > 0) {
 			break
 		}
+	}
+
+	if advance == len(data) && !atEOF {
+		// We have reached the end of the buffer but have not yet seen two consecutive
+		// newline sequences, so we request more data.
+		return 0, nil, nil
 	}
 
 	if l := len(data); advance < l {
