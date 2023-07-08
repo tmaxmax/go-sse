@@ -9,7 +9,6 @@ import (
 type FieldParser struct {
 	err   error
 	field Field
-	chunk []byte
 	cs    ChunkScanner
 }
 
@@ -20,22 +19,21 @@ func min(a, b int) int {
 	return b
 }
 
-func (b *ByteParser) scanSegmentName() (FieldName, bool) {
-	colonPos, l := bytes.IndexByte(b.chunk, ':'), len(b.chunk)
+func scanSegment(chunk []byte) (name FieldName, data []byte, valid bool) {
+	colonPos, l := bytes.IndexByte(chunk, ':'), len(chunk)
 	if colonPos > maxFieldNameLength {
-		return "", false
+		return "", nil, false
 	}
 	if colonPos == -1 {
 		colonPos = l
 	}
 
-	name, ok := getFieldName(b.chunk[:colonPos])
+	name, ok := getFieldName(chunk[:colonPos])
 	if ok {
 		dataStart := min(colonPos+1, l)
-		b.chunk = b.chunk[dataStart:]
-		return name, true
+		return name, chunk[dataStart:], true
 	}
-	return name, false
+	return "", nil, false
 }
 
 // ErrUnexpectedEOF is returned when the input is completely parsed but no complete field was found at the end.
@@ -49,8 +47,7 @@ func (b *FieldParser) Scan() bool {
 			return false
 		}
 
-		var endsInNewline bool
-		b.chunk, endsInNewline = b.cs.Chunk()
+		chunk, endsInNewline := b.cs.Chunk()
 		if !endsInNewline {
 			// If the chunk doesn't end in a newline we have reached EOF.
 			// Fields should always end in a newline, so we return false, as this is not a complete field.
@@ -58,13 +55,13 @@ func (b *FieldParser) Scan() bool {
 			return false
 		}
 
-		name, ok := b.scanSegmentName()
+		name, chunk, ok := scanSegment(chunk)
 		if !ok {
 			// Ignore the field
 			continue
 		}
 
-		b.field = Field{Name: name, Value: trimChunk(b.chunk)}
+		b.field = Field{Name: name, Value: trimChunk(chunk)}
 
 		return true
 	}
