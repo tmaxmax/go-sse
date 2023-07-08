@@ -5,9 +5,12 @@ import (
 	"io"
 )
 
+// splitFunc is a split function for a bufio.Scanner that splits a sequence of
+// bytes into SSE events. Each event ends with two consecutive newline sequences,
+// where a newline sequence is defined as either "\n", "\r", or "\r\n".
 var splitFunc bufio.SplitFunc = func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if len(data) == 0 {
-		return
+		return 0, nil, nil
 	}
 
 	var start, index, endlineLen int
@@ -22,14 +25,14 @@ var splitFunc bufio.SplitFunc = func(data []byte, atEOF bool) (advance int, toke
 		}
 	}
 
-	if advance == len(data) && !atEOF {
+	if l := len(data); advance == l && !atEOF {
 		// We have reached the end of the buffer but have not yet seen two consecutive
 		// newline sequences, so we request more data.
 		return 0, nil, nil
-	}
-
-	if l := len(data); advance < l {
+	} else if advance < l {
+		// We have found a newline. Consume the end-of-line sequence.
 		advance++
+		// Consume one more character if end-of-line is \r\n.
 		if advance < l && data[advance-1] == '\r' && data[advance] == '\n' {
 			advance++
 		}
@@ -37,7 +40,7 @@ var splitFunc bufio.SplitFunc = func(data []byte, atEOF bool) (advance int, toke
 
 	token = data[start:advance]
 
-	return
+	return advance, token, nil
 }
 
 // ReaderParser extracts fields from a reader. Reading is buffered using a bufio.Scanner.
