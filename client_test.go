@@ -55,7 +55,7 @@ func toEv(tb testing.TB, s string) (ev sse.Event) {
 		}
 	}()
 
-	p := parser.NewByteParser([]byte(s))
+	p := parser.NewFieldParser([]byte(s))
 
 	for p.Scan() {
 		f := p.Field()

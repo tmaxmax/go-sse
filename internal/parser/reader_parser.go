@@ -58,23 +58,23 @@ func newSplitFunc() bufio.SplitFunc {
 	}
 }
 
-// ReaderParser extracts fields from a reader. Reading is buffered using a bufio.Scanner.
-// The ReaderParser also removes the UTF-8 BOM if it exists.
-type ReaderParser struct {
-	sc *bufio.Scanner
-	p  *ByteParser
+// Parser extracts fields from a reader. Reading is buffered using a bufio.Scanner.
+// The Parser also removes the UTF-8 BOM if it exists.
+type Parser struct {
+	inputScanner *bufio.Scanner
+	fieldScanner *FieldParser
 }
 
 // Scan parses a single field from the reader. It returns false when there are no more fields to parse.
-func (r *ReaderParser) Scan() bool {
-	if !r.p.Scan() {
-		if !r.sc.Scan() {
+func (r *Parser) Scan() bool {
+	if !r.fieldScanner.Scan() {
+		if !r.inputScanner.Scan() {
 			return false
 		}
 
-		r.p.Reset(r.sc.Bytes())
+		r.fieldScanner.Reset(r.inputScanner.Bytes())
 
-		return r.p.Scan()
+		return r.fieldScanner.Scan()
 	}
 
 	return true
@@ -82,22 +82,22 @@ func (r *ReaderParser) Scan() bool {
 
 // Field returns the last parsed field. The Field's Value byte slice isn't owned by the field, the underlying buffer
 // is owned by the bufio.Scanner that is used by the ReaderParser.
-func (r *ReaderParser) Field() Field {
-	return r.p.Field()
+func (r *Parser) Field() Field {
+	return r.fieldScanner.Field()
 }
 
 // Err returns the last read error.
-func (r *ReaderParser) Err() error {
-	if r.sc.Err() != nil {
-		return r.sc.Err()
+func (r *Parser) Err() error {
+	if r.inputScanner.Err() != nil {
+		return r.inputScanner.Err()
 	}
-	return r.p.Err()
+	return r.fieldScanner.Err()
 }
 
-// NewReaderParser returns a parser that extracts fields from a reader.
-func NewReaderParser(r io.Reader) *ReaderParser {
+// New returns a Parser that extracts fields from a reader.
+func New(r io.Reader) *Parser {
 	sc := bufio.NewScanner(r)
 	sc.Split(newSplitFunc())
 
-	return &ReaderParser{sc: sc, p: NewByteParser(nil)}
+	return &Parser{inputScanner: sc, fieldScanner: NewFieldParser(nil)}
 }

@@ -206,7 +206,7 @@ func (c *Connection) dispatch(ev Event) {
 }
 
 func (c *Connection) read(r io.Reader, reset func()) error {
-	p := parser.NewReaderParser(r)
+	p := parser.New(r)
 	ev, dirty := Event{}, false
 
 	for p.Scan() {

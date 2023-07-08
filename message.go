@@ -363,7 +363,7 @@ func (e *Message) reset() {
 func (e *Message) UnmarshalText(p []byte) error {
 	e.reset()
 
-	s := parser.NewByteParser(p)
+	s := parser.NewFieldParser(p)
 
 loop:
 	for s.Scan() {

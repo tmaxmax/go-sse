@@ -5,8 +5,8 @@ import (
 	"errors"
 )
 
-// ByteParser extracts fields from a byte slice.
-type ByteParser struct {
+// FieldParser extracts fields from a byte slice.
+type FieldParser struct {
 	err   error
 	field Field
 	chunk []byte
@@ -43,7 +43,7 @@ var ErrUnexpectedEOF = errors.New("go-sse: unexpected end of input")
 
 // Scan parses the next available filed in the remaining buffer.
 // It returns false if there are no fields to parse.
-func (b *ByteParser) Scan() bool {
+func (b *FieldParser) Scan() bool {
 	for {
 		if !b.cs.Scan() {
 			return false
@@ -71,17 +71,17 @@ func (b *ByteParser) Scan() bool {
 }
 
 // Field returns the last parsed field.
-func (b *ByteParser) Field() Field {
+func (b *FieldParser) Field() Field {
 	return b.field
 }
 
 // Reset changes the buffer ByteParser parses fields from.
-func (b *ByteParser) Reset(p []byte) {
+func (b *FieldParser) Reset(p []byte) {
 	b.cs.Reset(p)
 }
 
 // Err returns the last error encountered by the parser. It is either nil or ErrUnexpectedEOF.
-func (b *ByteParser) Err() error {
+func (b *FieldParser) Err() error {
 	return b.err
 }
 
@@ -112,7 +112,7 @@ func trimChunk(c []byte) []byte {
 	return trimFirstSpace(trimNewline(c))
 }
 
-// NewByteParser creates a parser that extracts fields from the given byte slice.
-func NewByteParser(b []byte) *ByteParser {
-	return &ByteParser{cs: NewChunkScanner(b)}
+// NewFieldParser creates a parser that extracts fields from the given byte slice.
+func NewFieldParser(b []byte) *FieldParser {
+	return &FieldParser{cs: NewChunkScanner(b)}
 }

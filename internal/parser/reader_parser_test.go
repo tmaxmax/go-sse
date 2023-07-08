@@ -100,7 +100,7 @@ data: still, here's some data: you deserve it
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			p := parser.NewReaderParser(test.input)
+			p := parser.New(test.input)
 			var fields []parser.Field
 			if l := len(test.expected); l > 0 {
 				fields = make([]parser.Field, 0, l)
@@ -128,7 +128,7 @@ func BenchmarkReaderParser(b *testing.B) {
 
 	for n := 0; n < b.N; n++ {
 		r := strings.NewReader(benchmarkText)
-		p := parser.NewReaderParser(r)
+		p := parser.New(r)
 
 		for p.Scan() {
 			f = p.Field()
