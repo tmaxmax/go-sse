@@ -34,3 +34,33 @@ func TestSplitFunc(t *testing.T) {
 		t.Fatalf("wrong tokens:\nreceived: %#v\nexpected: %#v", tokens, expected)
 	}
 }
+
+func TestSplitFuncWithLongLine(t *testing.T) {
+	t.Parallel()
+
+	longString := strings.Repeat("abcdef\rghijklmn\nopqrstu\r\nvwxyz", 193)
+	text := longString + "\n\n" + longString + "\r\r" + longString + "\r\n\r\n" + longString
+	r := strings.NewReader(text)
+	s := bufio.NewScanner(r)
+	s.Split(splitFunc)
+
+	expected := []string{
+		longString + "\n\n",
+		longString + "\r\r",
+		longString + "\r\n\r\n",
+		longString,
+	}
+	tokens := make([]string, 0, len(expected))
+
+	for s.Scan() {
+		tokens = append(tokens, s.Text())
+	}
+
+	if s.Err() != nil {
+		t.Fatalf("an error occurred: %v", s.Err())
+	}
+
+	if !reflect.DeepEqual(tokens, expected) {
+		t.Fatalf("wrong tokens:\nreceived: %#v\nexpected: %#v", tokens, expected)
+	}
+}
