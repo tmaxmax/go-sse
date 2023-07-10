@@ -65,31 +65,25 @@ type Parser struct {
 	fieldScanner *FieldParser
 }
 
-// Scan parses a single field from the reader. It returns false when there are no more fields to parse.
-func (r *Parser) Scan() bool {
-	if !r.fieldScanner.Scan() {
+// Next parses a single field from the reader. It returns false when there are no more fields to parse.
+func (r *Parser) Next(f *Field) bool {
+	if !r.fieldScanner.Next(f) {
 		if !r.inputScanner.Scan() {
 			return false
 		}
 
 		r.fieldScanner.Reset(r.inputScanner.Bytes())
 
-		return r.fieldScanner.Scan()
+		return r.fieldScanner.Next(f)
 	}
 
 	return true
 }
 
-// Field returns the last parsed field. The Field's Value byte slice isn't owned by the field, the underlying buffer
-// is owned by the bufio.Scanner that is used by the ReaderParser.
-func (r *Parser) Field() Field {
-	return r.fieldScanner.Field()
-}
-
 // Err returns the last read error.
 func (r *Parser) Err() error {
-	if r.inputScanner.Err() != nil {
-		return r.inputScanner.Err()
+	if err := r.inputScanner.Err(); err != nil {
+		return err
 	}
 	return r.fieldScanner.Err()
 }

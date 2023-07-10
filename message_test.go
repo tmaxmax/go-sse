@@ -11,6 +11,12 @@ import (
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
+func newChunk(tb testing.TB, data string) chunk {
+	tb.Helper()
+
+	return chunk{content: parser.Chunk{Data: []byte(data), HasNewline: strings.HasSuffix(data, "\n")}}
+}
+
 func TestNew(t *testing.T) {
 	t.Parallel()
 
@@ -33,12 +39,12 @@ func TestNew(t *testing.T) {
 	expected := Message{
 		expiresAt: now,
 		chunks: []chunk{
-			{data: []byte("whatever")},
-			{data: []byte("input")},
-			{data: []byte("will\n"), endsInNewline: true},
-			{data: []byte("be\n"), endsInNewline: true},
-			{data: []byte("chunked")},
-			{data: []byte("amazing")},
+			newChunk(t, "whatever"),
+			newChunk(t, "input"),
+			newChunk(t, "will\n"),
+			newChunk(t, "be\n"),
+			newChunk(t, "chunked"),
+			newChunk(t, "amazing"),
 		},
 		retryValue: []byte("1000\n"),
 		name:       []byte("x"),
@@ -115,9 +121,9 @@ func TestEvent_UnmarshalText(t *testing.T) {
 			input: "data: raw bytes here\nretry: 500\nretry: 1000\nid: 1000\nid: 2000\n: no comments\ndata: again raw bytes\ndata: from multiple lines\nevent: overwritten name\nevent: my name here\n\ndata: I should be ignored",
 			expected: Message{
 				chunks: []chunk{
-					{data: []byte("raw bytes here\n"), endsInNewline: true},
-					{data: []byte("again raw bytes\n"), endsInNewline: true},
-					{data: []byte("from multiple lines\n"), endsInNewline: true},
+					newChunk(t, "raw bytes here\n"),
+					newChunk(t, "again raw bytes\n"),
+					newChunk(t, "from multiple lines\n"),
 				},
 				retryValue: []byte("1000\n"),
 				name:       []byte("my name here"),

@@ -57,8 +57,7 @@ func toEv(tb testing.TB, s string) (ev sse.Event) {
 
 	p := parser.NewFieldParser([]byte(s))
 
-	for p.Scan() {
-		f := p.Field()
+	for f := (parser.Field{}); p.Next(&f); {
 		switch f.Name {
 		case parser.FieldNameData:
 			ev.Data = append(ev.Data, f.Value...)

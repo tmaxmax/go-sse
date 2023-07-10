@@ -15,8 +15,8 @@ import (
 )
 
 func isSingleLine(p []byte) bool {
-	_, remaining := parser.NewlineIndex(p)
-	return remaining == 0
+	_, newlineLen := parser.NewlineIndex(p)
+	return newlineLen == 0
 }
 
 // fieldBytes holds the byte representation of each field type along with a colon at the end.
@@ -29,9 +29,8 @@ var (
 )
 
 type chunk struct {
-	data          []byte
-	endsInNewline bool
-	isComment     bool
+	content   parser.Chunk
+	isComment bool
 }
 
 var newline = []byte{'\n'}
@@ -45,9 +44,9 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 	if err != nil {
 		return int64(n), err
 	}
-	m, err := w.Write(c.data)
+	m, err := w.Write(c.content.Data)
 	n += m
-	if err != nil || c.endsInNewline {
+	if err != nil || c.content.HasNewline {
 		return int64(n), err
 	}
 	m, err = w.Write(newline)
@@ -80,14 +79,12 @@ type Message struct {
 }
 
 func (e *Message) appendText(isComment bool, chunks ...string) {
-	s := parser.ChunkScanner{}
-
 	for _, c := range chunks {
-		s.Reset(unsafeBytes(c)) // SAFETY: strings are immutable
+		var content parser.Chunk
 
-		for s.Scan() {
-			data, endsInNewline := s.Chunk()
-			e.chunks = append(e.chunks, chunk{data: data, endsInNewline: endsInNewline, isComment: isComment})
+		for rem := unsafeBytes(c); len(rem) != 0; {
+			content, rem = parser.NextChunk(rem)
+			e.chunks = append(e.chunks, chunk{content: content, isComment: isComment})
 		}
 	}
 }
@@ -134,14 +131,12 @@ func (e *Message) AppendText(chunks ...string) {
 // Still, if you need to send binary data, you can use a Base64 encoder or any other encoder that does not output
 // any newline characters (\r or \n) and then append the resulted byte slices.
 func (e *Message) AppendData(chunks ...[]byte) {
-	s := parser.ChunkScanner{}
-
 	for _, c := range chunks {
-		s.Reset(c)
+		var content parser.Chunk
 
-		for s.Scan() {
-			data, endsInNewline := s.Chunk()
-			e.chunks = append(e.chunks, chunk{data: data, endsInNewline: endsInNewline})
+		for len(c) != 0 {
+			content, c = parser.NextChunk(c)
+			e.chunks = append(e.chunks, chunk{content: content})
 		}
 	}
 }
@@ -366,9 +361,7 @@ func (e *Message) UnmarshalText(p []byte) error {
 	s := parser.NewFieldParser(p)
 
 loop:
-	for s.Scan() {
-		f := s.Field()
-
+	for f := (parser.Field{}); s.Next(&f); {
 		switch f.Name {
 		case parser.FieldNameRetry:
 			if i := bytes.IndexFunc(f.Value, func(r rune) bool {
@@ -389,7 +382,7 @@ loop:
 			var data []byte
 			data = append(data, f.Value...)
 			data = append(data, newline...)
-			e.chunks = append(e.chunks, chunk{data: data, endsInNewline: true})
+			e.chunks = append(e.chunks, chunk{content: parser.Chunk{Data: data, HasNewline: true}})
 		case parser.FieldNameEvent:
 			e.name = append(e.name[:0], f.Value...)
 		case parser.FieldNameID:

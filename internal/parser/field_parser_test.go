@@ -7,7 +7,7 @@ import (
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
-func TestByteParser(t *testing.T) {
+func TestFieldParser(t *testing.T) {
 	t.Parallel()
 
 	type testCase struct {
@@ -72,8 +72,8 @@ func TestByteParser(t *testing.T) {
 			p := parser.NewFieldParser([]byte(test.data))
 			var segments []parser.Field
 
-			for p.Scan() {
-				segments = append(segments, p.Field())
+			for f := (parser.Field{}); p.Next(&f); {
+				segments = append(segments, f)
 			}
 
 			if p.Err() != test.err { //nolint
@@ -86,16 +86,16 @@ func TestByteParser(t *testing.T) {
 	}
 }
 
-func BenchmarkByteParser(b *testing.B) {
-	var f parser.Field
+func BenchmarkFieldParser(b *testing.B) {
 	data := []byte(benchmarkText)
 
 	b.ReportAllocs()
 
+	var f parser.Field
+
 	for n := 0; n < b.N; n++ {
 		p := parser.NewFieldParser(data)
-		for p.Scan() {
-			f = p.Field()
+		for p.Next(&f) {
 		}
 	}
 

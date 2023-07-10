@@ -20,7 +20,7 @@ func (e errReader) Read(_ []byte) (int, error) {
 	return 0, errReadFailed
 }
 
-func TestReaderParser(t *testing.T) {
+func TestParser(t *testing.T) {
 	t.Parallel()
 
 	type test struct {
@@ -83,7 +83,7 @@ data: still, here's some data: you deserve it
 			err:   errReadFailed,
 		},
 		{
-			name:  "Error from byte parser (no final newline)",
+			name:  "Error from field parser (no final newline)",
 			input: strings.NewReader("data: lmao"),
 			err:   parser.ErrUnexpectedEOF,
 		},
@@ -106,8 +106,8 @@ data: still, here's some data: you deserve it
 				fields = make([]parser.Field, 0, l)
 			}
 
-			for p.Scan() {
-				fields = append(fields, p.Field())
+			for f := (parser.Field{}); p.Next(&f); {
+				fields = append(fields, f)
 			}
 
 			if err := p.Err(); err != test.err { //nolint
@@ -121,17 +121,16 @@ data: still, here's some data: you deserve it
 	}
 }
 
-func BenchmarkReaderParser(b *testing.B) {
-	var f parser.Field
-
+func BenchmarkParser(b *testing.B) {
 	b.ReportAllocs()
+
+	var f parser.Field
 
 	for n := 0; n < b.N; n++ {
 		r := strings.NewReader(benchmarkText)
 		p := parser.New(r)
 
-		for p.Scan() {
-			f = p.Field()
+		for p.Next(&f) {
 		}
 	}
 

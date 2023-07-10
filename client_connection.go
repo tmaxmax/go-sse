@@ -209,9 +209,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 	p := parser.New(r)
 	ev, dirty := Event{}, false
 
-	for p.Scan() {
-		f := p.Field()
-
+	for f := (parser.Field{}); p.Next(&f); {
 		switch f.Name {
 		case parser.FieldNameData:
 			ev.Data = append(ev.Data, f.Value...)
