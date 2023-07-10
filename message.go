@@ -71,11 +71,11 @@ type Message struct {
 	Topic     string
 	ExpiresAt time.Time
 
-	ID   EventID
-	Name EventName
+	chunks []chunk
 
-	chunks     []chunk
-	retryValue string
+	ID    EventID
+	Name  EventName
+	Retry time.Duration
 }
 
 func (e *Message) appendText(isComment bool, chunks ...string) {
@@ -136,12 +136,6 @@ func (e *Message) Comment(comments ...string) {
 	e.appendText(true, comments...)
 }
 
-// SetRetry creates a field on the message's event that tells the client to set the event stream reconnection time to
-// the number of milliseconds it provides.
-func (e *Message) SetRetry(duration time.Duration) {
-	e.retryValue = strconv.FormatInt(duration.Milliseconds(), 10)
-}
-
 func (e *Message) writeMessageField(w io.Writer, f messageField, fieldBytes []byte) (int64, error) {
 	if !f.IsSet() {
 		return 0, nil
@@ -169,7 +163,7 @@ func (e *Message) writeName(w io.Writer) (int64, error) {
 }
 
 func (e *Message) writeRetry(w io.Writer) (int64, error) {
-	if e.retryValue == "" {
+	if e.Retry <= 0 {
 		return 0, nil
 	}
 
@@ -177,7 +171,17 @@ func (e *Message) writeRetry(w io.Writer) (int64, error) {
 	if err != nil {
 		return int64(n), err
 	}
-	m, err := writeString(w, e.retryValue)
+
+	var buf [13]byte // log10(INT64_MAX / 1e6) ~= 13
+
+	i := len(buf) - 1
+	for n := e.Retry.Milliseconds(); n != 0; {
+		buf[i] = '0' + byte(n%10)
+		i--
+		n /= 10
+	}
+
+	m, err := w.Write(buf[i+1:])
 	n += m
 	if err != nil {
 		return int64(n), err
@@ -271,7 +275,7 @@ func (e *Message) reset() {
 	e.chunks = nil
 	e.Name = EventName{}
 	e.ID = EventID{}
-	e.retryValue = ""
+	e.Retry = 0
 }
 
 // UnmarshalText extracts the first event found in the given byte slice into the
@@ -310,7 +314,16 @@ loop:
 				}
 			}
 
-			e.retryValue = f.Value
+			milli, err := strconv.ParseInt(f.Value, 10, 64)
+			if err != nil {
+				return &UnmarshalError{
+					FieldName:  string(f.Name),
+					FieldValue: f.Value,
+					Reason:     fmt.Errorf("invalid retry value: %w", err),
+				}
+			}
+
+			e.Retry = time.Duration(milli) * time.Millisecond
 		case parser.FieldNameData, parser.FieldNameComment:
 			e.chunks = append(e.chunks, chunk{content: f.Value, isComment: f.Name == parser.FieldNameComment})
 		case parser.FieldNameEvent:
@@ -328,7 +341,7 @@ loop:
 		}
 	}
 
-	if len(e.chunks) == 0 && !e.Name.IsSet() && e.retryValue == "" && !e.ID.IsSet() || s.Err() != nil {
+	if len(e.chunks) == 0 && !e.Name.IsSet() && e.Retry == 0 && !e.ID.IsSet() || s.Err() != nil {
 		e.reset()
 		return &UnmarshalError{Reason: ErrUnexpectedEOF}
 	}
@@ -342,10 +355,10 @@ func (e *Message) Clone() *Message {
 		ExpiresAt: e.ExpiresAt,
 		// The first AppendData will trigger a reallocation.
 		// Already appended chunks cannot be modified/removed, so this is safe.
-		chunks:     e.chunks[:len(e.chunks):len(e.chunks)],
-		retryValue: e.retryValue,
-		Name:       e.Name,
-		ID:         e.ID,
+		chunks: e.chunks[:len(e.chunks):len(e.chunks)],
+		Retry:  e.Retry,
+		Name:   e.Name,
+		ID:     e.ID,
 	}
 }
 

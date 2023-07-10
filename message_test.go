@@ -14,10 +14,8 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	e := Message{Name: Name("x"), ID: ID("lol")}
+	e := Message{Name: Name("x"), ID: ID("lol"), Retry: time.Second}
 	e.AppendData("whatever", "input", "will\nbe\nchunked", "amazing")
-	e.SetRetry(30)
-	e.SetRetry(time.Second)
 
 	now := time.Now()
 	e.ExpiresAt = now
@@ -32,9 +30,9 @@ func TestNew(t *testing.T) {
 			{content: "chunked"},
 			{content: "amazing"},
 		},
-		retryValue: "1000",
-		Name:       Name("x"),
-		ID:         ID("lol"),
+		Retry: time.Second,
+		Name:  Name("x"),
+		ID:    ID("lol"),
 	}
 
 	require.Equal(t, expected, e, "invalid event")
@@ -43,11 +41,10 @@ func TestNew(t *testing.T) {
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
-	e := Message{Name: Name("test_event"), ID: ID("example_id")}
+	e := Message{Name: Name("test_event"), ID: ID("example_id"), Retry: time.Second * 5}
 	e.AppendData("This is an example\nOf an event", "", "a string here")
 	e.Comment("This test should pass")
 	e.AppendData("Important data\nImportant again\r\rVery important\r\n")
-	e.SetRetry(time.Second * 5)
 
 	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: a string here\n: This test should pass\ndata: Important data\ndata: Important again\ndata: \ndata: Very important\n\n"
 	expectedWritten := int64(len(output))
@@ -105,9 +102,9 @@ func TestEvent_UnmarshalText(t *testing.T) {
 					{content: "again raw bytes"},
 					{content: "from multiple lines"},
 				},
-				retryValue: "1000",
-				Name:       Name("my name here"),
-				ID:         ID("2000"),
+				Retry: time.Second,
+				Name:  Name("my name here"),
+				ID:    ID("2000"),
 			},
 		},
 	}
@@ -125,10 +122,9 @@ func TestEvent_UnmarshalText(t *testing.T) {
 }
 
 func newBenchmarkEvent() *Message {
-	e := Message{Name: Name("This is the event's name"), ID: ID("example_id")}
+	e := Message{Name: Name("This is the event's name"), ID: ID("example_id"), Retry: time.Minute}
 	e.AppendData("Example data\nWith multiple rows\r\nThis is interesting")
 	e.Comment("An useless comment here that spans\non\n\nmultiple\nlines")
-	e.SetRetry(time.Minute)
 	return &e
 }
 
