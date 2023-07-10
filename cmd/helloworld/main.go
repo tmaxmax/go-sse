@@ -13,7 +13,7 @@ func main() {
 
 	go func() {
 		ev := &sse.Message{}
-		ev.AppendText("Hello world")
+		ev.AppendData("Hello world")
 
 		for range time.Tick(time.Second) {
 			_ = s.Publish(ev)

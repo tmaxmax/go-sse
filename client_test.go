@@ -55,13 +55,12 @@ func toEv(tb testing.TB, s string) (ev sse.Event) {
 		}
 	}()
 
-	p := parser.NewFieldParser([]byte(s))
+	p := parser.NewFieldParser(s)
 
 	for f := (parser.Field{}); p.Next(&f); {
 		switch f.Name {
 		case parser.FieldNameData:
-			ev.Data = append(ev.Data, f.Value...)
-			ev.Data = append(ev.Data, '\n')
+			ev.Data += f.Value + "\n"
 		case parser.FieldNameID:
 			ev.LastEventID = string(f.Value)
 		case parser.FieldNameEvent:
@@ -368,9 +367,9 @@ func TestConnection_Subscriptions(t *testing.T) {
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
 	firstEvent := sse.Event{}
-	secondEvent := sse.Event{Name: "test", Data: []byte("something"), LastEventID: "1"}
-	thirdEvent := sse.Event{Name: "test2", Data: []byte("something else"), LastEventID: "1"}
-	fourthEvent := sse.Event{Data: []byte("unnamed"), LastEventID: "2"}
+	secondEvent := sse.Event{Name: "test", Data: "something", LastEventID: "1"}
+	thirdEvent := sse.Event{Name: "test2", Data: "something else", LastEventID: "1"}
+	fourthEvent := sse.Event{Data: "unnamed", LastEventID: "2"}
 
 	all, unsubAll := events(t, conn)
 	defer unsubAll()
@@ -411,7 +410,7 @@ func TestConnection_dispatchDirty(t *testing.T) {
 		MaxRetries:        -1, // for coverage, test will fail if a retry is actually made
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
-	expected := sse.Event{Data: []byte("hello\nworld")}
+	expected := sse.Event{Data: "hello\nworld"}
 	var got sse.Event
 
 	conn.SubscribeMessages(func(e sse.Event) {

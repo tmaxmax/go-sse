@@ -89,7 +89,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 			e := &sse.Message{}
 			e.SetTTL(frequency)
 			e.SetName(metric)
-			e.AppendData(strconv.AppendInt(nil, v, 10))
+			e.AppendData(strconv.FormatInt(v, 10))
 
 			_ = sseHandler.Publish(e)
 		case <-ctx.Done():
@@ -122,7 +122,7 @@ func generateRandomNumbers() *sse.Message {
 	count := 1 + rand.Intn(5)
 
 	for i := 0; i < count; i++ {
-		e.AppendData(strconv.AppendUint(nil, rand.Uint64(), 10))
+		e.AppendData(strconv.FormatUint(rand.Uint64(), 10))
 	}
 
 	return e

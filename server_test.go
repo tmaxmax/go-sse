@@ -34,7 +34,7 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub sse.Subscription) erro
 	m.Sub = sub
 
 	e := &sse.Message{}
-	e.AppendText("hello")
+	e.AppendData("hello")
 
 	if !sub.Callback(e) {
 		return errors.New("callback failed")
@@ -224,7 +224,7 @@ func TestUpgradedRequest_Send(t *testing.T) {
 	rec.Flushed = false
 
 	ev := sse.Message{}
-	ev.AppendText("sarmale")
+	ev.AppendData("sarmale")
 	expected, _ := ev.MarshalText()
 
 	require.NoError(t, conn.Send(&ev), "unexpected Send error")
@@ -250,7 +250,7 @@ func getMessage(tb testing.TB) *sse.Message {
 	tb.Helper()
 
 	m := &sse.Message{}
-	m.AppendText("Hello world!", "Nice to see you all.")
+	m.AppendData("Hello world!", "Nice to see you all.")
 	m.SetID(sse.MustEventID(strconv.Itoa(rand.Int())))
 	m.SetName("test")
 

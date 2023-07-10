@@ -8,7 +8,7 @@ func isNewlineChar(b byte) bool {
 // NewlineIndex returns the index of the first occurrence of a newline sequence (\n, \r, or \r\n).
 // It also returns the sequence's length. If no sequence is found, index is equal to len(s)
 // and length is 0.
-func NewlineIndex(s []byte) (index, length int) {
+func NewlineIndex(s string) (index, length int) {
 	for l := len(s); index < l; index++ {
 		b := s[index]
 
@@ -30,16 +30,15 @@ func NewlineIndex(s []byte) (index, length int) {
 // The newline is defined in the Event Stream standard's documentation:
 // https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events
 type Chunk struct {
-	// Not owned by the Chunk instance.
-	Data []byte
+	Data string
 	// Whether the Data slice ends with a newline sequence or not.
 	HasNewline bool
 }
 
-// NextChunk retrieves the next Chunk of data from the given byte slice
+// NextChunk retrieves the next Chunk of data from the given string
 // along with the data remaining after the returned Chunk.
 // If the returned chunk is the last one, len(remaining) will be 0.
-func NextChunk(s []byte) (Chunk, []byte) {
+func NextChunk(s string) (Chunk, string) {
 	// NewlineIndex is not reused here so NextChunk can also be inlined.
 	for chunkLen, inputLen := 0, len(s); chunkLen < inputLen; chunkLen++ {
 		b := s[chunkLen]
@@ -54,5 +53,5 @@ func NextChunk(s []byte) (Chunk, []byte) {
 		}
 	}
 
-	return Chunk{Data: s}, nil
+	return Chunk{Data: s}, ""
 }

@@ -14,15 +14,14 @@ import (
 func newChunk(tb testing.TB, data string) chunk {
 	tb.Helper()
 
-	return chunk{content: parser.Chunk{Data: []byte(data), HasNewline: strings.HasSuffix(data, "\n")}}
+	return chunk{content: parser.Chunk{Data: data, HasNewline: strings.HasSuffix(data, "\n")}}
 }
 
 func TestNew(t *testing.T) {
 	t.Parallel()
 
 	e := Message{}
-	e.AppendText("whatever", "input", "will\nbe\nchunked")
-	e.AppendData([]byte("amazing"))
+	e.AppendData("whatever", "input", "will\nbe\nchunked", "amazing")
 	e.SetRetry(30)
 	e.SetRetry(time.Second)
 
@@ -46,31 +45,30 @@ func TestNew(t *testing.T) {
 			newChunk(t, "chunked"),
 			newChunk(t, "amazing"),
 		},
-		retryValue: []byte("1000\n"),
-		name:       []byte("x"),
-		id:         []byte("lol"),
+		retryValue: "1000",
+		name:       "x",
+		id:         MustEventID("lol"),
 	}
 
 	require.Equal(t, expected, e, "invalid event")
 
 	e.SetID(EventID{})
 
-	require.Nil(t, e.id, "id was not unset")
+	require.Zero(t, e.id, "id was not unset")
 }
 
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
 	e := Message{}
-	e.AppendText("This is an example\nOf an event", "")
-	e.AppendData([]byte("raw bytes here"))
+	e.AppendData("This is an example\nOf an event", "", "a string here")
 	e.Comment("This test should pass")
-	e.AppendText("Important data\nImportant again\r\rVery important\r\n")
+	e.AppendData("Important data\nImportant again\r\rVery important\r\n")
 	e.SetName("test_event")
 	e.SetRetry(time.Second * 5)
 	e.SetID(MustEventID("example_id"))
 
-	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: raw bytes here\n: This test should pass\ndata: Important data\ndata: Important again\rdata: \rdata: Very important\r\n\n"
+	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: a string here\n: This test should pass\ndata: Important data\ndata: Important again\rdata: \rdata: Very important\r\n\n"
 	expectedWritten := int64(len(output))
 
 	w := &strings.Builder{}
@@ -125,9 +123,9 @@ func TestEvent_UnmarshalText(t *testing.T) {
 					newChunk(t, "again raw bytes\n"),
 					newChunk(t, "from multiple lines\n"),
 				},
-				retryValue: []byte("1000\n"),
-				name:       []byte("my name here"),
-				id:         []byte("2000"),
+				retryValue: "1000",
+				name:       "my name here",
+				id:         MustEventID("2000"),
 			},
 		},
 	}
@@ -154,7 +152,7 @@ func TestEvent_ID(t *testing.T) {
 
 func newBenchmarkEvent() *Message {
 	e := Message{}
-	e.AppendText("Example data\nWith multiple rows\r\nThis is interesting")
+	e.AppendData("Example data\nWith multiple rows\r\nThis is interesting")
 	e.Comment("An useless comment here that spans\non\n\nmultiple\nlines")
 	e.SetName("This is the event's name")
 	e.SetID(MustEventID("example_id"))
@@ -198,7 +196,7 @@ var benchmarkText = []string{
 
 func BenchmarkEvent_WriteTo_text(b *testing.B) {
 	ev := Message{}
-	ev.AppendText(benchmarkText...)
+	ev.AppendData(benchmarkText...)
 
 	for n := 0; n < b.N; n++ {
 		_, _ = ev.WriteTo(io.Discard)

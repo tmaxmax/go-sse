@@ -19,7 +19,7 @@ type EventID struct {
 // is a valid ID. A valid ID must not have any newlines. If the input is not valid,
 // an unset (invalid) ID is returned.
 func NewEventID(value string) (EventID, error) {
-	if !isSingleLine([]byte(value)) {
+	if !isSingleLine(value) {
 		return EventID{}, fmt.Errorf("input is not a valid EventID: %q", value)
 	}
 	return EventID{value: value, set: true}, nil

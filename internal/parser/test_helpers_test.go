@@ -6,22 +6,12 @@ import (
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
-func getBytes(tb testing.TB, value string) []byte {
-	tb.Helper()
-
-	if len(value) > 0 {
-		return []byte(value)
-	}
-
-	return nil
-}
-
 func newField(tb testing.TB, name parser.FieldName, value string) parser.Field {
 	tb.Helper()
 
 	return parser.Field{
 		Name:  name,
-		Value: getBytes(tb, value),
+		Value: value,
 	}
 }
 

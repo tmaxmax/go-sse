@@ -12,7 +12,7 @@ func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) *ss
 	tb.Helper()
 
 	e := &sse.Message{Topic: topic}
-	e.AppendText(data)
+	e.AppendData(data)
 	e.SetTTL(expiry)
 	if id != "" {
 		e.SetID(sse.MustEventID(id))

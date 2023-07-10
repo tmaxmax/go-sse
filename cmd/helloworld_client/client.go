@@ -16,7 +16,7 @@ func main() {
 	out := log.New(os.Stdout, "", 0)
 
 	conn.SubscribeMessages(func(event sse.Event) {
-		out.Printf("%s\n\n", event)
+		out.Printf("%s\n\n", event.Data)
 	})
 
 	if err := conn.Connect(); err != nil {

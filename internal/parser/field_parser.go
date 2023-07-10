@@ -1,13 +1,13 @@
 package parser
 
 import (
-	"bytes"
 	"errors"
+	"strings"
 )
 
 // FieldParser extracts fields from a byte slice.
 type FieldParser struct {
-	data []byte
+	data string
 	err  error
 }
 
@@ -18,10 +18,10 @@ func min(a, b int) int {
 	return b
 }
 
-func scanSegment(chunk []byte) (name FieldName, data []byte, valid bool) {
-	colonPos, l := bytes.IndexByte(chunk, ':'), len(chunk)
+func scanSegment(chunk string) (name FieldName, data string, valid bool) {
+	colonPos, l := strings.IndexByte(chunk, ':'), len(chunk)
 	if colonPos > maxFieldNameLength {
-		return "", nil, false
+		return "", "", false
 	}
 	if colonPos == -1 {
 		colonPos = l
@@ -32,7 +32,7 @@ func scanSegment(chunk []byte) (name FieldName, data []byte, valid bool) {
 		dataStart := min(colonPos+1, l)
 		return name, chunk[dataStart:], true
 	}
-	return "", nil, false
+	return "", "", false
 }
 
 // ErrUnexpectedEOF is returned when the input is completely parsed but no complete field was found at the end.
@@ -41,7 +41,7 @@ var ErrUnexpectedEOF = errors.New("go-sse: unexpected end of input")
 // Next parses the next available field in the remaining buffer.
 // It returns false if there are no more fields to parse.
 func (f *FieldParser) Next(r *Field) bool {
-	for len(f.data) != 0 {
+	for f.data != "" {
 		var chunk Chunk
 		chunk, f.data = NextChunk(f.data)
 		if !chunk.HasNewline {
@@ -64,7 +64,7 @@ func (f *FieldParser) Next(r *Field) bool {
 }
 
 // Reset changes the buffer from which fields are parsed.
-func (f *FieldParser) Reset(data []byte) {
+func (f *FieldParser) Reset(data string) {
 	f.data = data
 	f.err = nil
 }
@@ -74,7 +74,7 @@ func (f *FieldParser) Err() error {
 	return f.err
 }
 
-func trimNewline(c []byte) []byte {
+func trimNewline(c string) string {
 	l := len(c)
 	if l > 0 && c[l-1] == '\n' {
 		c = c[:l-1]
@@ -87,21 +87,18 @@ func trimNewline(c []byte) []byte {
 	return c
 }
 
-func trimFirstSpace(c []byte) []byte {
-	if len(c) == 0 {
-		return nil
-	}
-	if c[0] == ' ' {
+func trimFirstSpace(c string) string {
+	if c != "" && c[0] == ' ' {
 		return c[1:]
 	}
 	return c
 }
 
-func trimData(c []byte) []byte {
+func trimData(c string) string {
 	return trimFirstSpace(trimNewline(c))
 }
 
-// NewFieldParser creates a parser that extracts fields from the given byte slice.
-func NewFieldParser(data []byte) *FieldParser {
+// NewFieldParser creates a parser that extracts fields from the given string.
+func NewFieldParser(data string) *FieldParser {
 	return &FieldParser{data: data}
 }

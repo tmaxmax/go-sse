@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +13,7 @@ import (
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
-func isSingleLine(p []byte) bool {
+func isSingleLine(p string) bool {
 	_, newlineLen := parser.NewlineIndex(p)
 	return newlineLen == 0
 }
@@ -44,7 +43,7 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 	if err != nil {
 		return int64(n), err
 	}
-	m, err := w.Write(c.content.Data)
+	m, err := writeString(w, c.content.Data)
 	n += m
 	if err != nil || c.content.HasNewline {
 		return int64(n), err
@@ -67,36 +66,25 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 type Message struct {
 	Topic string
 
-	expiresAt time.Time
-	// DO NOT MUTATE, either original byte slices or unsafely converted from strings
+	expiresAt  time.Time
 	chunks     []chunk
-	retryValue []byte
-	// DO NOT MUTATE, unsafely converted from string
-	name []byte
-	// nil - not set; non-nil, any length: set
-	// DO NOT MUTATE, unsafely converted from string
-	id []byte
+	retryValue string
+	name       string
+	id         EventID
 }
 
 func (e *Message) appendText(isComment bool, chunks ...string) {
 	for _, c := range chunks {
 		var content parser.Chunk
 
-		for rem := unsafeBytes(c); len(rem) != 0; {
-			content, rem = parser.NextChunk(rem)
+		for c != "" {
+			content, c = parser.NextChunk(c)
 			e.chunks = append(e.chunks, chunk{content: content, isComment: isComment})
 		}
 	}
 }
 
-// AppendText creates multiple data fields on the message's event from the given strings. It uses the unsafe package
-// to convert the string to a byte slice, so no allocations are made. See the AppendData method's
-// documentation for details about the data field type.
-func (e *Message) AppendText(chunks ...string) {
-	e.appendText(false, chunks...)
-}
-
-// AppendData creates multiple data fields on the message's event from the given byte slices.
+// AppendData creates multiple data fields on the message's event from the given strings.
 //
 // Server-sent events are not suited for binary data: the event fields are delimited by newlines,
 // where a newline can be a LF, CR or CRLF sequence. When the client interprets the fields,
@@ -128,17 +116,10 @@ func (e *Message) AppendText(chunks ...string) {
 // Besides, the protocol explicitly states that event streams must always be UTF-8 encoded:
 // https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream.
 //
-// Still, if you need to send binary data, you can use a Base64 encoder or any other encoder that does not output
-// any newline characters (\r or \n) and then append the resulted byte slices.
-func (e *Message) AppendData(chunks ...[]byte) {
-	for _, c := range chunks {
-		var content parser.Chunk
-
-		for len(c) != 0 {
-			content, c = parser.NextChunk(c)
-			e.chunks = append(e.chunks, chunk{content: content})
-		}
-	}
+// If you need to send binary data, you can use a Base64 encoder or any other encoder that does not output
+// any newline characters (\r or \n) and then append the resulted data.
+func (e *Message) AppendData(chunks ...string) {
+	e.appendText(false, chunks...)
 }
 
 // Comment creates a comment field on the message's event. If it spans multiple lines,
@@ -150,43 +131,32 @@ func (e *Message) Comment(comments ...string) {
 // SetRetry creates a field on the message's event that tells the client to set the event stream reconnection time to
 // the number of milliseconds it provides.
 func (e *Message) SetRetry(duration time.Duration) {
-	var buf []byte
-	if e.retryValue == nil {
-		buf = e.retryValue[:0]
-	}
-	e.retryValue = strconv.AppendInt(buf, duration.Milliseconds(), 10)
-	e.retryValue = append(e.retryValue, '\n')
+	e.retryValue = strconv.FormatInt(duration.Milliseconds(), 10)
 }
 
 // ID returns the message's event's ID.
 func (e *Message) ID() EventID {
-	if e.id == nil {
-		return EventID{}
-	}
-	return EventID{value: unsafeString(e.id), set: true} // SAFETY: ids are immutable
+	return e.id
 }
 
 func (e *Message) Name() string {
-	return unsafeString(e.name)
+	return e.name
 }
 
 // SetID sets the message's event's ID.
+// To remove the ID, pass an unset ID to this function.
 func (e *Message) SetID(id EventID) {
-	if !id.IsSet() {
-		e.id = nil
-		return
-	}
-	e.id = unsafeBytes(id.String()) // SAFETY: ids are immutable
+	e.id = id
 }
 
 // SetName sets the message's event's name.
 //
 // A Name cannot have multiple lines. If it has, the function will return false.
 func (e *Message) SetName(name string) bool {
-	if !isSingleLine([]byte(name)) {
+	if !isSingleLine(name) {
 		return false
 	}
-	e.name = unsafeBytes(name) // SAFETY: strings are immutable
+	e.name = name
 	return true
 }
 
@@ -212,7 +182,7 @@ func (e *Message) ExpiresAt() time.Time {
 }
 
 func (e *Message) writeID(w io.Writer) (int64, error) {
-	if e.id == nil {
+	if !e.id.IsSet() {
 		return 0, nil
 	}
 
@@ -220,7 +190,7 @@ func (e *Message) writeID(w io.Writer) (int64, error) {
 	if err != nil {
 		return int64(n), err
 	}
-	m, err := w.Write(e.id)
+	m, err := writeString(w, e.id.value)
 	n += m
 	if err != nil {
 		return int64(n), err
@@ -238,7 +208,7 @@ func (e *Message) writeName(w io.Writer) (int64, error) {
 	if err != nil {
 		return int64(n), err
 	}
-	m, err := w.Write(e.name)
+	m, err := writeString(w, e.name)
 	n += m
 	if err != nil {
 		return int64(n), err
@@ -248,7 +218,7 @@ func (e *Message) writeName(w io.Writer) (int64, error) {
 }
 
 func (e *Message) writeRetry(w io.Writer) (int64, error) {
-	if len(e.retryValue) == 0 {
+	if e.retryValue == "" {
 		return 0, nil
 	}
 
@@ -256,7 +226,12 @@ func (e *Message) writeRetry(w io.Writer) (int64, error) {
 	if err != nil {
 		return int64(n), err
 	}
-	m, err := w.Write(e.retryValue)
+	m, err := writeString(w, e.retryValue)
+	n += m
+	if err != nil {
+		return int64(n), err
+	}
+	m, err = w.Write(newline)
 	return int64(n + m), err
 }
 
@@ -320,7 +295,7 @@ func (e *Message) String() string {
 type UnmarshalError struct {
 	Reason    error
 	FieldName string
-	// The value of the invalid field. This is a copy of the original value.
+	// The value of the invalid field.
 	FieldValue string
 }
 
@@ -340,9 +315,9 @@ var ErrUnexpectedEOF = parser.ErrUnexpectedEOF
 
 func (e *Message) reset() {
 	e.chunks = nil
-	e.name = []byte{}
-	e.id = nil
-	e.retryValue = []byte{}
+	e.name = ""
+	e.id = EventID{}
+	e.retryValue = ""
 	e.expiresAt = time.Time{}
 }
 
@@ -358,16 +333,16 @@ func (e *Message) reset() {
 func (e *Message) UnmarshalText(p []byte) error {
 	e.reset()
 
-	s := parser.NewFieldParser(p)
+	s := parser.NewFieldParser(string(p))
 
 loop:
 	for f := (parser.Field{}); s.Next(&f); {
 		switch f.Name {
 		case parser.FieldNameRetry:
-			if i := bytes.IndexFunc(f.Value, func(r rune) bool {
+			if i := strings.IndexFunc(f.Value, func(r rune) bool {
 				return r < '0' || r > '9'
 			}); i != -1 {
-				r, _ := utf8.DecodeRune(f.Value[i:])
+				r, _ := utf8.DecodeRuneInString(f.Value[i:])
 
 				return &UnmarshalError{
 					FieldName:  string(f.Name),
@@ -376,27 +351,19 @@ loop:
 				}
 			}
 
-			e.retryValue = append(e.retryValue[:0], f.Value...)
-			e.retryValue = append(e.retryValue, newline...)
+			e.retryValue = f.Value
 		case parser.FieldNameData:
-			var data []byte
-			data = append(data, f.Value...)
-			data = append(data, newline...)
-			e.chunks = append(e.chunks, chunk{content: parser.Chunk{Data: data, HasNewline: true}})
+			e.chunks = append(e.chunks, chunk{content: parser.Chunk{Data: f.Value + "\n", HasNewline: true}})
 		case parser.FieldNameEvent:
-			e.name = append(e.name[:0], f.Value...)
+			e.name = f.Value
 		case parser.FieldNameID:
-			var buf []byte
-			if e.id != nil {
-				buf = e.id[:0]
-			}
-			e.id = append(buf, f.Value...) //nolint
+			e.id = EventID{value: f.Value, set: true}
 		default: // event end
 			break loop
 		}
 	}
 
-	if len(e.chunks) == 0 && len(e.name) == 0 && len(e.retryValue) == 0 && e.id == nil || s.Err() != nil {
+	if len(e.chunks) == 0 && e.name == "" && e.retryValue == "" && !e.id.IsSet() || s.Err() != nil {
 		e.reset()
 		return &UnmarshalError{Reason: ErrUnexpectedEOF}
 	}
@@ -408,18 +375,15 @@ func (e *Message) Clone() *Message {
 	return &Message{
 		expiresAt:  e.expiresAt,
 		chunks:     append([]chunk(nil), e.chunks...),
-		retryValue: append([]byte(nil), e.retryValue...),
+		retryValue: e.retryValue,
 		name:       e.name,
 		id:         e.id,
 	}
 }
 
-func unsafeBytes(s string) []byte {
-	b := *(*[]byte)(unsafe.Pointer(&s))
-	(*reflect.SliceHeader)(unsafe.Pointer(&b)).Cap = len(s)
-	return b
-}
-
-func unsafeString(p []byte) string {
-	return *(*string)(unsafe.Pointer(&p))
+func writeString(w io.Writer, s string) (int, error) {
+	return w.Write(*(*[]byte)(unsafe.Pointer(&struct {
+		string
+		int
+	}{s, len(s)})))
 }

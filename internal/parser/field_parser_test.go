@@ -69,7 +69,7 @@ func TestFieldParser(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			p := parser.NewFieldParser([]byte(test.data))
+			p := parser.NewFieldParser(test.data)
 			var segments []parser.Field
 
 			for f := (parser.Field{}); p.Next(&f); {
@@ -87,14 +87,12 @@ func TestFieldParser(t *testing.T) {
 }
 
 func BenchmarkFieldParser(b *testing.B) {
-	data := []byte(benchmarkText)
-
 	b.ReportAllocs()
 
 	var f parser.Field
 
 	for n := 0; n < b.N; n++ {
-		p := parser.NewFieldParser(data)
+		p := parser.NewFieldParser(benchmarkText)
 		for p.Next(&f) {
 		}
 	}

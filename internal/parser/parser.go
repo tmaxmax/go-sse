@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"unsafe"
 )
 
 // newSplitFunc creates a split function for a bufio.Scanner that splits a sequence of
@@ -16,12 +17,12 @@ func newSplitFunc() bufio.SplitFunc {
 
 	return func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		if len(data) == 0 {
-			return
+			return 0, nil, nil
 		}
 
-		var start, index, endlineLen int
+		var start int
 		for {
-			index, endlineLen = NewlineIndex(data[advance:])
+			index, endlineLen := NewlineIndex((*(*string)(unsafe.Pointer(&data)))[advance:])
 			advance += index + endlineLen
 			if index == 0 {
 				// If it was a blank line, skip it.
@@ -54,7 +55,7 @@ func newSplitFunc() bufio.SplitFunc {
 			isFirstToken = false
 		}
 
-		return
+		return advance, token, nil
 	}
 }
 
@@ -72,7 +73,7 @@ func (r *Parser) Next(f *Field) bool {
 			return false
 		}
 
-		r.fieldScanner.Reset(r.inputScanner.Bytes())
+		r.fieldScanner.Reset(r.inputScanner.Text())
 
 		return r.fieldScanner.Next(f)
 	}
@@ -93,5 +94,5 @@ func New(r io.Reader) *Parser {
 	sc := bufio.NewScanner(r)
 	sc.Split(newSplitFunc())
 
-	return &Parser{inputScanner: sc, fieldScanner: NewFieldParser(nil)}
+	return &Parser{inputScanner: sc, fieldScanner: NewFieldParser("")}
 }

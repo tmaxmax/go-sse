@@ -1,13 +1,13 @@
 package sse
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,13 +22,8 @@ type Event struct {
 	LastEventID string
 	// The event's name. It is empty if the eventName is unnamed.
 	Name string
-	// The events's payload in raw form. Use the String method if you need it as a string.
-	Data []byte
-}
-
-// String copies the data buffer and returns it as a string.
-func (e Event) String() string {
-	return string(e.Data)
+	// The events's payload.
+	Data string
 }
 
 // EventCallback is a function that is used to receive events from a Connection.
@@ -212,23 +207,22 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 	for f := (parser.Field{}); p.Next(&f); {
 		switch f.Name {
 		case parser.FieldNameData:
-			ev.Data = append(ev.Data, f.Value...)
-			ev.Data = append(ev.Data, '\n')
+			ev.Data += f.Value + "\n"
 			dirty = true
 		case parser.FieldNameEvent:
-			ev.Name = string(f.Value)
+			ev.Name = f.Value
 			dirty = true
 		case parser.FieldNameID:
 			// empty IDs are valid, only IDs that contain the null byte must be ignored:
 			// https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
-			if bytes.IndexByte(f.Value, 0) != -1 {
+			if strings.IndexByte(f.Value, 0) != -1 {
 				break
 			}
 
-			c.lastEventID = string(f.Value)
+			c.lastEventID = f.Value
 			dirty = true
 		case parser.FieldNameRetry:
-			n, err := strconv.ParseInt(string(f.Value), 10, 64)
+			n, err := strconv.ParseInt(f.Value, 10, 64)
 			if err != nil {
 				break
 			}

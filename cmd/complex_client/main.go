@@ -26,13 +26,13 @@ func main() {
 	conn.SubscribeToAll(func(event sse.Event) {
 		switch event.Name {
 		case "cycles", "ops":
-			out.Printf("Metric %s: %s\n", event.Name, event)
+			out.Printf("Metric %s: %s\n", event.Name, event.Data)
 		case "close":
 			out.Println("Server closed!")
 			cancel()
 		default: // no event name
 			var sum, num big.Int
-			for _, n := range strings.Split(event.String(), "\n") {
+			for _, n := range strings.Split(event.Data, "\n") {
 				_, _ = num.SetString(n, 10)
 				sum.Add(&sum, &num)
 			}
