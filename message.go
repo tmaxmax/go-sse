@@ -63,10 +63,13 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 //
 // The message's expiry time can be used when replaying messages to new clients. If a message
 // is expired, then it is not sent. Replay providers will usually make use of this.
+//
+// The Topic and ExpiresAt fields are used only on the server and are not sent to the client.
+// They are not part of the protocol.
 type Message struct {
-	Topic string
+	Topic     string
+	ExpiresAt time.Time
 
-	expiresAt  time.Time
 	chunks     []chunk
 	retryValue string
 	name       string
@@ -158,27 +161,6 @@ func (e *Message) SetName(name string) bool {
 	}
 	e.name = name
 	return true
-}
-
-// SetExpiry sets the message's expiry time to the given timestamp.
-//
-// This is not sent to the clients. The expiry time can be used when implementing
-// event replay providers, to see if an event is still valid for replay.
-func (e *Message) SetExpiry(t time.Time) {
-	e.expiresAt = t
-}
-
-// SetTTL sets the message's expiry time to a timestamp after the given duration from the current time.
-//
-// This is not sent to the clients. The expiry time can be used when implementing
-// event replay providers, to see if an event is still valid for replay.
-func (e *Message) SetTTL(d time.Duration) {
-	e.SetExpiry(time.Now().Add(d))
-}
-
-// ExpiresAt returns the timestamp when the message expires.
-func (e *Message) ExpiresAt() time.Time {
-	return e.expiresAt
 }
 
 func (e *Message) writeID(w io.Writer) (int64, error) {
@@ -318,7 +300,7 @@ func (e *Message) reset() {
 	e.name = ""
 	e.id = EventID{}
 	e.retryValue = ""
-	e.expiresAt = time.Time{}
+	e.ExpiresAt = time.Time{}
 }
 
 // UnmarshalText extracts the first event found in the given byte slice into the
@@ -373,7 +355,7 @@ loop:
 // Clone returns a copy of the message. It does not copy the appended data.
 func (e *Message) Clone() *Message {
 	return &Message{
-		expiresAt:  e.expiresAt,
+		ExpiresAt:  e.ExpiresAt,
 		chunks:     append([]chunk(nil), e.chunks...),
 		retryValue: e.retryValue,
 		name:       e.name,

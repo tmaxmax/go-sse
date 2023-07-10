@@ -33,10 +33,10 @@ func TestNew(t *testing.T) {
 	require.Falsef(t, e.SetName("multi\nline"), "name %q regarded as invalid", "multi\nline")
 
 	now := time.Now()
-	e.SetExpiry(now)
+	e.ExpiresAt = now
 
 	expected := Message{
-		expiresAt: now,
+		ExpiresAt: now,
 		chunks: []chunk{
 			newChunk(t, "whatever"),
 			newChunk(t, "input"),

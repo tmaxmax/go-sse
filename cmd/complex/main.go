@@ -86,8 +86,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 		case <-ticker.C:
 			v := Inc(metric)
 
-			e := &sse.Message{}
-			e.SetTTL(frequency)
+			e := &sse.Message{ExpiresAt: time.Now().Add(frequency)}
 			e.SetName(metric)
 			e.AppendData(strconv.FormatInt(v, 10))
 

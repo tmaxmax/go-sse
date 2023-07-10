@@ -79,7 +79,7 @@ func (v *ValidReplayProvider) GC() error {
 	var e *Message
 	for {
 		e = v.b.front()
-		if e == nil || e.ExpiresAt().After(now) {
+		if e == nil || e.ExpiresAt.After(now) {
 			break
 		}
 		v.b.dequeue()
@@ -97,7 +97,7 @@ func (v *ValidReplayProvider) Replay(subscription Subscription) bool {
 
 	now := time.Now()
 	for _, e := range events {
-		if e.ExpiresAt().After(now) && hasTopic(subscription.Topics, e.Topic) {
+		if e.ExpiresAt.After(now) && hasTopic(subscription.Topics, e.Topic) {
 			if !subscription.Callback(e) {
 				return false
 			}
