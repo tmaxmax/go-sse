@@ -41,6 +41,8 @@ The library provides both server-side and client-side implementations of the pro
 
 If you are not familiar with the protocol or not sure how it works, read [MDN's guide for using server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events). [The spec](https://html.spec.whatwg.org/multipage/server-sent-events.html) is also useful read!
 
+`go-sse` promises to support the [Go versions supported by the Go team](https://go.dev/doc/devel/release#policy) – that is, the 2 most recent major releases.
+
 ## Implementing a server
 
 ### Providers and why they are vital
