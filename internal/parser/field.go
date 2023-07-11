@@ -20,12 +20,16 @@ const (
 	FieldNameEvent = FieldName("event")
 	FieldNameRetry = FieldName("retry")
 	FieldNameID    = FieldName("id")
+	// FieldNameComment is a sentinel value that indicates
+	// comment fields. It is not a valid field name that should
+	// be written to a SSE stream.
+	FieldNameComment = FieldName(":")
 
 	maxFieldNameLength = 5
 )
 
 func getFieldName(b string) (FieldName, bool) {
-	switch FieldName(b) {
+	switch FieldName(b) { //nolint:exhaustive // Cannot have Comment here
 	case FieldNameData:
 		return FieldNameData, true
 	case FieldNameEvent:

@@ -39,6 +39,12 @@ func newIDField(tb testing.TB, value string) parser.Field {
 	return newField(tb, parser.FieldNameID, value)
 }
 
+func newCommentField(tb testing.TB, value string) parser.Field {
+	tb.Helper()
+
+	return newField(tb, parser.FieldNameComment, value)
+}
+
 const benchmarkText = `
 event:cycles
 data:8

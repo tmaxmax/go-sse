@@ -250,8 +250,11 @@ func (e *Message) WriteTo(w io.Writer) (int64, error) {
 	return int64(o) + n, err
 }
 
-// MarshalText writes the standard textual representation of the message's event. Marshalling and unmarshalling will not
-// result in a message with an event that has the same fields: comment fields will not be unmarshalled, and expiry time and topic will be lost.
+// MarshalText writes the standard textual representation of the message's event. Marshalling and unmarshalling will
+// result in a message with an event that has the same fields; expiry time and topic will be lost.
+//
+// If you want to preserve everything, create your own custom marshalling logic.
+// For an example using encoding/json, see the top-level MessageCustomJSONMarshal example.
 //
 // Use the WriteTo method if you don't need the byte representation.
 //
@@ -307,10 +310,15 @@ func (e *Message) reset() {
 }
 
 // UnmarshalText extracts the first event found in the given byte slice into the
-// receiver. Fields that are sent to the client are reset beforehand (event name, ID, data, retry);
-// Topic and ExpireAt are kept as provided.
+// receiver. The input is expected to be a wire format event, as defined by the spec.
+// Therefore, previous fields present on the Message will be overwritten
+// (i.e. event, ID, comments, data, retry), but the Topic and ExpiresAt will be kept as is,
+// as these are not event fields.
 //
-// Unmarshaling ignores comments and fields with invalid names. If no valid fields are found,
+// A method for marshalling and unmarshalling Messages together with their Topic and ExpiresAt
+// can be seen in the top-level example MessageCustomJSONMarshal.
+//
+// Unmarshaling ignores fields with invalid names. If no valid fields are found,
 // an error is returned. For a field to be valid it must end in a newline - if the last
 // field of the event doesn't end in one, an error is returned.
 //
@@ -319,6 +327,7 @@ func (e *Message) UnmarshalText(p []byte) error {
 	e.reset()
 
 	s := parser.NewFieldParser(string(p))
+	s.KeepComments(true)
 
 loop:
 	for f := (parser.Field{}); s.Next(&f); {
@@ -337,8 +346,8 @@ loop:
 			}
 
 			e.retryValue = f.Value
-		case parser.FieldNameData:
-			e.chunks = append(e.chunks, chunk{content: f.Value})
+		case parser.FieldNameData, parser.FieldNameComment:
+			e.chunks = append(e.chunks, chunk{content: f.Value, isComment: f.Name == parser.FieldNameComment})
 		case parser.FieldNameEvent:
 			e.name = f.Value
 		case parser.FieldNameID:

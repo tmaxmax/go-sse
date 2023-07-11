@@ -58,7 +58,7 @@ func toEv(tb testing.TB, s string) (ev sse.Event) {
 	p := parser.NewFieldParser(s)
 
 	for f := (parser.Field{}); p.Next(&f); {
-		switch f.Name {
+		switch f.Name { //nolint:exhaustive // Comment fields are not parsed.
 		case parser.FieldNameData:
 			ev.Data += f.Value + "\n"
 		case parser.FieldNameID:

@@ -205,7 +205,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 	ev, dirty := Event{}, false
 
 	for f := (parser.Field{}); p.Next(&f); {
-		switch f.Name {
+		switch f.Name { //nolint:exhaustive // Comment fields are not parsed.
 		case parser.FieldNameData:
 			ev.Data += f.Value + "\n"
 			dirty = true

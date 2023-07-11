@@ -11,10 +11,11 @@ func TestFieldParser(t *testing.T) {
 	t.Parallel()
 
 	type testCase struct {
-		err      error
-		name     string
-		data     string
-		expected []parser.Field
+		err          error
+		name         string
+		data         string
+		expected     []parser.Field
+		keepComments bool
 	}
 
 	tests := []testCase{
@@ -61,6 +62,18 @@ func TestFieldParser(t *testing.T) {
 				newDataField(t, "second chunk"),
 			},
 		},
+		{
+			name:         "Normal data with comments",
+			data:         "data: hello\ndata: world\r: comm\r\n:other comm\nevent: test\n",
+			keepComments: true,
+			expected: []parser.Field{
+				newDataField(t, "hello"),
+				newDataField(t, "world"),
+				newCommentField(t, "comm"),
+				newCommentField(t, "other comm"),
+				newEventField(t, "test"),
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -70,6 +83,8 @@ func TestFieldParser(t *testing.T) {
 			t.Parallel()
 
 			p := parser.NewFieldParser(test.data)
+			p.KeepComments(test.keepComments)
+
 			var segments []parser.Field
 
 			for f := (parser.Field{}); p.Next(&f); {
