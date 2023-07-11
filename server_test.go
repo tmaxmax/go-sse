@@ -242,7 +242,7 @@ func TestUpgradedRequest_Send_error(t *testing.T) {
 
 	rec.Flushed = false
 
-	require.ErrorIs(t, conn.Send(&sse.Message{}), errWriteFailed, "invalid Send error")
+	require.ErrorIs(t, conn.Send(&sse.Message{ID: sse.ID("")}), errWriteFailed, "invalid Send error")
 	require.True(t, rec.Flushed, "writer wasn't flushed")
 }
 

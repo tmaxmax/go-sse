@@ -216,6 +216,9 @@ func (e *Message) WriteTo(w io.Writer) (int64, error) {
 			return n, err
 		}
 	}
+	if n == 0 {
+		return 0, nil
+	}
 	o, err := w.Write(newline)
 	return int64(o) + n, err
 }
