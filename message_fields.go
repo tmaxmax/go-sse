@@ -42,7 +42,7 @@ type EventType struct {
 func NewType(value string) (EventType, error) {
 	f, err := newMessageField(value)
 	if err != nil {
-		return EventType{}, fmt.Errorf("invalid event name: %w", err)
+		return EventType{}, fmt.Errorf("invalid event type: %w", err)
 	}
 
 	return EventType{f}, nil

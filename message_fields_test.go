@@ -149,3 +149,15 @@ func TestMessageField_Value(t *testing.T) {
 	require.NoError(t, err, "unexpected error")
 	require.Equal(t, "", v, "unexpected value")
 }
+
+func TestFieldConstructors(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewID("a\nb")
+	require.EqualError(t, err, "invalid event ID: input is multiline")
+	_, err = NewType("a\nb")
+	require.EqualError(t, err, "invalid event type: input is multiline")
+
+	require.Panics(t, func() { ID("a\nb") })
+	require.Panics(t, func() { Type("a\nb") })
+}
