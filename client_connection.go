@@ -39,7 +39,7 @@ type EventCallbackRemover func()
 // Retry values received from servers will be taken into account.
 //
 // Connections must not be copied after they are created.
-type Connection struct {
+type Connection struct { //nolint:govet // The current order aids readability.
 	mu               sync.RWMutex
 	wg               sync.WaitGroup
 	request          *http.Request

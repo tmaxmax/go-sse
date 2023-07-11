@@ -51,3 +51,6 @@ linters-settings:
       - opinionated
   nestif:
     min-complexity: 8
+  govet:
+    enable:
+      - fieldalignment
