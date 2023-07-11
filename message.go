@@ -193,8 +193,7 @@ func (e *Message) writeRetry(w io.Writer) (int64, error) {
 }
 
 // WriteTo writes the standard textual representation of the message's event to an io.Writer.
-// This operation is heavily optimized and does zero allocations, so it is strongly preferred
-// over MarshalText or String.
+// This operation is heavily optimized, so it is strongly preferred over MarshalText or String.
 func (e *Message) WriteTo(w io.Writer) (int64, error) {
 	n, err := e.writeID(w)
 	if err != nil {
