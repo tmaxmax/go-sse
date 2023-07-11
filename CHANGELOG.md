@@ -2,6 +2,14 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2023-07-12
+
+### Fixed
+
+- `Message.WriteTo` now writes nothing if `Message` is empty.
+- `Message.WriteTo` does not attempt to write the `retry` field if `Message.Retry` is not at least 1ms.
+- `NewType` error message is updated to say "event type", not "event name".
+
 ## [0.5.0] - 2023-07-11
 
 This version comes with a series of internal refactorings that improve code readability and performance. It also replaces usage of `[]byte` for event data with `string` – SSE is a UTF-8 encoded text-based protocol, so raw bytes never made sense. This migration improves code safety (less `unsafe` usage and less worry about ownership) and reduces the memory footprint of some objects.
