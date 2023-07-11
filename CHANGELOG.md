@@ -24,6 +24,7 @@ Documentation and examples were also fixed and improved.
 
 - Minimum supported Go version was bumped from 1.16 to 1.19. From now on, the latest two major Go versions will be supported.
 - `sse.Message`: `AppendData` takes `string`s instead of `[]byte`.
+- `sse.Message`: `Comment` is now named `AppendComment`, for consistency with `AppendData`.
 - `sse.Message`: The message's expiration is not reset anymore by `UnmarshalText`.
 - `sse.Message`: `UnmarshalText` now unmarshals comments aswell.
 - `sse.Message`: `WriteTo` (and `MarshalText` and `String` as a result) replaces all newline sequences in data with LF.

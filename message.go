@@ -130,9 +130,9 @@ func (e *Message) AppendData(chunks ...string) {
 	e.appendText(false, chunks...)
 }
 
-// Comment creates a comment field on the message's event. If it spans multiple lines,
-// new comment lines are created.
-func (e *Message) Comment(comments ...string) {
+// AppendComment adds comment fields to the message's event.
+// If the comments span multiple lines, they are broken into multiple comment fields.
+func (e *Message) AppendComment(comments ...string) {
 	e.appendText(true, comments...)
 }
 

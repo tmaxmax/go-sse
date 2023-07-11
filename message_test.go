@@ -43,7 +43,7 @@ func TestEvent_WriteTo(t *testing.T) {
 
 	e := Message{Type: Type("test_event"), ID: ID("example_id"), Retry: time.Second * 5}
 	e.AppendData("This is an example\nOf an event", "", "a string here")
-	e.Comment("This test should pass")
+	e.AppendComment("This test should pass")
 	e.AppendData("Important data\nImportant again\r\rVery important\r\n")
 
 	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: a string here\n: This test should pass\ndata: Important data\ndata: Important again\ndata: \ndata: Very important\n\n"
@@ -124,7 +124,7 @@ func TestEvent_UnmarshalText(t *testing.T) {
 func newBenchmarkEvent() *Message {
 	e := Message{Type: Type("This is the event's name"), ID: ID("example_id"), Retry: time.Minute}
 	e.AppendData("Example data\nWith multiple rows\r\nThis is interesting")
-	e.Comment("An useless comment here that spans\non\n\nmultiple\nlines")
+	e.AppendComment("An useless comment here that spans\non\n\nmultiple\nlines")
 	return &e
 }
 
