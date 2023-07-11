@@ -122,7 +122,7 @@ type ReplayProvider interface {
 
 ```go
 sse.NewJoe(sse.JoeConfig{
-    ReplayProvider: server.NewValidReplayProvider(),
+    ReplayProvider:   sse.NewValidReplayProvider(),
     ReplayGCInterval: time.Minute,
 })
 ```
@@ -140,8 +140,8 @@ To publish events from the server, we use the `sse.Message` struct:
 ```go
 import "github.com/tmaxmax/go-sse"
 
-m := sse.Message{}
-m.AppendText("Hello world!", "Nice\nto see you.")
+m := &sse.Message{}
+m.AppendData("Hello world!", "Nice\nto see you.")
 ```
 
 Now let's send it to our clients:
@@ -149,7 +149,7 @@ Now let's send it to our clients:
 ```go
 var s *sse.Server
 
-s.Publish(&m)
+s.Publish(m)
 ```
 
 This is how clients will receive our event:
@@ -163,8 +163,8 @@ data: to see you.
 If we use a replay provider, such as `ValidReplayProvider`, this event will expire immediately and it also doesn't have an ID. Let's solve this:
 
 ```go
-m.SetID(sse.MustEventID("unique"))
-m.SetTTL(5 * time.Minute)
+m.ID = sse.ID("unique")
+m.ExpiresAt = time.Now().Add(5 * time.Minute)
 ```
 
 Now the event will look like this:
@@ -178,27 +178,27 @@ data: to see you.
 
 And the ValidReplayProvider will stop replaying it after 5 minutes!
 
-An `EventID` type is also exposed, which is a special type that denotes an event's ID. An ID must not have newlines, so we use a special function that validates the ID beforehand. `MustEventID` panics, but there's also `NewEventID`, which returns an error indicating whether the value was successfully converted to an ID or not:
+An `EventID` type is also exposed, which is a special type that denotes an event's ID. An ID must not have newlines, so we use a special function that validates the ID beforehand. The `ID` constructor function panics (it is useful when creating IDs from static strings), but there's also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
 
 ```go
-id, err := sse.NewEventID("invalid\nID")
+id, err := sse.NewID("invalid\nID")
 ```
 
-Here, `err` will be non-nil and `id` will be an invalid value: nothing will be sent to clients if you set an event's ID using that value!
+Here, `err` will be non-nil and `id` will be an invalid value: no `id` field will be sent to clients if you set an event's ID using that value!
 
-Either way, IDs and expiry times can also be retrieved, so replay providers can use them to determine from which IDs to replay messages and which messages are still valid:
+Either way, IDs and expiry times can also be retrieved – they are simple fields on `sse.Message`. Replay providers can use them to determine from which IDs to replay messages and which messages are still valid:
 
 ```go
-fmt.Println(m.ID(), m.ExpiresAt())
+fmt.Println(m.ID, m.ExpiresAt)
 ```
 
 Setting the event's name (or type) is equally easy:
 
 ```go
-ok := m.SetName("The event's name")
+m.Name = sse.Name("The event's name")
 ```
 
-Names cannot have newlines, so the returned boolean flag indicates whether the name was valid and set. Read the [docs][4] to find out more about messages and how to use them!
+Like IDs, names cannot have newlines. You are provided with constructors that follow the same convention: `Name` panics, `NewName` returns an error. Read the [docs][4] to find out more about messages and how to use them!
 
 ### The server-side "Hello world"
 
@@ -219,11 +219,11 @@ func main() {
     s := sse.NewServer()
 
     go func() {
-        m := sse.Message{}
-        m.AppendText("Hello world")
+        m := &sse.Message{}
+        m.AppendData("Hello world")
 
         for range time.Tick(time.Second) {
-            _ = s.Publish(&m)
+            _ = s.Publish(m)
         }
     }()
 
@@ -262,7 +262,7 @@ As you can see, it uses a `net/http` client. It also uses the [cenkalti/backoff]
 We must first create an `http.Request` - yup, a fully customizable request:
 
 ```go
-req, err := http.NewRequestWithContext(ctx, http.MethodGet, "host", nil)
+req, err := http.NewRequestWithContext(ctx, http.MethodGet, "host", http.NoBody)
 ```
 
 Any kind of request is valid as long as your server handler supports it: you can do a GET, a POST, send a body; do whatever! The context is used as always for cancellation - to stop receiving events you will have to cancel the context.
@@ -272,7 +272,7 @@ Let's initiate a connection with this request:
 import "github.com/tmaxmax/go-sse"
 
 conn := sse.DefaultClient.NewConnection(req)
-// you can also do client.NewConnection(req)
+// you can also do sse.NewConnection(req)
 // it is an utility function that calls the
 // NewConnection method on the default client
 ```
@@ -323,10 +323,8 @@ In order to work with events, the `sse.Event` type has some fields and methods e
 type Event struct {
     LastEventID string
     Name        string
-    Data        []byte
+    Data        string
 }
-
-func (e Event) String() { return string(e.Data) }
 ```
 
 Pretty self-explanatory, but make sure to read the [docs][6]!
@@ -337,7 +335,7 @@ Now, with this knowledge, let's subscribe to all unnamed events and, when the co
 out := log.New(os.Stdout, "", 0)
 
 unsubscribe := conn.SubscribeMessages(func(event sse.Event) {
-    out.Printf("Received an unnamed event: %s\n", event)
+    out.Printf("Received an unnamed event: %s\n", event.Data)
 })
 ```
 
@@ -389,7 +387,7 @@ func main() {
     out := log.New(os.Stdout, "", 0)
 
     conn.SubscribeMessages(func(ev sse.Event) {
-        out.Printf("%s\n\n", ev)
+        out.Printf("%s\n\n", ev.Data)
     })
 
     if err := conn.Connect(); err != nil {
