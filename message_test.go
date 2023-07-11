@@ -51,20 +51,38 @@ func TestEvent_WriteTo(t *testing.T) {
 
 	t.Run("Valid", func(t *testing.T) {
 		e := &Message{Type: Type("test_event"), ID: ID("example_id"), Retry: time.Second * 5}
-	e.AppendData("This is an example\nOf an event", "", "a string here")
-	e.AppendComment("This test should pass")
-	e.AppendData("Important data\nImportant again\r\rVery important\r\n")
+		e.AppendData("This is an example\nOf an event", "", "a string here")
+		e.AppendComment("This test should pass")
+		e.AppendData("Important data\nImportant again\r\rVery important\r\n")
 
-	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: a string here\n: This test should pass\ndata: Important data\ndata: Important again\ndata: \ndata: Very important\n\n"
-	expectedWritten := int64(len(output))
+		output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: a string here\n: This test should pass\ndata: Important data\ndata: Important again\ndata: \ndata: Very important\n\n"
+		expectedWritten := int64(len(output))
 
-	w := &strings.Builder{}
+		w := &strings.Builder{}
 
-	written, _ := e.WriteTo(w)
+		written, _ := e.WriteTo(w)
 
-	require.Equal(t, output, w.String(), "event written incorrectly")
-	require.Equal(t, expectedWritten, written, "written byte count wrong")
+		require.Equal(t, output, w.String(), "event written incorrectly")
+		require.Equal(t, expectedWritten, written, "written byte count wrong")
 	})
+
+	type retryTest struct {
+		expected string
+		value    time.Duration
+	}
+
+	retryTests := []retryTest{
+		{value: -1},
+		{value: 0},
+		{value: time.Microsecond},
+		{value: time.Millisecond, expected: "retry: 1\n\n"},
+	}
+	for _, v := range retryTests {
+		t.Run(fmt.Sprintf("Retry/%s", v.value), func(t *testing.T) {
+			e := &Message{Retry: v.value}
+			require.Equal(t, v.expected, e.String(), "incorrect output")
+		})
+	}
 }
 
 func TestEvent_UnmarshalText(t *testing.T) {

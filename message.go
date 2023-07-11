@@ -165,7 +165,8 @@ func (e *Message) writeType(w io.Writer) (int64, error) {
 }
 
 func (e *Message) writeRetry(w io.Writer) (int64, error) {
-	if e.Retry <= 0 {
+	millis := e.Retry.Milliseconds()
+	if millis <= 0 {
 		return 0, nil
 	}
 
@@ -177,10 +178,10 @@ func (e *Message) writeRetry(w io.Writer) (int64, error) {
 	var buf [13]byte // log10(INT64_MAX / 1e6) ~= 13
 
 	i := len(buf) - 1
-	for n := e.Retry.Milliseconds(); n != 0; {
-		buf[i] = '0' + byte(n%10)
+	for millis != 0 {
+		buf[i] = '0' + byte(millis%10)
 		i--
-		n /= 10
+		millis /= 10
 	}
 
 	m, err := w.Write(buf[i+1:])
