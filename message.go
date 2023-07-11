@@ -340,7 +340,9 @@ loop:
 		case parser.FieldNameEvent:
 			e.name = f.Value
 		case parser.FieldNameID:
+			if strings.IndexByte(f.Value, 0) == -1 {
 			e.id = EventID{value: f.Value, set: true}
+			}
 		default: // event end
 			break loop
 		}

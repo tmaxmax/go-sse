@@ -116,7 +116,7 @@ func TestEvent_UnmarshalText(t *testing.T) {
 		},
 		{
 			name:  "Valid input",
-			input: "data: raw bytes here\nretry: 500\nretry: 1000\nid: 1000\nid: 2000\n: no comments\ndata: again raw bytes\ndata: from multiple lines\nevent: overwritten name\nevent: my name here\n\ndata: I should be ignored",
+			input: "data: raw bytes here\nretry: 500\nretry: 1000\nid: 1000\nid: 2000\nid: \x001\n: no comments\ndata: again raw bytes\ndata: from multiple lines\nevent: overwritten name\nevent: my name here\n\ndata: I should be ignored",
 			expected: Message{
 				chunks: []chunk{
 					newChunk(t, "raw bytes here\n"),
