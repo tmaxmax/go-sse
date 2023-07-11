@@ -4,11 +4,13 @@ on:
   push:
     branches: [master]
     paths-ignore:
-      - "README.md"
+      - "**.md"
+      - "cmd/**"
   pull_request:
     branches: [master]
     paths-ignore:
-      - "README.md"
+      - "**.md"
+      - "cmd/**"
 
 jobs:
   lint:
