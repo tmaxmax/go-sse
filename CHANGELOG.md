@@ -2,6 +2,13 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2023-07-08
+
+### Fixed
+
+- Messages longer than 4096 bytes are no longer being dropped ([#2], thanks [@aldld])
+- Event parsing no longer panics on empty field with colon after name, see [test case](https://github.com/tmaxmax/go-sse/blob/4938f99db3bf7a8f057cb3e21ca88df57db3c0e0/internal/parser/field_parser_test.go#L37-L45) for example ([#5])
+
 ## [0.4.2] - 2021-10-17
 
 ### Added
@@ -77,6 +84,14 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## [0.1.0] - 2021-09-11 First release
 
+[@aldld]: https://github.com/aldld
+
+[#5]: https://github.com/tmaxmax/go-sse/pull/5
+[#2]: https://github.com/tmaxmax/go-sse/pull/2
+
+[0.4.3]: https://github.com/tmaxmax/go-sse/releases/tag/v0.4.3
+[0.4.2]: https://github.com/tmaxmax/go-sse/releases/tag/v0.4.2
+[0.4.1]: https://github.com/tmaxmax/go-sse/releases/tag/v0.4.1
 [0.4.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.4.0
 [0.3.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.3.0
 [0.2.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.2.0
