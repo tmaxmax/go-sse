@@ -35,13 +35,13 @@ type bufferNoID struct {
 }
 
 func (b *bufferNoID) queue(message **Message) {
-	if (*message).ID().IsSet() {
+	if (*message).ID.IsSet() {
 		b.buf = append(b.buf, *message)
 	}
 }
 
 func (b *bufferNoID) dequeue() {
-	b.lastRemovedID = b.buf[0].ID()
+	b.lastRemovedID = b.buf[0].ID
 	b.buf = b.buf[1:]
 }
 
@@ -54,7 +54,7 @@ func (b *bufferNoID) slice(atID EventID) []*Message {
 	}
 	index := -1
 	for i := range b.buf {
-		if atID == b.buf[i].ID() {
+		if atID == b.buf[i].ID {
 			index = i
 			break
 		}
@@ -76,7 +76,7 @@ const autoIDBase = 10
 
 func (b *bufferAutoID) queue(message **Message) {
 	*message = (*message).Clone()
-	(*message).SetID(MustEventID(strconv.FormatInt(b.lastID, autoIDBase)))
+	(*message).ID = ID(strconv.FormatInt(b.lastID, autoIDBase))
 	b.lastID++
 	b.buf = append(b.buf, *message)
 }

@@ -117,7 +117,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 	sse.NewServer(sse.WithProvider(p)).ServeHTTP(rec, req)
 
 	require.True(t, p.Subscribed, "Subscribe wasn't called")
-	require.Equal(t, sse.MustEventID("5"), p.Sub.LastEventID, "Invalid last event ID received")
+	require.Equal(t, sse.ID("5"), p.Sub.LastEventID, "Invalid last event ID received")
 	require.Equal(t, "data: hello\n\n", rec.Body.String(), "Invalid response body")
 	require.Equal(t, http.StatusOK, rec.Code, "invalid response code")
 }
@@ -249,10 +249,11 @@ func TestUpgradedRequest_Send_error(t *testing.T) {
 func getMessage(tb testing.TB) *sse.Message {
 	tb.Helper()
 
-	m := &sse.Message{}
+	m := &sse.Message{
+		ID:   sse.ID(strconv.Itoa(rand.Int())),
+		Name: sse.Name("test"),
+	}
 	m.AppendData("Hello world!", "Nice to see you all.")
-	m.SetID(sse.MustEventID(strconv.Itoa(rand.Int())))
-	m.SetName("test")
 
 	return m
 }

@@ -209,7 +209,7 @@ func TestJoe_errors(t *testing.T) {
 
 	err := j.Subscribe(context.Background(), sse.Subscription{
 		Callback:    cb,
-		LastEventID: sse.MustEventID("0"),
+		LastEventID: sse.ID("0"),
 		Topics:      []string{sse.DefaultTopic},
 	})
 	require.NoError(t, err, "error not received from replay")

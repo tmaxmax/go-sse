@@ -213,7 +213,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h := r.Header[headerLastEventID]; len(h) != 0 && h[0] != "" {
 		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
 		// which providers are required to ignore.
-		id, _ = NewEventID(h[0])
+		id, _ = NewID(h[0])
 	}
 
 	cb := func(m *Message) bool {

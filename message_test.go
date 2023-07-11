@@ -14,17 +14,10 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	e := Message{}
+	e := Message{Name: Name("x"), ID: ID("lol")}
 	e.AppendData("whatever", "input", "will\nbe\nchunked", "amazing")
 	e.SetRetry(30)
 	e.SetRetry(time.Second)
-
-	e.SetID(MustEventID("again"))
-	e.SetID(MustEventID("lol"))
-
-	require.Truef(t, e.SetName("whatever"), "name %q regarded as invalid", "whatever")
-	require.Truef(t, e.SetName("x"), "name %q regarded as invalid", "x")
-	require.Falsef(t, e.SetName("multi\nline"), "name %q regarded as invalid", "multi\nline")
 
 	now := time.Now()
 	e.ExpiresAt = now
@@ -40,27 +33,21 @@ func TestNew(t *testing.T) {
 			{content: "amazing"},
 		},
 		retryValue: "1000",
-		name:       "x",
-		id:         MustEventID("lol"),
+		Name:       Name("x"),
+		ID:         ID("lol"),
 	}
 
 	require.Equal(t, expected, e, "invalid event")
-
-	e.SetID(EventID{})
-
-	require.Zero(t, e.id, "id was not unset")
 }
 
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
-	e := Message{}
+	e := Message{Name: Name("test_event"), ID: ID("example_id")}
 	e.AppendData("This is an example\nOf an event", "", "a string here")
 	e.Comment("This test should pass")
 	e.AppendData("Important data\nImportant again\r\rVery important\r\n")
-	e.SetName("test_event")
 	e.SetRetry(time.Second * 5)
-	e.SetID(MustEventID("example_id"))
 
 	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: a string here\n: This test should pass\ndata: Important data\ndata: Important again\ndata: \ndata: Very important\n\n"
 	expectedWritten := int64(len(output))
@@ -119,8 +106,8 @@ func TestEvent_UnmarshalText(t *testing.T) {
 					{content: "from multiple lines"},
 				},
 				retryValue: "1000",
-				name:       "my name here",
-				id:         MustEventID("2000"),
+				Name:       Name("my name here"),
+				ID:         ID("2000"),
 			},
 		},
 	}
@@ -137,20 +124,10 @@ func TestEvent_UnmarshalText(t *testing.T) {
 	}
 }
 
-func TestEvent_ID(t *testing.T) {
-	e := Message{}
-	require.Equal(t, EventID{}, e.ID(), "invalid default ID")
-	id := MustEventID("idk")
-	e.SetID(id)
-	require.Equal(t, id, e.ID(), "invalid received ID")
-}
-
 func newBenchmarkEvent() *Message {
-	e := Message{}
+	e := Message{Name: Name("This is the event's name"), ID: ID("example_id")}
 	e.AppendData("Example data\nWith multiple rows\r\nThis is interesting")
 	e.Comment("An useless comment here that spans\non\n\nmultiple\nlines")
-	e.SetName("This is the event's name")
-	e.SetID(MustEventID("example_id"))
 	e.SetRetry(time.Minute)
 	return &e
 }

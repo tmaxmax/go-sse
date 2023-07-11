@@ -14,7 +14,7 @@ func msg(tb testing.TB, data, id string, expiry time.Duration, topic string) *ss
 	e := &sse.Message{Topic: topic, ExpiresAt: time.Now().Add(expiry)}
 	e.AppendData(data)
 	if id != "" {
-		e.SetID(sse.MustEventID(id))
+		e.ID = sse.ID(id)
 	}
 
 	return e
@@ -44,10 +44,10 @@ func replay(tb testing.TB, p sse.ReplayProvider, lastEventID sse.EventID, topics
 	sub.LastEventID = sse.EventID{}
 	_ = p.Replay(sub)
 
-	sub.LastEventID = sse.MustEventID("mama")
+	sub.LastEventID = sse.ID("mama")
 	_ = p.Replay(sub)
 
-	sub.LastEventID = sse.MustEventID("10")
+	sub.LastEventID = sse.ID("10")
 	_ = p.Replay(sub)
 
 	return replayed
@@ -65,7 +65,7 @@ func testReplayError(tb testing.TB, p sse.ReplayProvider) {
 
 	success := p.Replay(sse.Subscription{
 		Callback:    cb,
-		LastEventID: sse.MustEventID("1"),
+		LastEventID: sse.ID("1"),
 		Topics:      []string{sse.DefaultTopic},
 	})
 
@@ -103,7 +103,7 @@ func TestValidReplayProvider(t *testing.T) {
 
 	time.Sleep(exp)
 
-	replayed := replay(t, p, sse.MustEventID("3"))[0]
+	replayed := replay(t, p, sse.ID("3"))[0]
 	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
 
 	testReplayError(t, sse.NewValidReplayProvider())
@@ -121,7 +121,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 		msg(t, "world", "4", 0, sse.DefaultTopic),
 	)
 
-	replayed := replay(t, p, sse.MustEventID("2"))[0]
+	replayed := replay(t, p, sse.ID("2"))[0]
 	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
 
 	putMessages(p,
@@ -130,7 +130,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 		msg(t, "again", "7", 0, sse.DefaultTopic),
 	)
 
-	replayed = replay(t, p, sse.MustEventID("4"))[0]
+	replayed = replay(t, p, sse.ID("4"))[0]
 	require.Equal(t, "id: 7\ndata: again\n\n", replayed.String())
 
 	testReplayError(t, sse.NewFiniteReplayProvider(10))

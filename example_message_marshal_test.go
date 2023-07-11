@@ -13,9 +13,9 @@ type MessageMarshaler struct {
 }
 
 type messageMarshalFormat struct {
-	Topic     string       `json:"topic"`
 	ExpiresAt time.Time    `json:"expiresAt"`
 	Message   *sse.Message `json:"message"`
+	Topic     string       `json:"topic"`
 }
 
 func (m MessageMarshaler) MarshalJSON() ([]byte, error) {

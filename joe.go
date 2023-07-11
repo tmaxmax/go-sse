@@ -35,9 +35,9 @@ type ReplayProvider interface {
 	// to be thread-safe.
 	//
 	// Replay providers are not required to guarantee that after Put returns the new events
-	// can be replayed. If an error occurs and retrying the operation would block for too
-	// long, it can be aborted. The errors aren't returned as the server providers won't be able
-	// to handle them in a useful manner anyway.
+	// can be replayed. If an error occurs internally when putting the new message
+	// and retrying the operation would block for too long, it can be aborted.
+	// The errors aren't returned as the server providers won't be able to handle them in a useful manner.
 	Put(message **Message)
 	// Replay sends to a new subscriber all the valid events received by the provider
 	// since the event with the listener's ID. If the ID the listener provides

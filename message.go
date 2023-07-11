@@ -71,10 +71,11 @@ type Message struct {
 	Topic     string
 	ExpiresAt time.Time
 
+	ID   EventID
+	Name EventName
+
 	chunks     []chunk
 	retryValue string
-	name       string
-	id         EventID
 }
 
 func (e *Message) appendText(isComment bool, chunks ...string) {
@@ -141,66 +142,30 @@ func (e *Message) SetRetry(duration time.Duration) {
 	e.retryValue = strconv.FormatInt(duration.Milliseconds(), 10)
 }
 
-// ID returns the message's event's ID.
-func (e *Message) ID() EventID {
-	return e.id
-}
-
-func (e *Message) Name() string {
-	return e.name
-}
-
-// SetID sets the message's event's ID.
-// To remove the ID, pass an unset ID to this function.
-func (e *Message) SetID(id EventID) {
-	e.id = id
-}
-
-// SetName sets the message's event's name.
-//
-// A Name cannot have multiple lines. If it has, the function will return false.
-func (e *Message) SetName(name string) bool {
-	if !isSingleLine(name) {
-		return false
+func (e *Message) writeMessageField(w io.Writer, f messageField, fieldBytes []byte) (int64, error) {
+	if !f.IsSet() {
+		return 0, nil
 	}
-	e.name = name
-	return true
+
+	n, err := w.Write(fieldBytes)
+	if err != nil {
+		return int64(n), err
+	}
+	m, err := writeString(w, f.String())
+	n += m
+	if err != nil {
+		return int64(n), err
+	}
+	m, err = w.Write(newline)
+	return int64(n + m), err
 }
 
 func (e *Message) writeID(w io.Writer) (int64, error) {
-	if !e.id.IsSet() {
-		return 0, nil
-	}
-
-	n, err := w.Write(fieldBytesID)
-	if err != nil {
-		return int64(n), err
-	}
-	m, err := writeString(w, e.id.value)
-	n += m
-	if err != nil {
-		return int64(n), err
-	}
-	m, err = w.Write(newline)
-	return int64(n + m), err
+	return e.writeMessageField(w, e.ID.messageField, fieldBytesID)
 }
 
 func (e *Message) writeName(w io.Writer) (int64, error) {
-	if len(e.name) == 0 {
-		return 0, nil
-	}
-
-	n, err := w.Write(fieldBytesEvent)
-	if err != nil {
-		return int64(n), err
-	}
-	m, err := writeString(w, e.name)
-	n += m
-	if err != nil {
-		return int64(n), err
-	}
-	m, err = w.Write(newline)
-	return int64(n + m), err
+	return e.writeMessageField(w, e.Name.messageField, fieldBytesEvent)
 }
 
 func (e *Message) writeRetry(w io.Writer) (int64, error) {
@@ -304,8 +269,8 @@ var ErrUnexpectedEOF = parser.ErrUnexpectedEOF
 
 func (e *Message) reset() {
 	e.chunks = nil
-	e.name = ""
-	e.id = EventID{}
+	e.Name = EventName{}
+	e.ID = EventID{}
 	e.retryValue = ""
 }
 
@@ -340,7 +305,7 @@ loop:
 
 				return &UnmarshalError{
 					FieldName:  string(f.Name),
-					FieldValue: string(f.Value),
+					FieldValue: f.Value,
 					Reason:     fmt.Errorf("contains character %q, which is not an ASCII digit", r),
 				}
 			}
@@ -349,17 +314,21 @@ loop:
 		case parser.FieldNameData, parser.FieldNameComment:
 			e.chunks = append(e.chunks, chunk{content: f.Value, isComment: f.Name == parser.FieldNameComment})
 		case parser.FieldNameEvent:
-			e.name = f.Value
+			e.Name.value = f.Value
+			e.Name.set = true
 		case parser.FieldNameID:
-			if strings.IndexByte(f.Value, 0) == -1 {
-				e.id = EventID{value: f.Value, set: true}
+			if strings.IndexByte(f.Value, 0) != -1 {
+				break
 			}
+
+			e.ID.value = f.Value
+			e.ID.set = true
 		default: // event end
 			break loop
 		}
 	}
 
-	if len(e.chunks) == 0 && e.name == "" && e.retryValue == "" && !e.id.IsSet() || s.Err() != nil {
+	if len(e.chunks) == 0 && !e.Name.IsSet() && e.retryValue == "" && !e.ID.IsSet() || s.Err() != nil {
 		e.reset()
 		return &UnmarshalError{Reason: ErrUnexpectedEOF}
 	}
@@ -375,8 +344,8 @@ func (e *Message) Clone() *Message {
 		// Already appended chunks cannot be modified/removed, so this is safe.
 		chunks:     e.chunks[:len(e.chunks):len(e.chunks)],
 		retryValue: e.retryValue,
-		name:       e.name,
-		id:         e.id,
+		Name:       e.Name,
+		ID:         e.ID,
 	}
 }
 
