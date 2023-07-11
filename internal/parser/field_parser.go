@@ -7,9 +7,13 @@ import (
 
 // FieldParser extracts fields from a byte slice.
 type FieldParser struct {
-	err          error
-	data         string
+	err  error
+	data string
+
+	isUntouched bool
+
 	keepComments bool
+	removeBOM    bool
 }
 
 func min(a, b int) int {
@@ -62,6 +66,8 @@ var ErrUnexpectedEOF = errors.New("go-sse: unexpected end of input")
 // Next parses the next available field in the remaining buffer.
 // It returns false if there are no more fields to parse.
 func (f *FieldParser) Next(r *Field) bool {
+	f.isUntouched = false
+
 	for f.data != "" {
 		chunk, rem, hasNewline := NextChunk(f.data)
 		if !hasNewline {
@@ -85,6 +91,8 @@ func (f *FieldParser) Next(r *Field) bool {
 func (f *FieldParser) Reset(data string) {
 	f.data = data
 	f.err = nil
+	f.isUntouched = true
+	f.doRemoveBOM()
 }
 
 // Err returns the last error encountered by the parser. It is either nil or ErrUnexpectedEOF.
@@ -98,7 +106,23 @@ func (f *FieldParser) KeepComments(shouldKeep bool) {
 	f.keepComments = shouldKeep
 }
 
+// RemoveBOM configures the FieldParser to try and remove the Unicode BOM
+// when parsing the first field, if it exists.
+// If, at the time this option is set, the input is untouched (no fields were parsed),
+// it will also be attempted to remove the BOM.
+func (f *FieldParser) RemoveBOM(shouldRemove bool) {
+	f.removeBOM = shouldRemove
+	f.doRemoveBOM()
+}
+
+func (f *FieldParser) doRemoveBOM() {
+	if f.removeBOM && f.isUntouched && f.data != "" {
+		f.data = strings.TrimPrefix(f.data, "\xEF\xBB\xBF")
+		f.isUntouched = false
+	}
+}
+
 // NewFieldParser creates a parser that extracts fields from the given string.
 func NewFieldParser(data string) *FieldParser {
-	return &FieldParser{data: data}
+	return &FieldParser{data: data, isUntouched: true}
 }

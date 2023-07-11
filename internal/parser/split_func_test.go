@@ -19,8 +19,8 @@ func TestSplitFunc(t *testing.T) {
 	longString := strings.Repeat("abcdef\rghijklmn\nopqrstu\r\nvwxyz", 193)
 	testCases := []testCase{
 		{
-			name:  "Short sample with BOM",
-			input: "\xEF\xBB\xBFmama mea e super\nce genial\nsincer n-am ce sa zic\r\n\r\n\nmama tata bunica bunicul\nsarmale\r\n\r\r\naualeu\nce taraboi",
+			name:  "Short sample",
+			input: "mama mea e super\nce genial\nsincer n-am ce sa zic\r\n\r\n\nmama tata bunica bunicul\nsarmale\r\n\r\r\naualeu\nce taraboi",
 			expected: []string{
 				"mama mea e super\nce genial\nsincer n-am ce sa zic\r\n\r\n",
 				"mama tata bunica bunicul\nsarmale\r\n\r",
@@ -47,7 +47,7 @@ func TestSplitFunc(t *testing.T) {
 
 			r := strings.NewReader(tc.input)
 			s := bufio.NewScanner(r)
-			s.Split(newSplitFunc())
+			s.Split(splitFunc)
 
 			tokens := make([]string, 0, len(tc.expected))
 

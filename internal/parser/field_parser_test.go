@@ -99,6 +99,29 @@ func TestFieldParser(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("BOM", func(t *testing.T) {
+		p := parser.NewFieldParser("\xEF\xBB\xBFid: 5\n")
+		p.RemoveBOM(true)
+
+		var f parser.Field
+		if !p.Next(&f) {
+			t.Fatalf("a field should be available (err=%v)", p.Err())
+		}
+
+		expectedF := parser.Field{Name: parser.FieldNameID, Value: "5"}
+		if f != expectedF {
+			t.Fatalf("invalid field: received %v, expected %v", f, expectedF)
+		}
+
+		p.Reset("\xEF\xBB\xBF")
+		if p.Next(&f) {
+			t.Fatalf("no fields should be available")
+		}
+		if p.Err() != nil {
+			t.Fatalf("no error is expected after BOM removal")
+		}
+	})
 }
 
 func BenchmarkFieldParser(b *testing.B) {
