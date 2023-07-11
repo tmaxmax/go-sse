@@ -6,7 +6,7 @@ import (
 	"unsafe"
 )
 
-func getByteSliceDataAddress(tb testing.TB, b string) uintptr {
+func getStringDataAddress(tb testing.TB, b string) uintptr {
 	tb.Helper()
 
 	return (*reflect.StringHeader)(unsafe.Pointer(&b)).Data
@@ -16,40 +16,40 @@ func TestNextChunk(t *testing.T) {
 	t.Parallel()
 
 	s := "sarmale"
-	chunk, remaining := NextChunk(s)
+	chunk, remaining, hasNewline := NextChunk(s)
 
 	if remaining != "" {
 		t.Fatalf("No more data should be remaining")
 	}
 
-	if getByteSliceDataAddress(t, s) != getByteSliceDataAddress(t, chunk.Data) {
+	if getStringDataAddress(t, s) != getStringDataAddress(t, chunk) {
 		t.Fatalf("First chunk should always have the same address as the given buffer")
 	}
 
-	if s != chunk.Data {
-		t.Fatalf("Expected chunk %q, got %q", string(s), string(chunk.Data))
+	if s != chunk {
+		t.Fatalf("Expected chunk %q, got %q", s, chunk)
 	}
 
-	if chunk.HasNewline {
-		t.Fatalf("Ends in newline flag incorrect: expected %t, got %t", false, chunk.HasNewline)
+	if hasNewline {
+		t.Fatalf("Ends in newline flag incorrect: expected %t, got %t", false, hasNewline)
 	}
 
 	s = "sarmale cu\nghimbir\r\nsunt\rsuper\n\ngenial sincer\r\n"
 
-	expected := []Chunk{
-		{"sarmale cu\n", true},
-		{"ghimbir\r\n", true},
-		{"sunt\r", true},
-		{"super\n", true},
-		{"\n", true},
-		{"genial sincer\r\n", true},
+	expected := []string{
+		"sarmale cu",
+		"ghimbir",
+		"sunt",
+		"super",
+		"",
+		"genial sincer",
 	}
 
-	var got []Chunk
+	var got []string
 
 	for s != "" {
-		var chunk Chunk
-		chunk, s = NextChunk(s)
+		var chunk string
+		chunk, s, _ = NextChunk(s)
 
 		got = append(got, chunk)
 	}

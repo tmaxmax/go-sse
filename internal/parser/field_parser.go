@@ -18,10 +18,10 @@ func min(a, b int) int {
 	return b
 }
 
-func scanSegment(chunk string) (name FieldName, data string, valid bool) {
+func scanSegment(chunk string, out *Field) bool {
 	colonPos, l := strings.IndexByte(chunk, ':'), len(chunk)
 	if colonPos > maxFieldNameLength {
-		return "", "", false
+		return false
 	}
 	if colonPos == -1 {
 		colonPos = l
@@ -29,10 +29,17 @@ func scanSegment(chunk string) (name FieldName, data string, valid bool) {
 
 	name, ok := getFieldName(chunk[:colonPos])
 	if ok {
-		dataStart := min(colonPos+1, l)
-		return name, chunk[dataStart:], true
+		out.Name = name
+		out.Value = trimFirstSpace(chunk[min(colonPos+1, l):])
+	} else if chunk == "" {
+		// scanSegment is called only with chunks which end with a newline in the input.
+		// If chunk is empty, it means that this is a blank line which ends the event,
+		// so an empty Field needs to be returned.
+		out.Name = ""
+		out.Value = ""
 	}
-	return "", "", false
+
+	return ok || chunk == ""
 }
 
 // ErrUnexpectedEOF is returned when the input is completely parsed but no complete field was found at the end.
@@ -42,20 +49,17 @@ var ErrUnexpectedEOF = errors.New("go-sse: unexpected end of input")
 // It returns false if there are no more fields to parse.
 func (f *FieldParser) Next(r *Field) bool {
 	for f.data != "" {
-		var chunk Chunk
-		chunk, f.data = NextChunk(f.data)
-		if !chunk.HasNewline {
+		chunk, rem, hasNewline := NextChunk(f.data)
+		if !hasNewline {
 			f.err = ErrUnexpectedEOF
 			return false
 		}
 
-		name, data, ok := scanSegment(chunk.Data)
-		if !ok {
+		f.data = rem
+
+		if !scanSegment(chunk, r) {
 			continue
 		}
-
-		r.Name = name
-		r.Value = trimData(data)
 
 		return true
 	}
@@ -74,28 +78,11 @@ func (f *FieldParser) Err() error {
 	return f.err
 }
 
-func trimNewline(c string) string {
-	l := len(c)
-	if l > 0 && c[l-1] == '\n' {
-		c = c[:l-1]
-		l--
-	}
-	if l > 0 && c[l-1] == '\r' {
-		c = c[:l-1]
-	}
-
-	return c
-}
-
 func trimFirstSpace(c string) string {
 	if c != "" && c[0] == ' ' {
 		return c[1:]
 	}
 	return c
-}
-
-func trimData(c string) string {
-	return trimFirstSpace(trimNewline(c))
 }
 
 // NewFieldParser creates a parser that extracts fields from the given string.

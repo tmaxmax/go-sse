@@ -20,7 +20,7 @@ func TestFieldParser(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "Normal data",
-			data: "event: sarmale\ndata:doresc sarmale\ndata:  multe sarmale  \r\n\n",
+			data: "event: sarmale\ndata:doresc sarmale\n: comentariu\ndata:  multe sarmale  \r\n\n",
 			expected: []parser.Field{
 				newEventField(t, "sarmale"),
 				newDataField(t, "doresc sarmale"),

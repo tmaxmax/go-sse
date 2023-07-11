@@ -25,11 +25,11 @@ var (
 	fieldBytesEvent   = []byte(parser.FieldNameEvent + ": ")
 	fieldBytesRetry   = []byte(parser.FieldNameRetry + ": ")
 	fieldBytesID      = []byte(parser.FieldNameID + ": ")
-	fieldBytesComment = []byte{':', ' '}
+	fieldBytesComment = []byte(": ")
 )
 
 type chunk struct {
-	content   parser.Chunk
+	content   string
 	isComment bool
 }
 
@@ -44,9 +44,9 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 	if err != nil {
 		return int64(n), err
 	}
-	m, err := writeString(w, c.content.Data)
+	m, err := writeString(w, c.content)
 	n += m
-	if err != nil || c.content.HasNewline {
+	if err != nil {
 		return int64(n), err
 	}
 	m, err = w.Write(newline)
@@ -79,10 +79,10 @@ type Message struct {
 
 func (e *Message) appendText(isComment bool, chunks ...string) {
 	for _, c := range chunks {
-		var content parser.Chunk
+		var content string
 
 		for c != "" {
-			content, c = parser.NextChunk(c)
+			content, c, _ = parser.NextChunk(c)
 			e.chunks = append(e.chunks, chunk{content: content, isComment: isComment})
 		}
 	}
@@ -122,6 +122,9 @@ func (e *Message) appendText(isComment bool, chunks ...string) {
 //
 // If you need to send binary data, you can use a Base64 encoder or any other encoder that does not output
 // any newline characters (\r or \n) and then append the resulted data.
+//
+// Given that clients treat all newlines the same and replace the original newlines with LF,
+// for internal code simplicity AppendData replaces them aswell.
 func (e *Message) AppendData(chunks ...string) {
 	e.appendText(false, chunks...)
 }
@@ -335,12 +338,12 @@ loop:
 
 			e.retryValue = f.Value
 		case parser.FieldNameData:
-			e.chunks = append(e.chunks, chunk{content: parser.Chunk{Data: f.Value + "\n", HasNewline: true}})
+			e.chunks = append(e.chunks, chunk{content: f.Value})
 		case parser.FieldNameEvent:
 			e.name = f.Value
 		case parser.FieldNameID:
 			if strings.IndexByte(f.Value, 0) == -1 {
-			e.id = EventID{value: f.Value, set: true}
+				e.id = EventID{value: f.Value, set: true}
 			}
 		default: // event end
 			break loop

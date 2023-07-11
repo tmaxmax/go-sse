@@ -25,10 +25,7 @@ const (
 )
 
 func getFieldName(b string) (FieldName, bool) {
-	if len(b) == 0 {
-		return "", false
-	}
-	switch FieldName(trimNewline(b)) {
+	switch FieldName(b) {
 	case FieldNameData:
 		return FieldNameData, true
 	case FieldNameEvent:
@@ -38,6 +35,6 @@ func getFieldName(b string) (FieldName, bool) {
 	case FieldNameID:
 		return FieldNameID, true
 	default:
-		return "", b[0] == '\n' || b[0] == '\r'
+		return "", false
 	}
 }

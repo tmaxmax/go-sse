@@ -11,12 +11,6 @@ import (
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
-func newChunk(tb testing.TB, data string) chunk {
-	tb.Helper()
-
-	return chunk{content: parser.Chunk{Data: data, HasNewline: strings.HasSuffix(data, "\n")}}
-}
-
 func TestNew(t *testing.T) {
 	t.Parallel()
 
@@ -38,12 +32,12 @@ func TestNew(t *testing.T) {
 	expected := Message{
 		ExpiresAt: now,
 		chunks: []chunk{
-			newChunk(t, "whatever"),
-			newChunk(t, "input"),
-			newChunk(t, "will\n"),
-			newChunk(t, "be\n"),
-			newChunk(t, "chunked"),
-			newChunk(t, "amazing"),
+			{content: "whatever"},
+			{content: "input"},
+			{content: "will"},
+			{content: "be"},
+			{content: "chunked"},
+			{content: "amazing"},
 		},
 		retryValue: "1000",
 		name:       "x",
@@ -68,7 +62,7 @@ func TestEvent_WriteTo(t *testing.T) {
 	e.SetRetry(time.Second * 5)
 	e.SetID(MustEventID("example_id"))
 
-	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: a string here\n: This test should pass\ndata: Important data\ndata: Important again\rdata: \rdata: Very important\r\n\n"
+	output := "id: example_id\nevent: test_event\nretry: 5000\ndata: This is an example\ndata: Of an event\ndata: a string here\n: This test should pass\ndata: Important data\ndata: Important again\ndata: \ndata: Very important\n\n"
 	expectedWritten := int64(len(output))
 
 	w := &strings.Builder{}
@@ -119,9 +113,9 @@ func TestEvent_UnmarshalText(t *testing.T) {
 			input: "data: raw bytes here\nretry: 500\nretry: 1000\nid: 1000\nid: 2000\nid: \x001\n: no comments\ndata: again raw bytes\ndata: from multiple lines\nevent: overwritten name\nevent: my name here\n\ndata: I should be ignored",
 			expected: Message{
 				chunks: []chunk{
-					newChunk(t, "raw bytes here\n"),
-					newChunk(t, "again raw bytes\n"),
-					newChunk(t, "from multiple lines\n"),
+					{content: "raw bytes here"},
+					{content: "again raw bytes"},
+					{content: "from multiple lines"},
 				},
 				retryValue: "1000",
 				name:       "my name here",
