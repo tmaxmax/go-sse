@@ -89,7 +89,9 @@ func (e *Message) appendText(isComment bool, chunks ...string) {
 	}
 }
 
-// AppendData creates multiple data fields on the message's event from the given strings.
+// AppendData adds multiple data fields on the message's event from the given strings.
+// Each string will be a distinct data field, and if the strings themselves span multiple lines
+// they will be broken into multiple fields.
 //
 // Server-sent events are not suited for binary data: the event fields are delimited by newlines,
 // where a newline can be a LF, CR or CRLF sequence. When the client interprets the fields,
