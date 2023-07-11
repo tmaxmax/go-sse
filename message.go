@@ -302,6 +302,7 @@ func (e *Message) UnmarshalText(p []byte) error {
 
 	s := parser.NewFieldParser(string(p))
 	s.KeepComments(true)
+	s.RemoveBOM(true)
 
 loop:
 	for f := (parser.Field{}); s.Next(&f); {

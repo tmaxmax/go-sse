@@ -2,6 +2,12 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- `Message.UnmarshalText` now strips the leading Unicode BOM, if it exists, as per the specification.
+
 ## [0.5.1] - 2023-07-12
 
 ### Fixed
