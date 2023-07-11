@@ -43,6 +43,9 @@ func main() {
 	}
 	s.RegisterOnShutdown(func() {
 		e := &sse.Message{Type: sse.Type("close")}
+		// Adding data is necessary because spec-compliant clients
+		// do not dispatch events without data.
+		e.AppendData("bye")
 		// Broadcast a close message so clients can gracefully disconnect.
 		_ = sseHandler.Publish(e)
 		_ = sseHandler.Shutdown()
