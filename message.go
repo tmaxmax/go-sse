@@ -301,12 +301,11 @@ func (e *Message) reset() {
 	e.name = ""
 	e.id = EventID{}
 	e.retryValue = ""
-	e.ExpiresAt = time.Time{}
 }
 
 // UnmarshalText extracts the first event found in the given byte slice into the
-// receiver. The receiver is always reset to the message's default value before unmarshaling,
-// so always use a new Message instance if you don't want to overwrite data.
+// receiver. Fields that are sent to the client are reset beforehand (event name, ID, data, retry);
+// Topic and ExpireAt are kept as provided.
 //
 // Unmarshaling ignores comments and fields with invalid names. If no valid fields are found,
 // an error is returned. For a field to be valid it must end in a newline - if the last
