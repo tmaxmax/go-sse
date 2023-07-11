@@ -353,11 +353,14 @@ loop:
 	return nil
 }
 
-// Clone returns a copy of the message. It does not copy the appended data.
+// Clone returns a copy of the message.
 func (e *Message) Clone() *Message {
 	return &Message{
-		ExpiresAt:  e.ExpiresAt,
-		chunks:     append([]chunk(nil), e.chunks...),
+		Topic:     e.Topic,
+		ExpiresAt: e.ExpiresAt,
+		// The first AppendData will trigger a reallocation.
+		// Already appended chunks cannot be modified/removed, so this is safe.
+		chunks:     e.chunks[:len(e.chunks):len(e.chunks)],
 		retryValue: e.retryValue,
 		name:       e.name,
 		id:         e.id,
