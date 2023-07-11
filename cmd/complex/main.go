@@ -42,7 +42,7 @@ func main() {
 		ReadHeaderTimeout: time.Second * 10,
 	}
 	s.RegisterOnShutdown(func() {
-		e := &sse.Message{Name: sse.Name("close")}
+		e := &sse.Message{Type: sse.Type("close")}
 		// Broadcast a close message so clients can gracefully disconnect.
 		_ = sseHandler.Publish(e)
 		_ = sseHandler.Shutdown()
@@ -86,7 +86,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 			v := Inc(metric)
 
 			e := &sse.Message{
-				Name:      sse.Name(metric),
+				Type:      sse.Type(metric),
 				ExpiresAt: time.Now().Add(frequency),
 			}
 			e.AppendData(strconv.FormatInt(v, 10))

@@ -251,7 +251,7 @@ func getMessage(tb testing.TB) *sse.Message {
 
 	m := &sse.Message{
 		ID:   sse.ID(strconv.Itoa(rand.Int())),
-		Name: sse.Name("test"),
+		Type: sse.Type("test"),
 	}
 	m.AppendData("Hello world!", "Nice to see you all.")
 

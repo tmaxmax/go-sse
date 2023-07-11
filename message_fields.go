@@ -30,28 +30,28 @@ func ID(value string) EventID {
 	return must(NewID(value))
 }
 
-// EventName is a value of the "event" field.
+// EventType is a value of the "event" field.
 // It must have a single line.
-type EventName struct {
+type EventType struct {
 	messageField
 }
 
-// NewName creates a value for the "event" field.
+// NewType creates a value for the "event" field.
 // It is valid if it does not have any newlines.
 // If the input is not valid, an unset (invalid) ID is returned.
-func NewName(value string) (EventName, error) {
+func NewType(value string) (EventType, error) {
 	f, err := newMessageField(value)
 	if err != nil {
-		return EventName{}, fmt.Errorf("invalid event name: %w", err)
+		return EventType{}, fmt.Errorf("invalid event name: %w", err)
 	}
 
-	return EventName{f}, nil
+	return EventType{f}, nil
 }
 
-// Name creates an event name and assumes it is valid.
+// Type creates an EventType and assumes it is valid.
 // If it is not valid, it panics.
-func Name(value string) EventName {
-	return must(NewName(value))
+func Type(value string) EventType {
+	return must(NewType(value))
 }
 
 func must[T any](v T, err error) T {

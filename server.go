@@ -38,7 +38,7 @@ type Subscription struct {
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
 	LastEventID EventID
 	// The topics to receive message from. If no topic is specified, a default topic is implied.
-	// Topics are orthogonal to event names. They are used to filter what the server sends to each client.
+	// Topics are orthogonal to event types. They are used to filter what the server sends to each client.
 	//
 	// If using a Provider directly, without a Server instance, you must specify at least one topic.
 	// The Server automatically adds the default topic if no topic is specified.

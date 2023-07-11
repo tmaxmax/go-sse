@@ -74,7 +74,7 @@ type Message struct {
 	chunks []chunk
 
 	ID    EventID
-	Name  EventName
+	Type  EventType
 	Retry time.Duration
 }
 
@@ -158,8 +158,8 @@ func (e *Message) writeID(w io.Writer) (int64, error) {
 	return e.writeMessageField(w, e.ID.messageField, fieldBytesID)
 }
 
-func (e *Message) writeName(w io.Writer) (int64, error) {
-	return e.writeMessageField(w, e.Name.messageField, fieldBytesEvent)
+func (e *Message) writeType(w io.Writer) (int64, error) {
+	return e.writeMessageField(w, e.Type.messageField, fieldBytesEvent)
 }
 
 func (e *Message) writeRetry(w io.Writer) (int64, error) {
@@ -198,7 +198,7 @@ func (e *Message) WriteTo(w io.Writer) (int64, error) {
 	if err != nil {
 		return n, err
 	}
-	m, err := e.writeName(w)
+	m, err := e.writeType(w)
 	n += m
 	if err != nil {
 		return n, err
@@ -273,7 +273,7 @@ var ErrUnexpectedEOF = parser.ErrUnexpectedEOF
 
 func (e *Message) reset() {
 	e.chunks = nil
-	e.Name = EventName{}
+	e.Type = EventType{}
 	e.ID = EventID{}
 	e.Retry = 0
 }
@@ -327,8 +327,8 @@ loop:
 		case parser.FieldNameData, parser.FieldNameComment:
 			e.chunks = append(e.chunks, chunk{content: f.Value, isComment: f.Name == parser.FieldNameComment})
 		case parser.FieldNameEvent:
-			e.Name.value = f.Value
-			e.Name.set = true
+			e.Type.value = f.Value
+			e.Type.set = true
 		case parser.FieldNameID:
 			if strings.IndexByte(f.Value, 0) != -1 {
 				break
@@ -341,7 +341,7 @@ loop:
 		}
 	}
 
-	if len(e.chunks) == 0 && !e.Name.IsSet() && e.Retry == 0 && !e.ID.IsSet() || s.Err() != nil {
+	if len(e.chunks) == 0 && !e.Type.IsSet() && e.Retry == 0 && !e.ID.IsSet() || s.Err() != nil {
 		e.reset()
 		return &UnmarshalError{Reason: ErrUnexpectedEOF}
 	}
@@ -357,7 +357,7 @@ func (e *Message) Clone() *Message {
 		// Already appended chunks cannot be modified/removed, so this is safe.
 		chunks: e.chunks[:len(e.chunks):len(e.chunks)],
 		Retry:  e.Retry,
-		Name:   e.Name,
+		Type:   e.Type,
 		ID:     e.ID,
 	}
 }

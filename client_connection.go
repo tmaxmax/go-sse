@@ -20,8 +20,8 @@ type Event struct {
 	// The last non-empty ID of all the events received. This may not be
 	// the ID of the latest event!
 	LastEventID string
-	// The event's name. It is empty if the eventName is unnamed.
-	Name string
+	// The event's type. It is empty if the event is unnamed.
+	Type string
 	// The events's payload.
 	Data string
 }
@@ -52,20 +52,20 @@ type Connection struct { //nolint:govet // The current order aids readability.
 	isRetry          bool
 }
 
-// SubscribeMessages subscribes the given callback to all unnamed events (none or empty event field).
+// SubscribeMessages subscribes the given callback to all events without type (without or with empty `event“ field).
 // Remove the callback by calling the returned function.
 func (c *Connection) SubscribeMessages(cb EventCallback) EventCallbackRemover {
 	return c.SubscribeEvent("", cb)
 }
 
-// SubscribeEvent subscribes the given callback to all the events with the provided name
-// (the event field has the value given here).
+// SubscribeEvent subscribes the given callback to all the events with the provided type
+// (the `event` field has the value given here).
 // Remove the callback by calling the returned function.
-func (c *Connection) SubscribeEvent(name string, cb EventCallback) EventCallbackRemover {
-	return c.addSubscriber(name, cb)
+func (c *Connection) SubscribeEvent(typ string, cb EventCallback) EventCallbackRemover {
+	return c.addSubscriber(typ, cb)
 }
 
-// SubscribeToAll subscribes the given callbcak to all events, named and unnamed.
+// SubscribeToAll subscribes the given callbcak to all events, with or without type.
 // Remove the callback by calling the returned function.
 func (c *Connection) SubscribeToAll(cb EventCallback) EventCallbackRemover {
 	return c.addSubscriberToAll(cb)
@@ -180,7 +180,7 @@ func (c *Connection) dispatch(ev Event) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	cbs := c.callbacks[ev.Name]
+	cbs := c.callbacks[ev.Type]
 	cbCount := len(cbs) + len(c.callbacksAll)
 	if cbCount == 0 {
 		return
@@ -192,7 +192,7 @@ func (c *Connection) dispatch(ev Event) {
 	ev.LastEventID = c.lastEventID
 
 	c.wg.Add(cbCount)
-	for _, cb := range c.callbacks[ev.Name] {
+	for _, cb := range c.callbacks[ev.Type] {
 		c.executeCallback(cb, ev)
 	}
 	for _, cb := range c.callbacksAll {
@@ -210,7 +210,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 			ev.Data += f.Value + "\n"
 			dirty = true
 		case parser.FieldNameEvent:
-			ev.Name = f.Value
+			ev.Type = f.Value
 			dirty = true
 		case parser.FieldNameID:
 			// empty IDs are valid, only IDs that contain the null byte must be ignored:

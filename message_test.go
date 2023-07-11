@@ -14,7 +14,7 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	e := Message{Name: Name("x"), ID: ID("lol"), Retry: time.Second}
+	e := Message{Type: Type("x"), ID: ID("lol"), Retry: time.Second}
 	e.AppendData("whatever", "input", "will\nbe\nchunked", "amazing")
 
 	now := time.Now()
@@ -31,7 +31,7 @@ func TestNew(t *testing.T) {
 			{content: "amazing"},
 		},
 		Retry: time.Second,
-		Name:  Name("x"),
+		Type:  Type("x"),
 		ID:    ID("lol"),
 	}
 
@@ -41,7 +41,7 @@ func TestNew(t *testing.T) {
 func TestEvent_WriteTo(t *testing.T) {
 	t.Parallel()
 
-	e := Message{Name: Name("test_event"), ID: ID("example_id"), Retry: time.Second * 5}
+	e := Message{Type: Type("test_event"), ID: ID("example_id"), Retry: time.Second * 5}
 	e.AppendData("This is an example\nOf an event", "", "a string here")
 	e.Comment("This test should pass")
 	e.AppendData("Important data\nImportant again\r\rVery important\r\n")
@@ -103,7 +103,7 @@ func TestEvent_UnmarshalText(t *testing.T) {
 					{content: "from multiple lines"},
 				},
 				Retry: time.Second,
-				Name:  Name("my name here"),
+				Type:  Type("my name here"),
 				ID:    ID("2000"),
 			},
 		},
@@ -122,7 +122,7 @@ func TestEvent_UnmarshalText(t *testing.T) {
 }
 
 func newBenchmarkEvent() *Message {
-	e := Message{Name: Name("This is the event's name"), ID: ID("example_id"), Retry: time.Minute}
+	e := Message{Type: Type("This is the event's name"), ID: ID("example_id"), Retry: time.Minute}
 	e.AppendData("Example data\nWith multiple rows\r\nThis is interesting")
 	e.Comment("An useless comment here that spans\non\n\nmultiple\nlines")
 	return &e

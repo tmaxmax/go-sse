@@ -24,9 +24,9 @@ func main() {
 	out := log.New(os.Stdout, "", 0)
 
 	conn.SubscribeToAll(func(event sse.Event) {
-		switch event.Name {
+		switch event.Type {
 		case "cycles", "ops":
-			out.Printf("Metric %s: %s\n", event.Name, event.Data)
+			out.Printf("Metric %s: %s\n", event.Type, event.Data)
 		case "close":
 			out.Println("Server closed!")
 			cancel()

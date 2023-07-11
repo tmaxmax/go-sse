@@ -64,7 +64,7 @@ func toEv(tb testing.TB, s string) (ev sse.Event) {
 		case parser.FieldNameID:
 			ev.LastEventID = string(f.Value)
 		case parser.FieldNameEvent:
-			ev.Name = string(f.Value)
+			ev.Type = string(f.Value)
 		case parser.FieldNameRetry:
 		default:
 			return
@@ -367,8 +367,8 @@ func TestConnection_Subscriptions(t *testing.T) {
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
 	firstEvent := sse.Event{}
-	secondEvent := sse.Event{Name: "test", Data: "something", LastEventID: "1"}
-	thirdEvent := sse.Event{Name: "test2", Data: "something else", LastEventID: "1"}
+	secondEvent := sse.Event{Type: "test", Data: "something", LastEventID: "1"}
+	thirdEvent := sse.Event{Type: "test2", Data: "something else", LastEventID: "1"}
 	fourthEvent := sse.Event{Data: "unnamed", LastEventID: "2"}
 
 	all, unsubAll := events(t, conn)
