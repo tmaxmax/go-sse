@@ -2,6 +2,44 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2023-07-11
+
+This version comes with a series of internal refactorings that improve code readability and performance. It also replaces usage of `[]byte` for event data with `string` – SSE is a UTF-8 encoded text-based protocol, so raw bytes never made sense. This migration improves code safety (less `unsafe` usage and less worry about ownership) and reduces the memory footprint of some objects.
+
+Creating events on the server is also revised – fields that required getters and setters, apart from `data` and comments, are now simple public fields on the `sse.Message` struct.
+
+Across the codebase, to refer to the value of the `event` field the name "event type" is used, which is the nomenclature used in the SSE specification.
+
+Documentation and examples were also fixed and improved.
+
+### Added
+
+- New `sse.EventName` type, which holds valid values for the `event` field, together with constructors (`sse.Name` and `sse.NewName`).
+
+### Removed
+
+- `sse.Message`: `AppendText` was removed, as part of the migration from byte slices to strings. SSE is a UTF-8 encoded text-based protocol – raw bytes never made sense.
+
+### Changed
+
+- Minimum supported Go version was bumped from 1.16 to 1.19. From now on, the latest two major Go versions will be supported.
+- `sse.Message`: `AppendData` takes `string`s instead of `[]byte`.
+- `sse.Message`: The message's expiration is not reset anymore by `UnmarshalText`.
+- `sse.Message`: `UnmarshalText` now unmarshals comments aswell.
+- `sse.Message`: `WriteTo` (and `MarshalText` and `String` as a result) replaces all newline sequences in data with LF.
+- `sse.Message`: The `Expiry` getter and `SetExpiresAt`, `SetTTL` setters are replaced by the public field `ExpiresAt`.
+- `sse.Message`: Event ID getter and setter are replaced by the public `ID` field.
+- `sse.Message`: Event type (previously named `Name`) getter and setter are replaced by the public `Type` field.
+- `sse.Message`: The `retry` field value is now a public field on the struct. As a byproduct, `WriteTo` will now make 1 allocation when writing events with the `retry` field set. 
+- `sse.NewEventID` is now `sse.NewID`, and `sse.MustEventID` is `sse.ID`.
+- `sse.Event`: The `Data` field is now of type `string`, not `[]byte`.
+- `sse.Event`: The `Name` field is now named `Type`.
+
+### Fixed
+
+- `sse.Message`: `Clone` now copies the topic of the message to the new value.
+- `sse.Message`: ID fields that contain NUL characters are now ignored, as required by the spec, in `UnmarshalText`.
+
 ## [0.4.3] - 2023-07-08
 
 ### Fixed
@@ -89,6 +127,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 [#5]: https://github.com/tmaxmax/go-sse/pull/5
 [#2]: https://github.com/tmaxmax/go-sse/pull/2
 
+[0.5.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.5.0
 [0.4.3]: https://github.com/tmaxmax/go-sse/releases/tag/v0.4.3
 [0.4.2]: https://github.com/tmaxmax/go-sse/releases/tag/v0.4.2
 [0.4.1]: https://github.com/tmaxmax/go-sse/releases/tag/v0.4.1
