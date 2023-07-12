@@ -63,6 +63,11 @@ func (r *Parser) Next(f *Field) bool {
 			return false
 		}
 
+		// The allocation made inside `Text` is not an issue and should even improve performance.
+		// If the Field returned from `Next` wouldn't own its resources, then the caller would have
+		// to allocate new memory and copy each field value. This way, not only the caller doesn't
+		// have to worry about allocations and ownership, but also bigger and less frequent allocations
+		// are made, compared to the previous usage – allocations are now made per event, not per field value.
 		r.fieldScanner.Reset(r.inputScanner.Text())
 
 		return r.fieldScanner.Next(f)
