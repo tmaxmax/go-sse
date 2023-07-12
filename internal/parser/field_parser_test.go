@@ -10,6 +10,20 @@ import (
 func TestFieldParser(t *testing.T) {
 	t.Parallel()
 
+	t.Run("Empty input", func(t *testing.T) {
+		p := parser.NewFieldParser("")
+		if p.Next(nil) {
+			t.Fatalf("empty input should not yield data")
+		}
+		if p.Started() {
+			t.Fatalf("parsing empty input should have no effects")
+		}
+		p.RemoveBOM(true)
+		if p.Started() {
+			t.Fatalf("BOM shouldn't be removed on empty input")
+		}
+	})
+
 	type testCase struct {
 		err          error
 		name         string
@@ -91,6 +105,9 @@ func TestFieldParser(t *testing.T) {
 				segments = append(segments, f)
 			}
 
+			if !p.Started() {
+				t.Fatalf("parsing should be marked as having started")
+			}
 			if p.Err() != test.err { //nolint
 				t.Fatalf("invalid error: received %v, expected %v", p.Err(), test.err)
 			}
@@ -120,6 +137,14 @@ func TestFieldParser(t *testing.T) {
 		}
 		if p.Err() != nil {
 			t.Fatalf("no error is expected after BOM removal")
+		}
+		if !p.Started() {
+			t.Fatalf("BOM removal should mark parsing as having started")
+		}
+
+		p.Reset("data: no BOM\n")
+		if p.Started() {
+			t.Fatalf("data has no BOM so no advancement should be made")
 		}
 	})
 }

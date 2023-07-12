@@ -10,7 +10,7 @@ type FieldParser struct {
 	err  error
 	data string
 
-	isUntouched bool
+	started bool
 
 	keepComments bool
 	removeBOM    bool
@@ -66,9 +66,9 @@ var ErrUnexpectedEOF = errors.New("go-sse: unexpected end of input")
 // Next parses the next available field in the remaining buffer.
 // It returns false if there are no more fields to parse.
 func (f *FieldParser) Next(r *Field) bool {
-	f.isUntouched = false
-
 	for f.data != "" {
+		f.started = true
+
 		chunk, rem, hasNewline := NextChunk(f.data)
 		if !hasNewline {
 			f.err = ErrUnexpectedEOF
@@ -91,13 +91,20 @@ func (f *FieldParser) Next(r *Field) bool {
 func (f *FieldParser) Reset(data string) {
 	f.data = data
 	f.err = nil
-	f.isUntouched = true
+	f.started = false
 	f.doRemoveBOM()
 }
 
 // Err returns the last error encountered by the parser. It is either nil or ErrUnexpectedEOF.
 func (f *FieldParser) Err() error {
 	return f.err
+}
+
+// Started tells whether parsing has started (a call to Next which consumed input was made
+// or the BOM was removed, if it existed). Started will be true if the FieldParser has advanced
+// through the data.
+func (f *FieldParser) Started() bool {
+	return f.started
 }
 
 // KeepComments configures the FieldParser to parse/ignore comment fields.
@@ -116,13 +123,14 @@ func (f *FieldParser) RemoveBOM(shouldRemove bool) {
 }
 
 func (f *FieldParser) doRemoveBOM() {
-	if f.removeBOM && f.isUntouched && f.data != "" {
-		f.data = strings.TrimPrefix(f.data, "\xEF\xBB\xBF")
-		f.isUntouched = false
+	const bom = "\xEF\xBB\xBF"
+	if f.removeBOM && !f.started && strings.HasPrefix(f.data, bom) {
+		f.data = f.data[len(bom):]
+		f.started = true
 	}
 }
 
 // NewFieldParser creates a parser that extracts fields from the given string.
 func NewFieldParser(data string) *FieldParser {
-	return &FieldParser{data: data, isUntouched: true}
+	return &FieldParser{data: data}
 }
