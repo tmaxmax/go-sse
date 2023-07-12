@@ -4,6 +4,10 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## Unreleased
 
+### Added
+
+- The new `Message.Writer` – write to the `Message` as if it is an `io.Writer`.
+
 ### Fixed
 
 - `Message.UnmarshalText` now strips the leading Unicode BOM, if it exists, as per the specification.

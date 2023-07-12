@@ -1,8 +1,14 @@
 package sse
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -147,6 +153,51 @@ func TestEvent_UnmarshalText(t *testing.T) {
 			require.Equal(t, test.expected, e, "invalid unmarshal")
 		})
 	}
+}
+
+//nolint:all
+func ExampleMessage_Writer() {
+	e := Message{
+		Type: Type("test"),
+		ID:   ID("1"),
+	}
+	w := e.Writer()
+
+	bw := base64.NewEncoder(base64.StdEncoding, w)
+	binary.Write(bw, binary.BigEndian, []byte{6, 9, 4, 2, 0})
+	binary.Write(bw, binary.BigEndian, []byte("data from sensor"))
+	bw.Close()
+	w.WriteByte('\n') // Adds the data to the event, as after this write it would end with a newline.
+
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	enc.Encode(map[string]string{"hello": "world"})
+	// Not necessary to add a newline here – json.Encoder.Encode adds a newline at the end.
+
+	// io.CopyN(hex.NewEncoder(w), rand.Reader, 8)
+	io.Copy(hex.NewEncoder(w), bytes.NewReader([]byte{5, 1, 6, 34, 234, 12, 143, 91}))
+
+	mw := io.MultiWriter(os.Stdout, w)
+	// The first newline adds to the Message the data written above from rand.Reader.
+	io.WriteString(mw, "\nYou'll see me both in console and in event\n\n")
+
+	// Even though the data is already added to the event because of the newlines,
+	// Close must be called to clean up resources.
+	w.Close()
+
+	e.WriteTo(os.Stdout)
+	// Output:
+	// You'll see me both in console and in event
+	//
+	// id: 1
+	// event: test
+	// data: BgkEAgBkYXRhIGZyb20gc2Vuc29y
+	// data: {
+	// data:   "hello": "world"
+	// data: }
+	// data: 05010622ea0c8f5b
+	// data: You'll see me both in console and in event
+	// data:
 }
 
 func newBenchmarkEvent() *Message {
