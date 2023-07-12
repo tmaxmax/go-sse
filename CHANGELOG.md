@@ -7,6 +7,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 ### Fixed
 
 - `Message.UnmarshalText` now strips the leading Unicode BOM, if it exists, as per the specification.
+- When parsing events client-side, BOM removal was attempted on each event input. Now the BOM is correctly removed only when parsing is started.
 
 ## [0.5.1] - 2023-07-12
 

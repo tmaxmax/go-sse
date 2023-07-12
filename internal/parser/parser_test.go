@@ -89,9 +89,15 @@ data: still, here's some data: you deserve it
 			err:   parser.ErrUnexpectedEOF,
 		},
 		{
-			name:     "With BOM",
-			input:    strings.NewReader("\xEF\xBB\xBFdata: hello\n"),
-			expected: []parser.Field{newDataField(t, "hello")},
+			name: "With BOM",
+			// The second BOM should not be removed, which should result in that field being named
+			// "\ufeffdata", which is an invalid name and thus the field ending up being ignored.
+			input: strings.NewReader("\xEF\xBB\xBFdata: hello\n\n\xEF\xBB\xBFdata: world\n\n"),
+			expected: []parser.Field{
+				newDataField(t, "hello"),
+				{},
+				{},
+			},
 		},
 	}
 

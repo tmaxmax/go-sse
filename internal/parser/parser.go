@@ -61,6 +61,12 @@ func (r *Parser) Next(f *Field) bool {
 			return false
 		}
 
+		if r.fieldScanner.Started() {
+			// If scanning was started, then an event was already processed at this point and the BOM was
+			// already removed, if it existed. We don't need to remove it anymore, so disable the option.
+			r.fieldScanner.RemoveBOM(false)
+		}
+
 		// The allocation made inside `Text` is not an issue and should even improve performance.
 		// If the Field returned from `Next` wouldn't own its resources, then the caller would have
 		// to allocate new memory and copy each field value. This way, not only the caller doesn't
