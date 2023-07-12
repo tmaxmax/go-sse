@@ -84,6 +84,13 @@ func (r *Parser) Err() error {
 	return r.fieldScanner.Err()
 }
 
+// Buffer sets the buffer used to scan the input.
+// For more information, see the documentation on bufio.Scanner.Buffer.
+// Do not call this after parsing has started – the method will panic!
+func (r *Parser) Buffer(buf []byte, max int) {
+	r.inputScanner.Buffer(buf, max)
+}
+
 // New returns a Parser that extracts fields from a reader.
 func New(r io.Reader) *Parser {
 	sc := bufio.NewScanner(r)

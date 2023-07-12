@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"bufio"
 	"errors"
 	"io"
 	"reflect"
@@ -119,6 +120,18 @@ data: still, here's some data: you deserve it
 			}
 		})
 	}
+
+	t.Run("Buffer", func(t *testing.T) {
+		p := parser.New(strings.NewReader("sarmale"))
+		p.Buffer(make([]byte, 0, 3), 3)
+
+		if p.Next(nil) {
+			t.Fatalf("nothing should be parsed")
+		}
+		if !errors.Is(p.Err(), bufio.ErrTooLong) {
+			t.Fatalf("expected error %v, received %v", bufio.ErrTooLong, p.Err())
+		}
+	})
 }
 
 func BenchmarkParser(b *testing.B) {
