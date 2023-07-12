@@ -9,8 +9,6 @@ import (
 // splitFunc is a split function for a bufio.Scanner that splits a sequence of
 // bytes into SSE events. Each event ends with two consecutive newline sequences,
 // where a newline sequence is defined as either "\n", "\r", or "\r\n".
-//
-// This split function also removes the BOM sequence from the first event, if it exists.
 func splitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if len(data) == 0 {
 		return 0, nil, nil
