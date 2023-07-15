@@ -207,7 +207,7 @@ func TestJoe_errors(t *testing.T) {
 	t.Parallel()
 
 	j := sse.NewJoe(sse.JoeConfig{
-		ReplayProvider: sse.NewFiniteReplayProvider(1),
+		ReplayProvider: &sse.FiniteReplayProvider{Count: 1},
 	})
 	defer j.Stop() //nolint:errcheck // irrelevant
 

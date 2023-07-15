@@ -11,6 +11,7 @@ type buffer interface {
 	dequeue()
 	front() *Message
 	len() int
+	cap() int
 	slice(EventID) []*Message
 }
 
@@ -20,6 +21,10 @@ type bufferBase struct {
 
 func (b *bufferBase) len() int {
 	return len(b.buf)
+}
+
+func (b *bufferBase) cap() int {
+	return cap(b.buf)
 }
 
 func (b *bufferBase) front() *Message {

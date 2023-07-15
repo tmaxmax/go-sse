@@ -135,7 +135,7 @@ func TestValidReplayProvider(t *testing.T) {
 func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
-	p := NewFiniteReplayProvider(3)
+	p := &FiniteReplayProvider{Count: 3}
 
 	putMessages(p,
 		msg(t, "", "1", ""),
@@ -156,5 +156,5 @@ func TestFiniteReplayProvider(t *testing.T) {
 	replayed = replay(t, p, ID("4"))[0]
 	require.Equal(t, "id: 7\ndata: again\n\n", replayed.String())
 
-	testReplayError(t, NewFiniteReplayProvider(10))
+	testReplayError(t, &FiniteReplayProvider{Count: 10})
 }

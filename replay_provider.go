@@ -4,30 +4,28 @@ import (
 	"time"
 )
 
-func isAutoIDsSet(input []bool) bool {
-	return len(input) > 0 && input[0]
-}
-
-// NewFiniteReplayProvider creates a replay provider that can hold a maximum number of events at once.
-// The events' expiry times are not considered, as the oldest events are removed
-// anyway when the provider has buffered the maximum number of events.
-// The events must have an ID unless the provider is constructed with the autoIDs flag.
-func NewFiniteReplayProvider(count int, autoIDs ...bool) *FiniteReplayProvider {
-	return &FiniteReplayProvider{count: count, b: getBuffer(isAutoIDsSet(autoIDs), count)}
-}
-
 // FiniteReplayProvider is a replay provider that replays at maximum a certain number of events.
 // GC is a no-op for this provider, as when the maximum number of values is reached
 // and a new value has to be appended, old values are removed from the buffer.
+// The events must have an ID unless the AutoIDs flag is toggled.
 type FiniteReplayProvider struct {
-	b     buffer
-	count int
+	b buffer
+
+	// Count is the maximum number of events FiniteReplayProvider should hold as valid.
+	// It must be a positive integer, or the code will panic.
+	Count int
+	// AutoIDs configures FiniteReplayProvider to automatically set the IDs of events.
+	AutoIDs bool
 }
 
 // Put puts a message into the provider's buffer. If there are more messages than the maximum
 // number, the oldest message is removed.
 func (f *FiniteReplayProvider) Put(message *Message) *Message {
-	if f.b.len() == f.count {
+	if f.b == nil {
+		f.b = getBuffer(f.AutoIDs, f.Count)
+	}
+
+	if f.b.len() == f.b.cap() {
 		f.b.dequeue()
 	}
 
@@ -37,6 +35,10 @@ func (f *FiniteReplayProvider) Put(message *Message) *Message {
 // Replay replays the messages in the buffer to the listener.
 // It doesn't take into account the messages' expiry times.
 func (f *FiniteReplayProvider) Replay(subscription Subscription) bool {
+	if f.b == nil {
+		return true
+	}
+
 	events := f.b.slice(subscription.LastEventID)
 	if events == nil {
 		return true

@@ -8,10 +8,12 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 - `Message.ExpiresAt` is no more.
 - `NewValidReplayProvider` is no more.
+- `NewFiniteReplayProvider` is no more.
 
 ### Added
 
 - Because the `ValidReplayProvider` constructor was removed, the fields `ValidReplayProvider.{TTL,AutoIDs}` were added for configuration.
+- Because the `FiniteReplayProvider` constructor was removed, the fields `FiniteReplayProvider.{Count,AutoIDs}` were added for configuration.
 
 ### Changed
 
