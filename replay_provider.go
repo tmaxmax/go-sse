@@ -35,12 +35,12 @@ type FiniteReplayProvider struct {
 
 // Put puts a message into the provider's buffer. If there are more messages than the maximum
 // number, the oldest message is removed.
-func (f *FiniteReplayProvider) Put(message **Message) {
+func (f *FiniteReplayProvider) Put(message *Message) *Message {
 	if f.b.len() == f.count {
 		f.b.dequeue()
 	}
 
-	f.b.queue(message)
+	return f.b.queue(message)
 }
 
 // Replay replays the messages in the buffer to the listener.
@@ -68,8 +68,8 @@ type ValidReplayProvider struct {
 }
 
 // Put puts the message into the provider's buffer.
-func (v *ValidReplayProvider) Put(message **Message) {
-	v.b.queue(message)
+func (v *ValidReplayProvider) Put(message *Message) *Message {
+	return v.b.queue(message)
 }
 
 // GC removes all the expired messages from the provider's buffer.

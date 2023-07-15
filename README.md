@@ -110,9 +110,10 @@ and he'll dispatch events all day! By default, he has no memory of what events h
 ```go
 type ReplayProvider interface {
     // Put a new event in the provider's buffer.
-    // It takes a pointer to a pointer because a new event may be created,
-    // in case the ReplayProvider automatically sets IDs.
-    Put(msg **Message)
+    // If the provider automatically adds IDs aswell,
+    // the returned message will also have the ID set,
+    // otherwise the input value is returned.
+    Put(msg *Message) *Message
     // Replay valid events to a subscriber.
     Replay(sub Subscription)
 }

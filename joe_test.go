@@ -17,8 +17,9 @@ type mockReplayProvider struct {
 	callsReplay int
 }
 
-func (m *mockReplayProvider) Put(_ **sse.Message) {
+func (m *mockReplayProvider) Put(msg *sse.Message) *sse.Message {
 	m.callsPut++
+	return msg
 }
 
 func (m *mockReplayProvider) Replay(_ sse.Subscription) bool {

@@ -26,8 +26,10 @@ import (
 //
 // If not specified otherwise, the errors returned are implementation-specific.
 type ReplayProvider interface {
-	// Put adds a new event to the replay buffer. The message's event may be modified by
-	// the provider, if it sets an ID.
+	// Put adds a new event to the replay buffer. The Message that is returned may not have the
+	// same address, if the replay provider automatically sets IDs. It may also be nil if the
+	// message couldn't be queued – for example, the provider expects the message to have an ID
+	// but it didn't.
 	//
 	// The Put operation may be executed by the replay provider in another goroutine only if
 	// it can ensure that any Replay operation called after the Put goroutine is started
@@ -38,7 +40,7 @@ type ReplayProvider interface {
 	// can be replayed. If an error occurs internally when putting the new message
 	// and retrying the operation would block for too long, it can be aborted.
 	// The errors aren't returned as the server providers won't be able to handle them in a useful manner.
-	Put(message **Message)
+	Put(message *Message) *Message
 	// Replay sends to a new subscriber all the valid events received by the provider
 	// since the event with the listener's ID. If the ID the listener provides
 	// is invalid, the provider should not replay any events.
@@ -226,7 +228,7 @@ func (j *Joe) start() {
 	for {
 		select {
 		case msg := <-j.message:
-			j.replay.Put(&msg)
+			msg = j.replay.Put(msg)
 
 			for done, cb := range j.topics[msg.Topic] {
 				if !cb(msg) {

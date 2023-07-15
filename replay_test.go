@@ -74,7 +74,7 @@ func testReplayError(tb testing.TB, p sse.ReplayProvider) {
 
 func putMessages(p sse.ReplayProvider, msgs ...*sse.Message) {
 	for i := range msgs {
-		p.Put(&msgs[i])
+		msgs[i] = p.Put(msgs[i])
 	}
 }
 

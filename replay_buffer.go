@@ -7,7 +7,7 @@ import (
 // A buffer is the underlying storage for a provider. Its methods are used by the provider to implement
 // the Provider interface.
 type buffer interface {
-	queue(message **Message)
+	queue(message *Message) *Message
 	dequeue()
 	front() *Message
 	len() int
@@ -34,10 +34,14 @@ type bufferNoID struct {
 	bufferBase
 }
 
-func (b *bufferNoID) queue(message **Message) {
-	if (*message).ID.IsSet() {
-		b.buf = append(b.buf, *message)
+func (b *bufferNoID) queue(message *Message) *Message {
+	if !message.ID.IsSet() {
+		return nil
 	}
+
+	b.buf = append(b.buf, message)
+
+	return message
 }
 
 func (b *bufferNoID) dequeue() {
@@ -68,17 +72,19 @@ func (b *bufferNoID) slice(atID EventID) []*Message {
 
 type bufferAutoID struct {
 	bufferBase
-	firstID int64
-	lastID  int64
+	firstID    int64
+	upcomingID int64
 }
 
 const autoIDBase = 10
 
-func (b *bufferAutoID) queue(message **Message) {
-	*message = (*message).Clone()
-	(*message).ID = ID(strconv.FormatInt(b.lastID, autoIDBase))
-	b.lastID++
-	b.buf = append(b.buf, *message)
+func (b *bufferAutoID) queue(message *Message) *Message {
+	message = message.Clone()
+	message.ID = ID(strconv.FormatInt(b.upcomingID, autoIDBase))
+	b.upcomingID++
+	b.buf = append(b.buf, message)
+
+	return message
 }
 
 func (b *bufferAutoID) dequeue() {

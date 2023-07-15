@@ -4,7 +4,7 @@ package sse
 // It is used to avoid nil checks for the provider each time it is used.
 type noopReplayProvider struct{}
 
-func (n noopReplayProvider) Put(_ **Message)            {}
+func (n noopReplayProvider) Put(m *Message) *Message    { return m }
 func (n noopReplayProvider) Replay(_ Subscription) bool { return true }
 
 var _ ReplayProvider = (*noopReplayProvider)(nil)
