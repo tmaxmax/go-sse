@@ -123,7 +123,7 @@ type ReplayProvider interface {
 
 ```go
 sse.NewJoe(sse.JoeConfig{
-    ReplayProvider:   sse.NewValidReplayProvider(),
+    ReplayProvider:   &sse.ValidReplayProvider{TTL: time.Minute * 5}, // let's have events expire after 5 minutes
     ReplayGCInterval: time.Minute,
 })
 ```
@@ -161,14 +161,15 @@ data: Nice
 data: to see you.
 ```
 
-If we use a replay provider, such as `ValidReplayProvider`, this event will expire immediately and it also doesn't have an ID. Let's solve this:
+You can also see that `go-sse` takes care of splitting input by lines into new fields, as required by the specification.
+
+Keep in mind that providers, such as the `ValidReplayProvider` used above, will ignore events without IDs. To have our event expire, as configured, we must set an ID for the event:
 
 ```go
 m.ID = sse.ID("unique")
-m.ExpiresAt = time.Now().Add(5 * time.Minute)
 ```
 
-Now the event will look like this:
+This is how the event will look:
 
 ```txt
 id: unique
@@ -177,7 +178,7 @@ data: Nice
 data: to see you.
 ```
 
-And the ValidReplayProvider will stop replaying it after 5 minutes!
+Now that it has an ID, the event will be considered expired 5 minutes after it's been published – it won't be replayed to clients after the expiry!
 
 An `EventID` type is also exposed, which is a special type that denotes an event's ID. An ID must not have newlines, so we use a special function that validates the ID beforehand. The `ID` constructor function panics (it is useful when creating IDs from static strings), but there's also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
 
@@ -186,12 +187,6 @@ id, err := sse.NewID("invalid\nID")
 ```
 
 Here, `err` will be non-nil and `id` will be an invalid value: no `id` field will be sent to clients if you set an event's ID using that value!
-
-Either way, IDs and expiry times can also be retrieved – they are simple fields on `sse.Message`. Replay providers can use them to determine from which IDs to replay messages and which messages are still valid:
-
-```go
-fmt.Println(m.ID, m.ExpiresAt)
-```
 
 Setting the event's name (or type) is equally easy:
 

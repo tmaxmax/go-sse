@@ -23,11 +23,7 @@ func TestNew(t *testing.T) {
 	e := Message{Type: Type("x"), ID: ID("lol"), Retry: time.Second}
 	e.AppendData("whatever", "input", "will\nbe\nchunked", "amazing")
 
-	now := time.Now()
-	e.ExpiresAt = now
-
 	expected := Message{
-		ExpiresAt: now,
 		chunks: []chunk{
 			{content: "whatever"},
 			{content: "input"},

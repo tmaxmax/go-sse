@@ -34,6 +34,18 @@ func (m *mockReplayProvider) GC() error {
 
 var _ sse.ReplayProvider = (*mockReplayProvider)(nil)
 
+func msg(tb testing.TB, data, id, topic string) *sse.Message {
+	tb.Helper()
+
+	e := &sse.Message{Topic: topic}
+	e.AppendData(data)
+	if id != "" {
+		e.ID = sse.ID(id)
+	}
+
+	return e
+}
+
 func TestNewJoe(t *testing.T) {
 	t.Parallel()
 
@@ -145,9 +157,9 @@ func TestJoe_SubscribePublish(t *testing.T) {
 
 	sub := subscribe(t, j, ctx)
 	<-ctx.waitingOnDone
-	require.NoError(t, j.Publish(msg(t, "hello", "", 0, sse.DefaultTopic)))
+	require.NoError(t, j.Publish(msg(t, "hello", "", sse.DefaultTopic)))
 	cancel()
-	require.NoError(t, j.Publish(msg(t, "world", "", 0, sse.DefaultTopic)))
+	require.NoError(t, j.Publish(msg(t, "world", "", sse.DefaultTopic)))
 	msgs := <-sub
 	require.Equal(t, "data: hello\n\n", msgs[0].String())
 
@@ -176,8 +188,8 @@ func TestJoe_Subscribe_multipleTopics(t *testing.T) {
 	sub := subscribe(t, j, ctx, sse.DefaultTopic, "another topic")
 	<-ctx.waitingOnDone
 
-	_ = j.Publish(msg(t, "hello", "", 0, sse.DefaultTopic))
-	_ = j.Publish(msg(t, "world", "", 0, "another topic"))
+	_ = j.Publish(msg(t, "hello", "", sse.DefaultTopic))
+	_ = j.Publish(msg(t, "world", "", "another topic"))
 
 	_ = j.Stop()
 
@@ -199,8 +211,8 @@ func TestJoe_errors(t *testing.T) {
 	})
 	defer j.Stop() //nolint:errcheck // irrelevant
 
-	_ = j.Publish(msg(t, "hello", "0", 0, sse.DefaultTopic))
-	_ = j.Publish(msg(t, "hello", "1", 0, sse.DefaultTopic))
+	_ = j.Publish(msg(t, "hello", "0", sse.DefaultTopic))
+	_ = j.Publish(msg(t, "hello", "1", sse.DefaultTopic))
 
 	var called int
 	cb := func(_ *sse.Message) bool {
@@ -215,7 +227,7 @@ func TestJoe_errors(t *testing.T) {
 	})
 	require.NoError(t, err, "error not received from replay")
 
-	_ = j.Publish(msg(t, "world", "2", 0, sse.DefaultTopic))
+	_ = j.Publish(msg(t, "world", "2", sse.DefaultTopic))
 
 	require.Equal(t, 1, called, "callback was called after subscribe returned")
 
@@ -229,8 +241,8 @@ func TestJoe_errors(t *testing.T) {
 
 		<-ctx.waitingOnDone
 
-		_ = j.Publish(msg(t, "", "3", 0, sse.DefaultTopic))
-		_ = j.Publish(msg(t, "", "4", 0, sse.DefaultTopic))
+		_ = j.Publish(msg(t, "", "3", sse.DefaultTopic))
+		_ = j.Publish(msg(t, "", "4", sse.DefaultTopic))
 	}()
 
 	err = j.Subscribe(ctx, sse.Subscription{Callback: cb, Topics: []string{sse.DefaultTopic}})

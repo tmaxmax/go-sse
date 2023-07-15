@@ -56,20 +56,16 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 // Message is the representation of a single message sent from the server to its clients.
 //
 // A Message is made of a single event, which is sent to each client, and other metadata
-// about the message itself: its expiry time and topic.
+// about the message itself: its topic.
 //
 // Topics are used to filter which events reach which clients. If a client subscribes to
 // a certain set of topics, but a message's topic is not part of that set, then the underlying
 // event of the message does not reach the client.
 //
-// The message's expiry time can be used when replaying messages to new clients. If a message
-// is expired, then it is not sent. Replay providers will usually make use of this.
-//
-// The Topic and ExpiresAt fields are used only on the server and are not sent to the client.
-// They are not part of the protocol.
+// The Topic field is used only on the server and is not sent to the client.
+// It is not part of the protocol.
 type Message struct {
-	Topic     string
-	ExpiresAt time.Time
+	Topic string
 
 	chunks []chunk
 
@@ -271,7 +267,7 @@ func (e *Message) WriteTo(w io.Writer) (int64, error) {
 }
 
 // MarshalText writes the standard textual representation of the message's event. Marshalling and unmarshalling will
-// result in a message with an event that has the same fields; expiry time and topic will be lost.
+// result in a message with an event that has the same fields; topic will be lost.
 //
 // If you want to preserve everything, create your own custom marshalling logic.
 // For an example using encoding/json, see the top-level MessageCustomJSONMarshal example.
@@ -332,10 +328,10 @@ func (e *Message) reset() {
 // UnmarshalText extracts the first event found in the given byte slice into the
 // receiver. The input is expected to be a wire format event, as defined by the spec.
 // Therefore, previous fields present on the Message will be overwritten
-// (i.e. event, ID, comments, data, retry), but the Topic and ExpiresAt will be kept as is,
-// as these are not event fields.
+// (i.e. event, ID, comments, data, retry), but the Topic will be kept as is,
+// as it is not an event field.
 //
-// A method for marshalling and unmarshalling Messages together with their Topic and ExpiresAt
+// A method for marshalling and unmarshalling Messages together with their Topic
 // can be seen in the top-level example MessageCustomJSONMarshal.
 //
 // Unmarshaling ignores fields with invalid names. If no valid fields are found,
@@ -403,8 +399,6 @@ loop:
 // Clone returns a copy of the message.
 func (e *Message) Clone() *Message {
 	return &Message{
-		Topic:     e.Topic,
-		ExpiresAt: e.ExpiresAt,
 		// The first AppendData will trigger a reallocation.
 		// Already appended chunks cannot be modified/removed, so this is safe.
 		chunks: e.chunks[:len(e.chunks):len(e.chunks)],

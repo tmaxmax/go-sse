@@ -89,8 +89,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 			v := Inc(metric)
 
 			e := &sse.Message{
-				Type:      sse.Type(metric),
-				ExpiresAt: time.Now().Add(frequency),
+				Type: sse.Type(metric),
 			}
 			e.AppendData(strconv.FormatInt(v, 10))
 

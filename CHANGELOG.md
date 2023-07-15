@@ -4,9 +4,19 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## [Unreleased]
 
+### Removed
+
+- `Message.ExpiresAt` is no more.
+- `NewValidReplayProvider` is no more.
+
+### Added
+
+- Because the `ValidReplayProvider` constructor was removed, the fields `ValidReplayProvider.{TTL,AutoIDs}` were added for configuration.
+
 ### Changed
 
 - `ReplayProvider.Put` takes a simple `*Message` and returns a `*Message`, instead of changing the `*Message` to which the `**Message` parameter points.
+- Because `Message.ExpiresAt` is removed, the `ValidReplayProvider` sets the expiry itself.
 
 ## [0.5.2] - 2023-07-12
 

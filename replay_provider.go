@@ -16,15 +16,6 @@ func NewFiniteReplayProvider(count int, autoIDs ...bool) *FiniteReplayProvider {
 	return &FiniteReplayProvider{count: count, b: getBuffer(isAutoIDsSet(autoIDs), count)}
 }
 
-// NewValidReplayProvider creates a replay Provider that replays all the buffered non-expired events.
-// Call its GC method periodically to remove expired events from the buffer and release resources.
-// You can use this provider for replaying an infinite number of events, if the events never
-// expire.
-// The events must have an ID unless the provider is constructed with autoIDs flag as true.
-func NewValidReplayProvider(autoIDs ...bool) *ValidReplayProvider {
-	return &ValidReplayProvider{b: getBuffer(isAutoIDsSet(autoIDs), 0)}
-}
-
 // FiniteReplayProvider is a replay provider that replays at maximum a certain number of events.
 // GC is a no-op for this provider, as when the maximum number of values is reached
 // and a new value has to be appended, old values are removed from the buffer.
@@ -62,27 +53,50 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) bool {
 	return true
 }
 
-// ValidReplayProvider is a replay provider that replays all the valid (not expired) previous events.
+// ValidReplayProvider is a ReplayProvider that replays all the buffered non-expired events.
+// Call its GC method periodically to remove expired events from the buffer and release resources.
+// You can use this provider for replaying an infinite number of events, if the events never
+// expire.
+// The events must have an ID unless the AutoIDs flag is toggled.
 type ValidReplayProvider struct {
-	b buffer
+	b        buffer
+	expiries []time.Time
+
+	// TTL is for how long a message is valid, since it was added.
+	TTL time.Duration
+	// AutoIDs configures ValidReplayProvider to automatically set the IDs of events.
+	AutoIDs bool
 }
+
+// timeNow is used by tests to get a deterministic time.
+var timeNow = time.Now
 
 // Put puts the message into the provider's buffer.
 func (v *ValidReplayProvider) Put(message *Message) *Message {
+	if v.b == nil {
+		v.b = getBuffer(v.AutoIDs, 0)
+	}
+
+	v.expiries = append(v.expiries, timeNow().Add(v.TTL))
 	return v.b.queue(message)
 }
 
 // GC removes all the expired messages from the provider's buffer.
 func (v *ValidReplayProvider) GC() error {
-	now := time.Now()
+	if v.b == nil {
+		return nil
+	}
 
-	var e *Message
+	now := timeNow()
+
 	for {
-		e = v.b.front()
-		if e == nil || e.ExpiresAt.After(now) {
+		e := v.b.front()
+		if e == nil || v.expiries[0].After(now) {
 			break
 		}
+
 		v.b.dequeue()
+		v.expiries = v.expiries[1:]
 	}
 
 	return nil
@@ -90,14 +104,20 @@ func (v *ValidReplayProvider) GC() error {
 
 // Replay replays all the valid messages to the listener.
 func (v *ValidReplayProvider) Replay(subscription Subscription) bool {
+	if v.b == nil {
+		return true
+	}
+
 	events := v.b.slice(subscription.LastEventID)
 	if events == nil {
 		return true
 	}
 
-	now := time.Now()
-	for _, e := range events {
-		if e.ExpiresAt.After(now) && hasTopic(subscription.Topics, e.Topic) {
+	now := timeNow()
+	expiriesOffset := v.b.len() - len(events)
+
+	for i, e := range events {
+		if v.expiries[i+expiriesOffset].After(now) && hasTopic(subscription.Topics, e.Topic) {
 			if !subscription.Callback(e) {
 				return false
 			}
