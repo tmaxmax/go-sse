@@ -188,13 +188,13 @@ id, err := sse.NewID("invalid\nID")
 
 Here, `err` will be non-nil and `id` will be an invalid value: no `id` field will be sent to clients if you set an event's ID using that value!
 
-Setting the event's name (or type) is equally easy:
+Setting the event's type (the `event` field) is equally easy:
 
 ```go
-m.Name = sse.Name("The event's name")
+m.Type = sse.Type("The event's name")
 ```
 
-Like IDs, names cannot have newlines. You are provided with constructors that follow the same convention: `Name` panics, `NewName` returns an error. Read the [docs][4] to find out more about messages and how to use them!
+Like IDs, types cannot have newlines. You are provided with constructors that follow the same convention: `Type` panics, `NewType` returns an error. Read the [docs][4] to find out more about messages and how to use them!
 
 ### The server-side "Hello world"
 
