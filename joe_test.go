@@ -17,7 +17,7 @@ type mockReplayProvider struct {
 	callsReplay int
 }
 
-func (m *mockReplayProvider) Put(msg *sse.Message) *sse.Message {
+func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) *sse.Message {
 	m.callsPut++
 	return msg
 }
@@ -34,10 +34,10 @@ func (m *mockReplayProvider) GC() error {
 
 var _ sse.ReplayProvider = (*mockReplayProvider)(nil)
 
-func msg(tb testing.TB, data, id, topic string) *sse.Message {
+func msg(tb testing.TB, data, id string) *sse.Message {
 	tb.Helper()
 
-	e := &sse.Message{Topic: topic}
+	e := &sse.Message{}
 	e.AppendData(data)
 	if id != "" {
 		e.ID = sse.ID(id)
@@ -84,7 +84,8 @@ func TestJoe_Stop(t *testing.T) {
 	require.NoError(t, j.Stop())
 	require.ErrorIs(t, j.Stop(), sse.ErrProviderClosed)
 	require.ErrorIs(t, j.Subscribe(context.Background(), sse.Subscription{}), sse.ErrProviderClosed)
-	require.ErrorIs(t, j.Publish(nil), sse.ErrProviderClosed)
+	require.ErrorIs(t, j.Publish(nil, nil), sse.ErrNoTopic)
+	require.ErrorIs(t, j.Publish(nil, []string{sse.DefaultTopic}), sse.ErrProviderClosed)
 	require.Zero(t, rp.callsPut)
 	require.Zero(t, rp.callsReplay)
 	require.Zero(t, rp.callsGC)
@@ -157,9 +158,9 @@ func TestJoe_SubscribePublish(t *testing.T) {
 
 	sub := subscribe(t, j, ctx)
 	<-ctx.waitingOnDone
-	require.NoError(t, j.Publish(msg(t, "hello", "", sse.DefaultTopic)))
+	require.NoError(t, j.Publish(msg(t, "hello", ""), []string{sse.DefaultTopic}))
 	cancel()
-	require.NoError(t, j.Publish(msg(t, "world", "", sse.DefaultTopic)))
+	require.NoError(t, j.Publish(msg(t, "world", ""), []string{sse.DefaultTopic}))
 	msgs := <-sub
 	require.Equal(t, "data: hello\n\n", msgs[0].String())
 
@@ -188,8 +189,8 @@ func TestJoe_Subscribe_multipleTopics(t *testing.T) {
 	sub := subscribe(t, j, ctx, sse.DefaultTopic, "another topic")
 	<-ctx.waitingOnDone
 
-	_ = j.Publish(msg(t, "hello", "", sse.DefaultTopic))
-	_ = j.Publish(msg(t, "world", "", "another topic"))
+	_ = j.Publish(msg(t, "hello", ""), []string{sse.DefaultTopic, "another topic"})
+	_ = j.Publish(msg(t, "world", ""), []string{"another topic"})
 
 	_ = j.Stop()
 
@@ -211,8 +212,8 @@ func TestJoe_errors(t *testing.T) {
 	})
 	defer j.Stop() //nolint:errcheck // irrelevant
 
-	_ = j.Publish(msg(t, "hello", "0", sse.DefaultTopic))
-	_ = j.Publish(msg(t, "hello", "1", sse.DefaultTopic))
+	_ = j.Publish(msg(t, "hello", "0"), []string{sse.DefaultTopic})
+	_ = j.Publish(msg(t, "hello", "1"), []string{sse.DefaultTopic})
 
 	var called int
 	cb := func(_ *sse.Message) bool {
@@ -227,7 +228,7 @@ func TestJoe_errors(t *testing.T) {
 	})
 	require.NoError(t, err, "error not received from replay")
 
-	_ = j.Publish(msg(t, "world", "2", sse.DefaultTopic))
+	_ = j.Publish(msg(t, "world", "2"), []string{sse.DefaultTopic})
 
 	require.Equal(t, 1, called, "callback was called after subscribe returned")
 
@@ -241,8 +242,8 @@ func TestJoe_errors(t *testing.T) {
 
 		<-ctx.waitingOnDone
 
-		_ = j.Publish(msg(t, "", "3", sse.DefaultTopic))
-		_ = j.Publish(msg(t, "", "4", sse.DefaultTopic))
+		_ = j.Publish(msg(t, "", "3"), []string{sse.DefaultTopic})
+		_ = j.Publish(msg(t, "", "4"), []string{sse.DefaultTopic})
 	}()
 
 	err = j.Subscribe(ctx, sse.Subscription{Callback: cb, Topics: []string{sse.DefaultTopic}})

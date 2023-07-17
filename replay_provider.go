@@ -20,7 +20,7 @@ type FiniteReplayProvider struct {
 
 // Put puts a message into the provider's buffer. If there are more messages than the maximum
 // number, the oldest message is removed.
-func (f *FiniteReplayProvider) Put(message *Message) *Message {
+func (f *FiniteReplayProvider) Put(message *Message, topics []string) *Message {
 	if f.b == nil {
 		f.b = getBuffer(f.AutoIDs, f.Count)
 	}
@@ -29,7 +29,7 @@ func (f *FiniteReplayProvider) Put(message *Message) *Message {
 		f.b.dequeue()
 	}
 
-	return f.b.queue(message)
+	return f.b.queue(message, topics)
 }
 
 // Replay replays the messages in the buffer to the listener.
@@ -45,8 +45,8 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) bool {
 	}
 
 	for _, e := range events {
-		if hasTopic(subscription.Topics, e.Topic) {
-			if !subscription.Callback(e) {
+		if topicsIntersect(subscription.Topics, e.topics) {
+			if !subscription.Callback(e.message) {
 				return false
 			}
 		}
@@ -74,13 +74,13 @@ type ValidReplayProvider struct {
 var timeNow = time.Now
 
 // Put puts the message into the provider's buffer.
-func (v *ValidReplayProvider) Put(message *Message) *Message {
+func (v *ValidReplayProvider) Put(message *Message, topics []string) *Message {
 	if v.b == nil {
 		v.b = getBuffer(v.AutoIDs, 0)
 	}
 
 	v.expiries = append(v.expiries, timeNow().Add(v.TTL))
-	return v.b.queue(message)
+	return v.b.queue(message, topics)
 }
 
 // GC removes all the expired messages from the provider's buffer.
@@ -119,8 +119,8 @@ func (v *ValidReplayProvider) Replay(subscription Subscription) bool {
 	expiriesOffset := v.b.len() - len(events)
 
 	for i, e := range events {
-		if v.expiries[i+expiriesOffset].After(now) && hasTopic(subscription.Topics, e.Topic) {
-			if !subscription.Callback(e) {
+		if v.expiries[i+expiriesOffset].After(now) && topicsIntersect(subscription.Topics, e.topics) {
+			if !subscription.Callback(e.message) {
 				return false
 			}
 		}
@@ -134,12 +134,15 @@ var (
 	_ ReplayProvider = (*ValidReplayProvider)(nil)
 )
 
-// hasTopic returns true if the given topic is inside the given topics slice.
-func hasTopic(topics []string, topic string) bool {
-	for i := 0; i < len(topics); i++ {
-		if topics[i] == topic {
-			return true
+// topicsIntersect returns true if the given topic slices have at least one topic in common.
+func topicsIntersect(a, b []string) bool {
+	for _, at := range a {
+		for _, bt := range b {
+			if at == bt {
+				return true
+			}
 		}
 	}
+
 	return false
 }

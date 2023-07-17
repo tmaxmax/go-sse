@@ -75,8 +75,8 @@ A provider is an implementation of the publish-subscribe messaging system:
 
 ```go
 type Provider interface {
-    // Publish a message to all subscribers. A message contains the event and some additional information - read further and see the documentation.
-    Publish(msg *Message) error
+    // Publish a message to all subscribers of the given topics.
+    Publish(msg *Message, topics []string) error
     // Add a new subscriber that is unsubscribed when the context is done.
     Subscribe(ctx context.Context, sub Subscription) error
     // Cleanup all resources and stop publishing messages or accepting subscriptions.
@@ -113,7 +113,7 @@ type ReplayProvider interface {
     // If the provider automatically adds IDs aswell,
     // the returned message will also have the ID set,
     // otherwise the input value is returned.
-    Put(msg *Message) *Message
+    Put(msg *Message, topics []string) *Message
     // Replay valid events to a subscriber.
     Replay(sub Subscription)
 }

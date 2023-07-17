@@ -7,16 +7,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func msg(tb testing.TB, data, id, topic string) *Message {
+func msg(tb testing.TB, data, id string, topics ...string) messageWithTopics {
 	tb.Helper()
 
-	e := &Message{Topic: topic}
+	e := &Message{}
 	e.AppendData(data)
 	if id != "" {
 		e.ID = ID(id)
 	}
 
-	return e
+	if len(topics) == 0 {
+		topics = []string{DefaultTopic}
+	}
+
+	return messageWithTopics{message: e, topics: topics}
 }
 
 func replay(tb testing.TB, p ReplayProvider, lastEventID EventID, topics ...string) []*Message {
@@ -82,9 +86,9 @@ func testReplayError(tb testing.TB, p ReplayProvider) {
 	require.False(tb, success, "received invalid error")
 }
 
-func putMessages(p ReplayProvider, msgs ...*Message) {
+func putMessages(p ReplayProvider, msgs ...messageWithTopics) {
 	for i := range msgs {
-		msgs[i] = p.Put(msgs[i])
+		msgs[i].message = p.Put(msgs[i].message, msgs[i].topics)
 	}
 }
 
@@ -126,7 +130,7 @@ func TestValidReplayProvider(t *testing.T) {
 
 	now = now.Add(p.TTL)
 
-	replayed := replay(t, p, ID("3"))[0]
+	replayed := replay(t, p, ID("3"), DefaultTopic, "topic with no messages")[0]
 	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
 
 	testReplayError(t, &ValidReplayProvider{})
@@ -153,7 +157,7 @@ func TestFiniteReplayProvider(t *testing.T) {
 		msg(t, "again", "7", DefaultTopic),
 	)
 
-	replayed = replay(t, p, ID("4"))[0]
+	replayed = replay(t, p, ID("4"), DefaultTopic, "topic with no messages")[0]
 	require.Equal(t, "id: 7\ndata: again\n\n", replayed.String())
 
 	testReplayError(t, &FiniteReplayProvider{Count: 10})

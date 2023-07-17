@@ -7,16 +7,16 @@ import (
 // A buffer is the underlying storage for a provider. Its methods are used by the provider to implement
 // the Provider interface.
 type buffer interface {
-	queue(message *Message) *Message
+	queue(message *Message, topics []string) *Message
 	dequeue()
-	front() *Message
+	front() *messageWithTopics
 	len() int
 	cap() int
-	slice(EventID) []*Message
+	slice(EventID) []messageWithTopics
 }
 
 type bufferBase struct {
-	buf []*Message
+	buf []messageWithTopics
 }
 
 func (b *bufferBase) len() int {
@@ -27,11 +27,11 @@ func (b *bufferBase) cap() int {
 	return cap(b.buf)
 }
 
-func (b *bufferBase) front() *Message {
+func (b *bufferBase) front() *messageWithTopics {
 	if b.len() == 0 {
 		return nil
 	}
-	return b.buf[0]
+	return &b.buf[0]
 }
 
 type bufferNoID struct {
@@ -39,22 +39,22 @@ type bufferNoID struct {
 	bufferBase
 }
 
-func (b *bufferNoID) queue(message *Message) *Message {
+func (b *bufferNoID) queue(message *Message, topics []string) *Message {
 	if !message.ID.IsSet() {
 		return nil
 	}
 
-	b.buf = append(b.buf, message)
+	b.buf = append(b.buf, messageWithTopics{message: message, topics: topics})
 
 	return message
 }
 
 func (b *bufferNoID) dequeue() {
-	b.lastRemovedID = b.buf[0].ID
+	b.lastRemovedID = b.buf[0].message.ID
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferNoID) slice(atID EventID) []*Message {
+func (b *bufferNoID) slice(atID EventID) []messageWithTopics {
 	if !atID.IsSet() {
 		return nil
 	}
@@ -63,7 +63,7 @@ func (b *bufferNoID) slice(atID EventID) []*Message {
 	}
 	index := -1
 	for i := range b.buf {
-		if atID == b.buf[i].ID {
+		if atID == b.buf[i].message.ID {
 			index = i
 			break
 		}
@@ -83,11 +83,11 @@ type bufferAutoID struct {
 
 const autoIDBase = 10
 
-func (b *bufferAutoID) queue(message *Message) *Message {
+func (b *bufferAutoID) queue(message *Message, topics []string) *Message {
 	message = message.Clone()
 	message.ID = ID(strconv.FormatInt(b.upcomingID, autoIDBase))
 	b.upcomingID++
-	b.buf = append(b.buf, message)
+	b.buf = append(b.buf, messageWithTopics{message: message, topics: topics})
 
 	return message
 }
@@ -97,7 +97,7 @@ func (b *bufferAutoID) dequeue() {
 	b.buf = b.buf[1:]
 }
 
-func (b *bufferAutoID) slice(atID EventID) []*Message {
+func (b *bufferAutoID) slice(atID EventID) []messageWithTopics {
 	id, err := strconv.ParseInt(atID.String(), autoIDBase, 64)
 	if err != nil {
 		return nil
@@ -110,7 +110,7 @@ func (b *bufferAutoID) slice(atID EventID) []*Message {
 }
 
 func getBuffer(autoIDs bool, capacity int) buffer {
-	base := bufferBase{buf: make([]*Message, 0, capacity)}
+	base := bufferBase{buf: make([]messageWithTopics, 0, capacity)}
 	if autoIDs {
 		return &bufferAutoID{bufferBase: base}
 	}

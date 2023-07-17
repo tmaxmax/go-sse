@@ -7,6 +7,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 ### Removed
 
 - `Message.ExpiresAt` is no more.
+- `Message.Topic` is no more. See the changes to `Server`, `Provider` and `ReplayProvider` for handling topics – you can now publish a message to multiple topics at once.
 - `NewValidReplayProvider` is no more.
 - `NewFiniteReplayProvider` is no more.
 
@@ -18,7 +19,11 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 ### Changed
 
 - `ReplayProvider.Put` takes a simple `*Message` and returns a `*Message`, instead of changing the `*Message` to which the `**Message` parameter points.
+  It also takes a slice of topics, given that the `Message` doesn't hold the topic itself anymore.
 - Because `Message.ExpiresAt` is removed, the `ValidReplayProvider` sets the expiry itself.
+- `Server.Publish` now takes a list of topics.
+- `Provider.Publish` now takes a non-empty slice of topics.
+- `ReplayProvider.Put` now takes a non-empty slice of topics.
 
 ## [0.5.2] - 2023-07-12
 

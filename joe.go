@@ -40,7 +40,7 @@ type ReplayProvider interface {
 	// can be replayed. If an error occurs internally when putting the new message
 	// and retrying the operation would block for too long, it can be aborted.
 	// The errors aren't returned as the server providers won't be able to handle them in a useful manner.
-	Put(message *Message) *Message
+	Put(message *Message, topics []string) *Message
 	// Replay sends to a new subscriber all the valid events received by the provider
 	// since the event with the listener's ID. If the ID the listener provides
 	// is invalid, the provider should not replay any events.
@@ -80,6 +80,11 @@ type (
 		done subscriber
 		Subscription
 	}
+
+	messageWithTopics struct {
+		message *Message
+		topics  []string
+	}
 )
 
 // Joe is a basic server provider that synchronously executes operations by queueing them in channels.
@@ -94,7 +99,7 @@ type (
 // He serves simple use-cases well, as he's light on resources, and does not require any external
 // services. Also, he is the default provider for Servers.
 type Joe struct {
-	message        chan *Message
+	message        chan messageWithTopics
 	subscription   chan subscription
 	unsubscription chan subscriber
 	done           chan struct{}
@@ -131,7 +136,7 @@ func NewJoe(configuration ...JoeConfig) *Joe {
 	gc, stopGCTicker := ticker(config.ReplayGCInterval)
 
 	j := &Joe{
-		message:        make(chan *Message),
+		message:        make(chan messageWithTopics),
 		subscription:   make(chan subscription),
 		unsubscription: make(chan subscriber),
 		done:           make(chan struct{}),
@@ -175,11 +180,20 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 }
 
 // Publish tells Joe to send the given message to the subscribers.
-func (j *Joe) Publish(msg *Message) error {
+// When a message is published to multiple topics, Joe makes sure to
+// not send the Message multiple times to clients that are subscribed
+// to more than one topic that receive the given Message. Every client
+// receives each unique message once, regardless of how many topics it
+// is subscribed to or to how many topics the message is published.
+func (j *Joe) Publish(msg *Message, topics []string) error {
+	if len(topics) == 0 {
+		return ErrNoTopic
+	}
+
 	// Waiting on done ensures Publish doesn't block the caller goroutine
 	// when Joe is stopped and implements the required Provider behavior.
 	select {
-	case j.message <- msg:
+	case j.message <- messageWithTopics{message: msg, topics: topics}:
 		return nil
 	case <-j.done:
 		return ErrProviderClosed
@@ -228,11 +242,20 @@ func (j *Joe) start() {
 	for {
 		select {
 		case msg := <-j.message:
-			msg = j.replay.Put(msg)
+			toDispatch := j.replay.Put(msg.message, msg.topics)
+			seen := map[subscriber]struct{}{}
 
-			for done, cb := range j.topics[msg.Topic] {
-				if !cb(msg) {
-					j.removeSubscriber(done)
+			for _, topic := range msg.topics {
+				for done, cb := range j.topics[topic] {
+					if _, ok := seen[done]; ok {
+						continue
+					}
+
+					if cb(toDispatch) {
+						seen[done] = struct{}{}
+					} else {
+						j.removeSubscriber(done)
+					}
 				}
 			}
 		case sub := <-j.subscription:

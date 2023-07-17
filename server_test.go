@@ -18,6 +18,7 @@ type mockProvider struct {
 	SubError   error
 	Closed     chan struct{}
 	Pub        *sse.Message
+	PubTopics  []string
 	Sub        sse.Subscription
 	Subscribed bool
 	Stopped    bool
@@ -45,8 +46,9 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub sse.Subscription) erro
 	return nil
 }
 
-func (m *mockProvider) Publish(msg *sse.Message) error {
+func (m *mockProvider) Publish(msg *sse.Message, topics []string) error {
 	m.Pub = msg
+	m.PubTopics = topics
 	m.Published = true
 	return nil
 }
@@ -85,12 +87,12 @@ func TestServer_ShutdownPublish(t *testing.T) {
 
 	_ = s.Publish(&sse.Message{})
 	require.True(t, p.Published, "Publish wasn't called")
-	require.Equal(t, *p.Pub, sse.Message{Topic: sse.DefaultTopic}, "incorrect message")
+	require.Equal(t, []any{*p.Pub, p.PubTopics}, []any{sse.Message{}, []string{sse.DefaultTopic}}, "incorrect message")
 
 	p.Published = false
-	_ = s.Publish(&sse.Message{Topic: "topic"})
+	_ = s.Publish(&sse.Message{}, "topic")
 	require.True(t, p.Published, "Publish wasn't called")
-	require.Equal(t, *p.Pub, sse.Message{Topic: "topic"}, "incorrect message")
+	require.Equal(t, []any{*p.Pub, p.PubTopics}, []any{sse.Message{}, []string{"topic"}}, "incorrect message")
 
 	_ = s.Shutdown()
 	require.True(t, p.Stopped, "Stop wasn't called")

@@ -60,8 +60,9 @@ type Provider interface {
 	//
 	// Providers can assume that the topics list for a subscription has at least one topic.
 	Subscribe(ctx context.Context, subscription Subscription) error
-	// Publish a message to all the subscribers that are subscribed to the message's topic.
-	Publish(message *Message) error
+	// Publish a message to all the subscribers that are subscribed to the given topics.
+	// The topics slice must be non-empty, or ErrNoTopic will be raised.
+	Publish(message *Message, topics []string) error
 	// Stop the provider. Calling Stop will clean up all the provider's resources and
 	// make Subscribe and Publish fail with an error. All the listener channels will be
 	// closed and any ongoing publishes will be aborted.
@@ -72,6 +73,11 @@ type Provider interface {
 
 // ErrProviderClosed is a sentinel error returned by providers when any operation is attempted after the provider is closed.
 var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
+
+// ErrNoTopic is a sentinel error returned by providers when a Message is published without any topics.
+// It is not an issue to call Server.Publish without topics, because the Server will add the DefaultTopic;
+// it is an error to call Provider.Publish without any topics, though.
+var ErrNoTopic = errors.New("go-sse.server: no topics specified")
 
 // DefaultTopic is the identifier for the topic that is implied when no topics are specified for a Subscription
 // or a Message. Providers are required to implement this behavior to ensure handlers don't break if providers
@@ -238,26 +244,20 @@ const (
 // Pre-allocated header value.
 var headerContentTypeValue = []string{"text/event-stream"}
 
-var defaultTopicSlice = []string{DefaultTopic}
-
 // Subscribe subscribes the given callback to the specified topics. It is unsubscribed when the context is closed
 // or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
 func (s *Server) Subscribe(ctx context.Context, callback SubscriptionCallback, lastEventID EventID, topics ...string) error {
-	if len(topics) == 0 {
-		topics = defaultTopicSlice
-	}
-
 	return s.Provider().Subscribe(ctx, Subscription{
 		Callback:    callback,
 		LastEventID: lastEventID,
-		Topics:      topics,
+		Topics:      getTopics(topics),
 	})
 }
 
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
-// The topic is optional - if none is specified, the event is published to the default topic.
-func (s *Server) Publish(e *Message) error {
-	return s.Provider().Publish(e)
+// The topics are optional - if none are specified, the event is published to the DefaultTopic.
+func (s *Server) Publish(e *Message, topics ...string) error {
+	return s.Provider().Publish(e, getTopics(topics))
 }
 
 // Shutdown closes all the connections and stops the server. Publish operations will fail
@@ -270,4 +270,14 @@ func (s *Server) Publish(e *Message) error {
 // The error returned is the one returned by the underlying provider's Stop method.
 func (s *Server) Shutdown() error {
 	return s.Provider().Stop()
+}
+
+var defaultTopicSlice = []string{DefaultTopic}
+
+func getTopics(initial []string) []string {
+	if len(initial) == 0 {
+		return defaultTopicSlice
+	}
+
+	return initial
 }

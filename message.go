@@ -53,20 +53,8 @@ func (c *chunk) WriteTo(w io.Writer) (int64, error) {
 	return int64(n + m), err
 }
 
-// Message is the representation of a single message sent from the server to its clients.
-//
-// A Message is made of a single event, which is sent to each client, and other metadata
-// about the message itself: its topic.
-//
-// Topics are used to filter which events reach which clients. If a client subscribes to
-// a certain set of topics, but a message's topic is not part of that set, then the underlying
-// event of the message does not reach the client.
-//
-// The Topic field is used only on the server and is not sent to the client.
-// It is not part of the protocol.
+// Message is the representation of an event sent from the server to its clients.
 type Message struct {
-	Topic string
-
 	chunks []chunk
 
 	ID    EventID
@@ -328,11 +316,7 @@ func (e *Message) reset() {
 // UnmarshalText extracts the first event found in the given byte slice into the
 // receiver. The input is expected to be a wire format event, as defined by the spec.
 // Therefore, previous fields present on the Message will be overwritten
-// (i.e. event, ID, comments, data, retry), but the Topic will be kept as is,
-// as it is not an event field.
-//
-// A method for marshalling and unmarshalling Messages together with their Topic
-// can be seen in the top-level example MessageCustomJSONMarshal.
+// (i.e. event, ID, comments, data, retry).
 //
 // Unmarshaling ignores fields with invalid names. If no valid fields are found,
 // an error is returned. For a field to be valid it must end in a newline - if the last
