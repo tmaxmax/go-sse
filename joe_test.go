@@ -57,7 +57,7 @@ func TestNewJoe(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 2)
 
-	require.NoError(t, j.Stop())
+	require.NoError(t, j.Shutdown(context.Background()))
 	require.Equal(t, rp.callsGC, 1)
 
 	//nolint
@@ -65,15 +65,15 @@ func TestNewJoe(t *testing.T) {
 		s := sse.NewJoe(sse.JoeConfig{
 			ReplayGCInterval: -5,
 		})
-		defer s.Stop()
+		defer s.Shutdown(context.Background())
 		t := sse.NewJoe(sse.JoeConfig{
 			ReplayGCInterval: 5,
 		})
-		defer t.Stop()
+		defer t.Shutdown(context.Background())
 	})
 }
 
-func TestJoe_Stop(t *testing.T) {
+func TestJoe_Shutdown(t *testing.T) {
 	t.Parallel()
 
 	rp := &mockReplayProvider{errGC: errors.New("")}
@@ -81,8 +81,8 @@ func TestJoe_Stop(t *testing.T) {
 		ReplayProvider: rp,
 	})
 
-	require.NoError(t, j.Stop())
-	require.ErrorIs(t, j.Stop(), sse.ErrProviderClosed)
+	require.NoError(t, j.Shutdown(context.Background()))
+	require.ErrorIs(t, j.Shutdown(context.Background()), sse.ErrProviderClosed)
 	require.ErrorIs(t, j.Subscribe(context.Background(), sse.Subscription{}), sse.ErrProviderClosed)
 	require.ErrorIs(t, j.Publish(nil, nil), sse.ErrNoTopic)
 	require.ErrorIs(t, j.Publish(nil, []string{sse.DefaultTopic}), sse.ErrProviderClosed)
@@ -93,9 +93,28 @@ func TestJoe_Stop(t *testing.T) {
 	j = sse.NewJoe()
 	//nolint
 	require.NotPanics(t, func() {
-		go j.Stop()
-		j.Stop()
+		go j.Shutdown(context.Background())
+		j.Shutdown(context.Background())
 	})
+
+	j = sse.NewJoe()
+	subctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	t.Cleanup(cancel)
+	go j.Subscribe(subctx, sse.Subscription{
+		Topics: []string{sse.DefaultTopic},
+		Callback: func(_ *sse.Message) bool {
+			time.Sleep(time.Millisecond * 5)
+			return true
+		},
+	})
+
+	j.Publish(&sse.Message{}, []string{sse.DefaultTopic})
+
+	sctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*3)
+	t.Cleanup(cancel)
+	require.ErrorIs(t, j.Shutdown(sctx), context.DeadlineExceeded)
+
+	<-subctx.Done()
 }
 
 func subscribe(t testing.TB, p sse.Provider, ctx context.Context, topics ...string) <-chan []*sse.Message { //nolint
@@ -151,7 +170,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider: rp,
 	})
-	defer j.Stop() //nolint:errcheck // irrelevant
+	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
 
 	ctx, cancel := newMockContext(t)
 	defer cancel()
@@ -170,7 +189,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	sub2 := subscribe(t, j, ctx2)
 	<-ctx2.waitingOnDone
 
-	require.NoError(t, j.Stop())
+	require.NoError(t, j.Shutdown(context.Background()))
 	msgs = <-sub2
 	require.Zero(t, msgs, "unexpected messages received")
 	require.Equal(t, 2, rp.callsPut, "invalid put calls")
@@ -181,7 +200,7 @@ func TestJoe_Subscribe_multipleTopics(t *testing.T) {
 	t.Parallel()
 
 	j := sse.NewJoe()
-	defer j.Stop() //nolint:errcheck // irrelevant
+	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
 
 	ctx, cancel := newMockContext(t)
 	defer cancel()
@@ -192,7 +211,7 @@ func TestJoe_Subscribe_multipleTopics(t *testing.T) {
 	_ = j.Publish(msg(t, "hello", ""), []string{sse.DefaultTopic, "another topic"})
 	_ = j.Publish(msg(t, "world", ""), []string{"another topic"})
 
-	_ = j.Stop()
+	_ = j.Shutdown(context.Background())
 
 	msgs := <-sub
 
@@ -210,7 +229,7 @@ func TestJoe_errors(t *testing.T) {
 	j := sse.NewJoe(sse.JoeConfig{
 		ReplayProvider: &sse.FiniteReplayProvider{Count: 1},
 	})
-	defer j.Stop() //nolint:errcheck // irrelevant
+	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
 
 	_ = j.Publish(msg(t, "hello", "0"), []string{sse.DefaultTopic})
 	_ = j.Publish(msg(t, "hello", "1"), []string{sse.DefaultTopic})
@@ -266,6 +285,6 @@ func TestJoe_GCInterval(t *testing.T) {
 	expected := 2
 
 	time.Sleep(interval*time.Duration(expected) + interval/2)
-	require.NoError(t, j.Stop())
+	require.NoError(t, j.Shutdown(context.Background()))
 	require.Equal(t, expected, rp.callsGC)
 }

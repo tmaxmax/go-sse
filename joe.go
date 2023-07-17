@@ -204,7 +204,7 @@ func (j *Joe) Publish(msg *Message, topics []string) error {
 // It returns when all the subscribers are closed.
 //
 // Further calls to Stop will return ErrProviderClosed.
-func (j *Joe) Stop() (err error) {
+func (j *Joe) Shutdown(ctx context.Context) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = ErrProviderClosed
@@ -212,7 +212,12 @@ func (j *Joe) Stop() (err error) {
 	}()
 
 	close(j.done)
-	<-j.closed
+
+	select {
+	case <-j.closed:
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
 
 	return
 }
@@ -293,8 +298,6 @@ func (j *Joe) closeSubscribers() {
 		}
 	}
 }
-
-var _ Provider = (*Joe)(nil)
 
 // joeConfig takes the NewJoe function's input and returns a valid configuration.
 func joeConfig(input []JoeConfig) JoeConfig {

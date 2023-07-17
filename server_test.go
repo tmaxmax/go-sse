@@ -53,7 +53,7 @@ func (m *mockProvider) Publish(msg *sse.Message, topics []string) error {
 	return nil
 }
 
-func (m *mockProvider) Stop() error {
+func (m *mockProvider) Shutdown(_ context.Context) error {
 	m.Stopped = true
 	return nil
 }
@@ -81,7 +81,7 @@ func TestServer_ShutdownPublish(t *testing.T) {
 	require.True(t, p.Published, "Publish wasn't called")
 	require.Equal(t, []any{*p.Pub, p.PubTopics}, []any{sse.Message{}, []string{"topic"}}, "incorrect message")
 
-	_ = s.Shutdown()
+	_ = s.Shutdown(context.Background())
 	require.True(t, p.Stopped, "Stop wasn't called")
 }
 
@@ -271,7 +271,7 @@ func benchmarkServer(b *testing.B, conns int) {
 	b.Helper()
 
 	s := sse.NewServer()
-	b.Cleanup(func() { _ = s.Shutdown() })
+	b.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
 	m := getMessage(b)
 

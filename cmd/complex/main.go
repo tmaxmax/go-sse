@@ -48,7 +48,15 @@ func main() {
 		e.AppendData("bye")
 		// Broadcast a close message so clients can gracefully disconnect.
 		_ = sseHandler.Publish(e)
-		_ = sseHandler.Shutdown()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+
+		// We use a context with a timeout so the program doesn't wait indefinitely
+		// for connections to terminate. There may be misbehaving connections
+		// which may hang for an unknown timespan, so we just stop waiting on Shutdown
+		// after a certain duration.
+		_ = sseHandler.Shutdown(ctx)
 	})
 
 	go recordMetric(ctx, "ops", time.Second*2)

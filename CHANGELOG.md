@@ -27,6 +27,8 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 - `Server.Publish` now takes a list of topics.
 - `Provider.Publish` now takes a non-empty slice of topics.
 - `ReplayProvider.Put` now takes a non-empty slice of topics.
+- `Provider.Stop` is now `Provider.Shutdown` and takes now a `context.Context` as a parameter.
+- `Server.Shutdown` takes now a `context.Context` as a parameter.
 
 ## [0.5.2] - 2023-07-12
 

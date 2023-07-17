@@ -80,7 +80,7 @@ type Provider interface {
     // Add a new subscriber that is unsubscribed when the context is done.
     Subscribe(ctx context.Context, sub Subscription) error
     // Cleanup all resources and stop publishing messages or accepting subscriptions.
-    Stop() error
+    Shutdown(ctx context.Context) error
 }
 ```
 

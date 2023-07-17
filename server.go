@@ -63,12 +63,16 @@ type Provider interface {
 	// Publish a message to all the subscribers that are subscribed to the given topics.
 	// The topics slice must be non-empty, or ErrNoTopic will be raised.
 	Publish(message *Message, topics []string) error
-	// Stop the provider. Calling Stop will clean up all the provider's resources and
-	// make Subscribe and Publish fail with an error. All the listener channels will be
+	// Shutdown stops the provider. Calling Shutdown will clean up all the provider's resources
+	// and make Subscribe and Publish fail with an error. All the listener channels will be
 	// closed and any ongoing publishes will be aborted.
 	//
-	// Calling Stop multiple times does nothing but return ErrProviderClosed.
-	Stop() error
+	// If the given context times out before the provider is shut down – shutting it down takes
+	// longer, the context error is returned.
+	//
+	// Calling Shutdown multiple times after it successfully returned the first time
+	// does nothing but return ErrProviderClosed.
+	Shutdown(ctx context.Context) error
 }
 
 // ErrProviderClosed is a sentinel error returned by providers when any operation is attempted after the provider is closed.
@@ -257,9 +261,9 @@ func (s *Server) Publish(e *Message, topics ...string) error {
 // method. Not doing this will result in the server never shutting down or connections being
 // abruptly stopped.
 //
-// The error returned is the one returned by the underlying provider's Stop method.
-func (s *Server) Shutdown() error {
-	return s.provider.Stop()
+// See the Provider.Shutdown documentation for information on context usage and errors.
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.provider.Shutdown(ctx)
 }
 
 var defaultTopicSlice = []string{DefaultTopic}
