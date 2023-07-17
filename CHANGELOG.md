@@ -11,16 +11,19 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 - `Message.Writer` is no more. The API was redundant – one can achieve the same using `strings.Builder` and `Message.AppendData`. See the `MessageWriter` example for more.
 - `NewValidReplayProvider` is no more.
 - `NewFiniteReplayProvider` is no more.
-- `Server.Subscribe` is no more – it never made sense.
-- `Server.Provider` is no more.
 - `NewJoe` is no more.
 - `JoeConfig` is no more.
+- `Server.Subscribe` is no more – it never made sense.
+- `Server.Provider` is no more.
+- `NewServer`, `ServerOption` and associated are no more.
+- The `Logger` interface and the capability of the `Server` to use types that implement `Logger` as logging systems.
 
 ### Added
 
 - Because the `ValidReplayProvider` constructor was removed, the fields `ValidReplayProvider.{TTL,AutoIDs}` were added for configuration.
 - Because the `FiniteReplayProvider` constructor was removed, the fields `FiniteReplayProvider.{Count,AutoIDs}` were added for configuration.
 - Because the `Joe` constructor was removed, the fields `Joe.{ReplayProvider,ReplayGCInterval}` were added for configuration.
+- Because the `Server` constructor was removed, the field `Server.Provider` was added for configuration.
 
 ### Changed
 

@@ -19,9 +19,8 @@ package sse
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
-	"os"
+	"sync"
 )
 
 // SubscriptionCallback is a function that is called when a subscriber receives a message.
@@ -88,34 +87,6 @@ var ErrNoTopic = errors.New("go-sse.server: no topics specified")
 // are changed.
 const DefaultTopic = ""
 
-// A ServerOption configures a certain property of a given Server.
-type ServerOption func(*Server)
-
-// WithProvider is an option that sets a custom provider for a given Server.
-// The default provider is Joe without any ReplayProvider, if this option isn't given.
-func WithProvider(provider Provider) ServerOption {
-	return func(s *Server) {
-		if provider != nil {
-			s.provider = provider
-		}
-	}
-}
-
-// The Logger interface describes an object that can be used for logging.
-type Logger interface {
-	Printf(format string, args ...interface{})
-}
-
-// WithLogger is an option that sets a custom logger for a given Server.
-// The default logger is the one provided by the standard log package.
-func WithLogger(logger Logger) ServerOption {
-	return func(s *Server) {
-		if logger != nil {
-			s.logger = logger
-		}
-	}
-}
-
 // A Server is mostly a convenience wrapper around a provider.
 // It implements the http.Handler interface and has some methods
 // for calling the underlying provider's methods.
@@ -123,27 +94,10 @@ func WithLogger(logger Logger) ServerOption {
 // When creating a server, if no provider is specified using the WithProvider
 // option, the Joe provider found in this package with no replay provider is used.
 type Server struct {
+	Provider Provider
+
 	provider Provider
-	logger   Logger
-}
-
-// NewServer creates a new server using the specified provider. If no provider is given, Joe with no replay provider is used.
-func NewServer(options ...ServerOption) *Server {
-	s := &Server{}
-
-	for _, opt := range options {
-		opt(s)
-	}
-
-	if s.provider == nil {
-		s.provider = &Joe{}
-	}
-
-	if s.logger == nil {
-		s.logger = log.New(os.Stderr, "go-sse: ", log.LstdFlags)
-	}
-
-	return s
+	initDone sync.Once
 }
 
 type writeFlusher interface {
@@ -204,6 +158,7 @@ var ErrUpgradeUnsupported = errors.New("go-sse.server: upgrade unsupported")
 //
 // If you need different behavior, you can create a custom handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.init()
 	// Make sure to keep the ServeHTTP implementation line number in sync with the number in the README!
 
 	conn, err := Upgrade(w)
@@ -223,7 +178,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	cb := func(m *Message) bool {
 		if err := conn.Send(m); err != nil {
-			s.logger.Printf("send error: %v", err)
 			return false
 		}
 		return true
@@ -251,6 +205,7 @@ var headerContentTypeValue = []string{"text/event-stream"}
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topics are optional - if none are specified, the event is published to the DefaultTopic.
 func (s *Server) Publish(e *Message, topics ...string) error {
+	s.init()
 	return s.provider.Publish(e, getTopics(topics))
 }
 
@@ -263,7 +218,17 @@ func (s *Server) Publish(e *Message, topics ...string) error {
 //
 // See the Provider.Shutdown documentation for information on context usage and errors.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.init()
 	return s.provider.Shutdown(ctx)
+}
+
+func (s *Server) init() {
+	s.initDone.Do(func() {
+		s.provider = s.Provider
+		if s.provider == nil {
+			s.provider = &Joe{}
+		}
+	})
 }
 
 var defaultTopicSlice = []string{DefaultTopic}

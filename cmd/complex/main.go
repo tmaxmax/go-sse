@@ -15,7 +15,7 @@ import (
 	"github.com/tmaxmax/go-sse"
 )
 
-var sseHandler = sse.NewServer()
+var sseHandler sse.Server
 
 func cors(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +34,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("/", SnapshotHTTPEndpoint)
-	mux.Handle("/events", sseHandler)
+	mux.Handle("/events", &sseHandler)
 
 	s := &http.Server{
 		Addr:              "0.0.0.0:8080",

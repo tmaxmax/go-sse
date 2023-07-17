@@ -70,7 +70,7 @@ func TestServer_ShutdownPublish(t *testing.T) {
 	t.Parallel()
 
 	p := &mockProvider{}
-	s := sse.NewServer(sse.WithProvider(p))
+	s := &sse.Server{Provider: p}
 
 	_ = s.Publish(&sse.Message{})
 	require.True(t, p.Published, "Publish wasn't called")
@@ -103,7 +103,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 	req.Header.Set("Last-Event-ID", "5")
 
 	go cancel()
-	sse.NewServer(sse.WithProvider(p)).ServeHTTP(rec, req)
+	(&sse.Server{Provider: p}).ServeHTTP(rec, req)
 
 	require.True(t, p.Subscribed, "Subscribe wasn't called")
 	require.Equal(t, sse.ID("5"), p.Sub.LastEventID, "Invalid last event ID received")
@@ -123,7 +123,7 @@ func TestServer_ServeHTTP_unsupportedRespWriter(t *testing.T) {
 	defer cancel()
 	p := newMockProvider(t, nil)
 
-	sse.NewServer(sse.WithProvider(p)).ServeHTTP(noFlusher{rec}, req)
+	(&sse.Server{Provider: p}).ServeHTTP(noFlusher{rec}, req)
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
 	require.Equal(t, "Server-sent events unsupported\n", rec.Body.String(), "invalid response body")
@@ -136,7 +136,7 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 	req, _ := http.NewRequest("", "http://localhost", http.NoBody)
 	p := newMockProvider(t, errors.New("can't subscribe"))
 
-	sse.NewServer(sse.WithProvider(p)).ServeHTTP(rec, req)
+	(&sse.Server{Provider: p}).ServeHTTP(rec, req)
 
 	require.Equal(t, p.SubError.Error()+"\n", rec.Body.String(), "invalid response body")
 	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
@@ -163,7 +163,7 @@ func TestServer_ServeHTTP_connectionError(t *testing.T) {
 	req, _ := http.NewRequest("", "http://localhost", http.NoBody)
 	p := newMockProvider(t, nil)
 
-	sse.NewServer(sse.WithProvider(p)).ServeHTTP(&responseWriterErr{rec}, req)
+	(&sse.Server{Provider: p}).ServeHTTP(&responseWriterErr{rec}, req)
 	_, ok := <-p.Closed
 	require.False(t, ok)
 }
@@ -270,7 +270,7 @@ func getRequest(tb testing.TB) (w *discardResponseWriter, r *http.Request) {
 func benchmarkServer(b *testing.B, conns int) {
 	b.Helper()
 
-	s := sse.NewServer()
+	s := &sse.Server{}
 	b.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
 	m := getMessage(b)

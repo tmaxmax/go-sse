@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	s := sse.NewServer()
+	s := &sse.Server{}
 
 	go func() {
 		ev := &sse.Message{}

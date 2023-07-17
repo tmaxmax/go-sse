@@ -55,23 +55,23 @@ import "github.com/tmaxmax/go-sse"
 s := sse.NewServer()
 ```
 
-The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L180) to learn how to implement your own custom logic.
+The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L160) to learn how to implement your own custom logic.
 
-The `NewServer` constructor actually takes in additional options:
-
-```go
-package sse
-
-func NewServer(options ...ServerOption) *Server
-```
-
-One of them is the `WithProvider` option:
+To initialize a server:
 
 ```go
-func WithProvider(provider Provider) Option
+s := &sse.Server{} // zero value ready to use!
 ```
 
-A provider is an implementation of the publish-subscribe messaging system:
+The `sse.Server` has some additional configuration options:
+
+```go
+s := &sse.Server{
+    Provider: /* what goes here? find out next! */,
+}
+```
+
+What is this "provider"? A provider is an implementation of the publish-subscribe messaging system:
 
 ```go
 type Provider interface {
@@ -212,7 +212,7 @@ import (
 )
 
 func main() {
-    s := sse.NewServer()
+    s := &sse.Server{}
 
     go func() {
         m := &sse.Message{}
