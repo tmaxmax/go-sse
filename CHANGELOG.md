@@ -11,6 +11,8 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 - `Message.Writer` is no more. The API was redundant – one can achieve the same using `strings.Builder` and `Message.AppendData`. See the `MessageWriter` example for more.
 - `NewValidReplayProvider` is no more.
 - `NewFiniteReplayProvider` is no more.
+- `Server.Subscribe` is no more – it never made sense.
+- `Server.Provider` is no more.
 
 ### Added
 

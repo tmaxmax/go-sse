@@ -66,19 +66,6 @@ func newMockProvider(tb testing.TB, subErr error) *mockProvider {
 	return &mockProvider{Closed: make(chan struct{}), SubError: subErr}
 }
 
-func TestNew(t *testing.T) {
-	t.Parallel()
-
-	s := sse.NewServer()
-	defer s.Shutdown() //nolint
-	_, ok := s.Provider().(*sse.Joe)
-	require.True(t, ok, "Default provider isn't Joe")
-
-	s = sse.NewServer(sse.WithProvider(&mockProvider{}))
-	_, ok = s.Provider().(*mockProvider)
-	require.True(t, ok, "given provider isn't used")
-}
-
 func TestServer_ShutdownPublish(t *testing.T) {
 	t.Parallel()
 

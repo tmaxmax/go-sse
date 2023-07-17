@@ -142,11 +142,6 @@ func NewServer(options ...ServerOption) *Server {
 	return s
 }
 
-// Provider returns the server's underlying provider.
-func (s *Server) Provider() Provider {
-	return s.provider
-}
-
 type writeFlusher interface {
 	http.ResponseWriter
 	http.Flusher
@@ -229,8 +224,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return true
 	}
+	sub := Subscription{
+		Callback:    cb,
+		LastEventID: id,
+		Topics:      []string{DefaultTopic},
+	}
 
-	if err = s.Subscribe(r.Context(), cb, id); err != nil {
+	if err = s.provider.Subscribe(r.Context(), sub); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -244,20 +244,10 @@ const (
 // Pre-allocated header value.
 var headerContentTypeValue = []string{"text/event-stream"}
 
-// Subscribe subscribes the given callback to the specified topics. It is unsubscribed when the context is closed
-// or the server is shut down. If no topic is specified, the channel is subscribed to the default topic.
-func (s *Server) Subscribe(ctx context.Context, callback SubscriptionCallback, lastEventID EventID, topics ...string) error {
-	return s.Provider().Subscribe(ctx, Subscription{
-		Callback:    callback,
-		LastEventID: lastEventID,
-		Topics:      getTopics(topics),
-	})
-}
-
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topics are optional - if none are specified, the event is published to the DefaultTopic.
 func (s *Server) Publish(e *Message, topics ...string) error {
-	return s.Provider().Publish(e, getTopics(topics))
+	return s.provider.Publish(e, getTopics(topics))
 }
 
 // Shutdown closes all the connections and stops the server. Publish operations will fail
@@ -269,7 +259,7 @@ func (s *Server) Publish(e *Message, topics ...string) error {
 //
 // The error returned is the one returned by the underlying provider's Stop method.
 func (s *Server) Shutdown() error {
-	return s.Provider().Stop()
+	return s.provider.Stop()
 }
 
 var defaultTopicSlice = []string{DefaultTopic}
