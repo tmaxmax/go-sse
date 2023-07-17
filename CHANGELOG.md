@@ -8,6 +8,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 - `Message.ExpiresAt` is no more.
 - `Message.Topic` is no more. See the changes to `Server`, `Provider` and `ReplayProvider` for handling topics – you can now publish a message to multiple topics at once.
+- `Message.Writer` is no more. The API was redundant – one can achieve the same using `strings.Builder` and `Message.AppendData`. See the `MessageWriter` example for more.
 - `NewValidReplayProvider` is no more.
 - `NewFiniteReplayProvider` is no more.
 

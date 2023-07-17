@@ -152,18 +152,18 @@ func TestEvent_UnmarshalText(t *testing.T) {
 }
 
 //nolint:all
-func ExampleMessage_Writer() {
+func Example_messageWriter() {
 	e := Message{
 		Type: Type("test"),
 		ID:   ID("1"),
 	}
-	w := e.Writer()
+	w := &strings.Builder{}
 
 	bw := base64.NewEncoder(base64.StdEncoding, w)
 	binary.Write(bw, binary.BigEndian, []byte{6, 9, 4, 2, 0})
 	binary.Write(bw, binary.BigEndian, []byte("data from sensor"))
 	bw.Close()
-	w.WriteByte('\n') // Adds the data to the event, as after this write it would end with a newline.
+	w.WriteByte('\n') // Ensures that the data written above will be a distinct `data` field.
 
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -174,13 +174,12 @@ func ExampleMessage_Writer() {
 	io.Copy(hex.NewEncoder(w), bytes.NewReader([]byte{5, 1, 6, 34, 234, 12, 143, 91}))
 
 	mw := io.MultiWriter(os.Stdout, w)
-	// The first newline adds to the Message the data written above from rand.Reader.
+	// The first newline adds the data written above as a `data field`.
 	io.WriteString(mw, "\nYou'll see me both in console and in event\n\n")
 
-	// Even though the data is already added to the event because of the newlines,
-	// Close must be called to clean up resources.
-	w.Close()
-
+	// Add the data to the event. It will be split into fields here,
+	// according to the newlines present in the input.
+	e.AppendData(w.String())
 	e.WriteTo(os.Stdout)
 	// Output:
 	// You'll see me both in console and in event
