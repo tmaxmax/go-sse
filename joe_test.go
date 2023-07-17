@@ -3,6 +3,7 @@ package sse_test
 import (
 	"context"
 	"errors"
+	"log"
 	"testing"
 	"time"
 
@@ -46,40 +47,13 @@ func msg(tb testing.TB, data, id string) *sse.Message {
 	return e
 }
 
-func TestNewJoe(t *testing.T) {
-	t.Parallel()
-
-	rp := &mockReplayProvider{errGC: errors.New("")}
-	j := sse.NewJoe(sse.JoeConfig{
-		ReplayProvider:   rp,
-		ReplayGCInterval: time.Millisecond,
-	})
-
-	time.Sleep(time.Millisecond * 2)
-
-	require.NoError(t, j.Shutdown(context.Background()))
-	require.Equal(t, rp.callsGC, 1)
-
-	//nolint
-	require.NotPanics(t, func() {
-		s := sse.NewJoe(sse.JoeConfig{
-			ReplayGCInterval: -5,
-		})
-		defer s.Shutdown(context.Background())
-		t := sse.NewJoe(sse.JoeConfig{
-			ReplayGCInterval: 5,
-		})
-		defer t.Shutdown(context.Background())
-	})
-}
-
 func TestJoe_Shutdown(t *testing.T) {
 	t.Parallel()
 
 	rp := &mockReplayProvider{errGC: errors.New("")}
-	j := sse.NewJoe(sse.JoeConfig{
+	j := &sse.Joe{
 		ReplayProvider: rp,
-	})
+	}
 
 	require.NoError(t, j.Shutdown(context.Background()))
 	require.ErrorIs(t, j.Shutdown(context.Background()), sse.ErrProviderClosed)
@@ -90,27 +64,32 @@ func TestJoe_Shutdown(t *testing.T) {
 	require.Zero(t, rp.callsReplay)
 	require.Zero(t, rp.callsGC)
 
-	j = sse.NewJoe()
+	j = &sse.Joe{}
+	// trigger internal initialization, so the concurrent Shutdowns aren't serialized by the internal sync.Once.
+	_ = j.Publish(&sse.Message{}, []string{sse.DefaultTopic})
 	//nolint
 	require.NotPanics(t, func() {
 		go j.Shutdown(context.Background())
 		j.Shutdown(context.Background())
 	})
 
-	j = sse.NewJoe()
-	subctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	log.Println()
+
+	j = &sse.Joe{}
+	subctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*15)
 	t.Cleanup(cancel)
-	go j.Subscribe(subctx, sse.Subscription{
+	go j.Subscribe(subctx, sse.Subscription{ //nolint:errcheck // we don't care about this error
 		Topics: []string{sse.DefaultTopic},
 		Callback: func(_ *sse.Message) bool {
-			time.Sleep(time.Millisecond * 5)
+			time.Sleep(time.Millisecond * 8)
 			return true
 		},
 	})
+	time.Sleep(time.Millisecond)
 
-	j.Publish(&sse.Message{}, []string{sse.DefaultTopic})
+	_ = j.Publish(&sse.Message{}, []string{sse.DefaultTopic})
 
-	sctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*3)
+	sctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*5)
 	t.Cleanup(cancel)
 	require.ErrorIs(t, j.Shutdown(sctx), context.DeadlineExceeded)
 
@@ -167,9 +146,9 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	t.Parallel()
 
 	rp := &mockReplayProvider{errGC: errors.New("")}
-	j := sse.NewJoe(sse.JoeConfig{
+	j := &sse.Joe{
 		ReplayProvider: rp,
-	})
+	}
 	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
 
 	ctx, cancel := newMockContext(t)
@@ -199,7 +178,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 func TestJoe_Subscribe_multipleTopics(t *testing.T) {
 	t.Parallel()
 
-	j := sse.NewJoe()
+	j := &sse.Joe{}
 	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
 
 	ctx, cancel := newMockContext(t)
@@ -226,9 +205,9 @@ data: world
 func TestJoe_errors(t *testing.T) {
 	t.Parallel()
 
-	j := sse.NewJoe(sse.JoeConfig{
+	j := &sse.Joe{
 		ReplayProvider: &sse.FiniteReplayProvider{Count: 1},
-	})
+	}
 	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
 
 	_ = j.Publish(msg(t, "hello", "0"), []string{sse.DefaultTopic})
@@ -277,10 +256,12 @@ func TestJoe_GCInterval(t *testing.T) {
 
 	rp := &mockReplayProvider{}
 	interval := time.Millisecond * 6
-	j := sse.NewJoe(sse.JoeConfig{
+	j := &sse.Joe{
 		ReplayProvider:   rp,
 		ReplayGCInterval: interval,
-	})
+	}
+	// trigger internal initialization, so GC is started.
+	_ = j.Publish(&sse.Message{}, []string{sse.DefaultTopic})
 
 	expected := 2
 

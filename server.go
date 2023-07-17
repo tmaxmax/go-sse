@@ -136,7 +136,7 @@ func NewServer(options ...ServerOption) *Server {
 	}
 
 	if s.provider == nil {
-		s.provider = NewJoe()
+		s.provider = &Joe{}
 	}
 
 	if s.logger == nil {

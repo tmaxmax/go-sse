@@ -2,6 +2,7 @@ package sse
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -104,59 +105,23 @@ type Joe struct {
 	unsubscription chan subscriber
 	done           chan struct{}
 	closed         chan struct{}
-	gc             <-chan time.Time
-	stopGC         func()
-	gcFn           func() error
 	topics         map[string]subscribers
-	replay         ReplayProvider
-}
 
-// JoeConfig is used to optionally configure a replay provider for Joe.
-type JoeConfig struct {
 	// An optional replay provider that Joe uses to resend older messages to new subscribers.
 	ReplayProvider ReplayProvider
 	// An optional interval at which Joe triggers a cleanup of expired messages, if the replay provider supports it.
 	// See the desired provider's documentation to determine if periodic cleanup is necessary.
 	ReplayGCInterval time.Duration
-}
 
-// NewJoe creates and starts a Joe (the default provider for servers).
-// You can optionally pass a JoeConfig if you want to use a ReplayProvider with Joe.
-func NewJoe(configuration ...JoeConfig) *Joe {
-	config := joeConfig(configuration)
-
-	var gcFn func() error
-	provider, hasGC := config.ReplayProvider.(ReplayProviderWithGC)
-	if hasGC {
-		gcFn = provider.GC
-	} else {
-		config.ReplayGCInterval = 0
-	}
-
-	gc, stopGCTicker := ticker(config.ReplayGCInterval)
-
-	j := &Joe{
-		message:        make(chan messageWithTopics),
-		subscription:   make(chan subscription),
-		unsubscription: make(chan subscriber),
-		done:           make(chan struct{}),
-		closed:         make(chan struct{}),
-		gc:             gc,
-		stopGC:         stopGCTicker,
-		gcFn:           gcFn,
-		topics:         map[string]subscribers{},
-		replay:         config.ReplayProvider,
-	}
-
-	go j.start()
-
-	return j
+	initDone sync.Once
 }
 
 // Subscribe tells Joe to send new messages to this subscriber. The subscription
 // is automatically removed when the context is done, a callback error occurs
 // or Joe is stopped.
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
+	j.init()
+
 	done := make(chan struct{})
 
 	select {
@@ -190,6 +155,8 @@ func (j *Joe) Publish(msg *Message, topics []string) error {
 		return ErrNoTopic
 	}
 
+	j.init()
+
 	// Waiting on done ensures Publish doesn't block the caller goroutine
 	// when Joe is stopped and implements the required Provider behavior.
 	select {
@@ -205,6 +172,8 @@ func (j *Joe) Publish(msg *Message, topics []string) error {
 //
 // Further calls to Stop will return ErrProviderClosed.
 func (j *Joe) Shutdown(ctx context.Context) (err error) {
+	j.init()
+
 	defer func() {
 		if r := recover(); r != nil {
 			err = ErrProviderClosed
@@ -237,17 +206,17 @@ func (j *Joe) removeSubscriber(sub subscriber) {
 	close(sub)
 }
 
-func (j *Joe) start() {
+func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan time.Time, stopGCSignal func()) {
 	defer close(j.closed)
 	// defer closing all subscribers instead of closing them when done is closed
 	// so in case of a panic subscribers won't block the request goroutines forever.
 	defer j.closeSubscribers()
-	defer j.stopGC()
+	defer stopGCSignal()
 
 	for {
 		select {
 		case msg := <-j.message:
-			toDispatch := j.replay.Put(msg.message, msg.topics)
+			toDispatch := replay.Put(msg.message, msg.topics)
 			seen := map[subscriber]struct{}{}
 
 			for _, topic := range msg.topics {
@@ -264,7 +233,7 @@ func (j *Joe) start() {
 				}
 			}
 		case sub := <-j.subscription:
-			if !j.replay.Replay(sub.Subscription) {
+			if !replay.Replay(sub.Subscription) {
 				close(sub.done)
 				continue
 			}
@@ -274,9 +243,9 @@ func (j *Joe) start() {
 			}
 		case sub := <-j.unsubscription:
 			j.removeSubscriber(sub)
-		case <-j.gc:
-			if err := j.gcFn(); err != nil {
-				j.stopGC()
+		case <-gcSignal:
+			if err := gcFn(); err != nil {
+				stopGCSignal()
 			}
 		case <-j.done:
 			return
@@ -299,21 +268,34 @@ func (j *Joe) closeSubscribers() {
 	}
 }
 
-// joeConfig takes the NewJoe function's input and returns a valid configuration.
-func joeConfig(input []JoeConfig) JoeConfig {
-	cfg := JoeConfig{}
-	if len(input) > 0 {
-		cfg = input[0]
-	}
+func (j *Joe) init() {
+	j.initDone.Do(func() {
+		j.message = make(chan messageWithTopics)
+		j.subscription = make(chan subscription)
+		j.unsubscription = make(chan subscriber)
+		j.done = make(chan struct{})
+		j.closed = make(chan struct{})
+		j.topics = map[string]subscribers{}
 
-	if cfg.ReplayProvider == nil {
-		if cfg.ReplayGCInterval > 0 {
-			cfg.ReplayGCInterval = 0
+		replay := j.ReplayProvider
+		if replay == nil {
+			replay = noopReplayProvider{}
 		}
-		cfg.ReplayProvider = noopReplayProvider{}
-	}
 
-	return cfg
+		var gcFn func() error
+		replayGCInterval := j.ReplayGCInterval
+
+		provider, hasGC := replay.(ReplayProviderWithGC)
+		if hasGC {
+			gcFn = provider.GC
+		} else {
+			replayGCInterval = 0
+		}
+
+		gc, stopGCTicker := ticker(replayGCInterval)
+
+		go j.start(replay, gcFn, gc, stopGCTicker)
+	})
 }
 
 // ticker creates a time.Ticker, if duration is positive, and returns its channel and stop function.

@@ -102,7 +102,7 @@ The server still works by default, without a provider. `go-sse` brings you Joe: 
 ```go
 import "github.com/tmaxmax/go-sse"
 
-joe := sse.NewJoe()
+joe := &sse.Joe{} // the zero value is ready to use!
 ```
 
 and he'll dispatch events all day! By default, he has no memory of what events he has received, but you can help him remember and replay older messages to new clients using a `ReplayProvider`:
@@ -122,10 +122,10 @@ type ReplayProvider interface {
 `go-sse` provides two replay providers by default, which both hold the events in-memory: the `ValidReplayProvider` and `FiniteReplayProvider`. The first replays events that are valid, not expired, the second replays a finite number of the most recent events. For example:
 
 ```go
-sse.NewJoe(sse.JoeConfig{
+joe = &sse.Joe{
     ReplayProvider:   &sse.ValidReplayProvider{TTL: time.Minute * 5}, // let's have events expire after 5 minutes
     ReplayGCInterval: time.Minute,
-})
+}
 ```
 
 will tell Joe to replay all valid events and clean up the expired ones each minute! Replay providers can do so much more (for example, add IDs to events automatically): read the [docs][3] on how to use the existing ones and how to implement yours.
