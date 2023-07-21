@@ -50,10 +50,10 @@ type ReplayProvider interface {
 	// Other goroutines may be launched from inside the Replay method, but the events must
 	// be sent to the listener in the same goroutine that Replay is called in.
 	//
-	// The returned value indicates whether messages were replayed successfully. If no messages
-	// were replayed (invalid ID or no messages to replay) it must return true. It returns false
-	// only if the subscription's callback returns false.
-	Replay(subscription Subscription) bool
+	// If an error is returned, then at least some messages weren't successfully replayed.
+	// The error is nil if there were no messages to replay for the particular subscription
+	// or if all messages were replayed successfully.
+	Replay(subscription Subscription) error
 }
 
 // ReplayProviderWithGC is a ReplayProvider that must have invalid messages cleaned up from time to time.
@@ -75,8 +75,8 @@ type ReplayProviderWithGC interface {
 }
 
 type (
-	subscriber   chan<- struct{}
-	subscribers  map[subscriber]SubscriptionCallback
+	subscriber   chan<- error
+	subscribers  map[subscriber]MessageWriter
 	subscription struct {
 		done subscriber
 		Subscription
@@ -122,7 +122,7 @@ type Joe struct {
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	j.init()
 
-	done := make(chan struct{})
+	done := make(chan error, 1)
 
 	select {
 	case <-j.done:
@@ -131,17 +131,17 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	}
 
 	select {
-	case <-done:
-		return nil
+	case err := <-done:
+		return err
 	case <-ctx.Done():
 	}
 
 	select {
-	case <-done:
+	case err := <-done:
+		return err
 	case j.unsubscription <- done:
+		return nil
 	}
-
-	return nil
 }
 
 // Publish tells Joe to send the given message to the subscribers.
@@ -220,26 +220,33 @@ func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan ti
 			seen := map[subscriber]struct{}{}
 
 			for _, topic := range msg.topics {
-				for done, cb := range j.topics[topic] {
+				for done, c := range j.topics[topic] {
 					if _, ok := seen[done]; ok {
 						continue
 					}
 
-					if cb(toDispatch) {
-						seen[done] = struct{}{}
-					} else {
+					err := c.Send(toDispatch)
+					if err == nil {
+						err = c.Flush()
+					}
+
+					if err != nil {
+						done <- err
 						j.removeSubscriber(done)
+					} else {
+						seen[done] = struct{}{}
 					}
 				}
 			}
 		case sub := <-j.subscription:
-			if !replay.Replay(sub.Subscription) {
+			if err := replay.Replay(sub.Subscription); err != nil {
+				sub.done <- err
 				close(sub.done)
 				continue
 			}
 
 			for _, topic := range sub.Topics {
-				j.topic(topic)[sub.done] = sub.Callback
+				j.topic(topic)[sub.done] = sub.Client
 			}
 		case sub := <-j.unsubscription:
 			j.removeSubscriber(sub)

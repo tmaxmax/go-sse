@@ -1,164 +1,132 @@
-package sse
+package sse_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tmaxmax/go-sse"
+	"github.com/tmaxmax/go-sse/internal/tests"
 )
 
-func msg(tb testing.TB, data, id string, topics ...string) messageWithTopics {
-	tb.Helper()
-
-	e := &Message{}
-	e.AppendData(data)
-	if id != "" {
-		e.ID = ID(id)
-	}
-
-	if len(topics) == 0 {
-		topics = []string{DefaultTopic}
-	}
-
-	return messageWithTopics{message: e, topics: topics}
-}
-
-func replay(tb testing.TB, p ReplayProvider, lastEventID EventID, topics ...string) []*Message {
+func replay(tb testing.TB, p sse.ReplayProvider, lastEventID sse.EventID, topics ...string) []*sse.Message {
 	tb.Helper()
 
 	if len(topics) == 0 {
-		topics = []string{DefaultTopic}
+		topics = []string{sse.DefaultTopic}
 	}
 
-	var replayed []*Message
-	cb := func(m *Message) bool {
-		replayed = append(replayed, m)
-		return true
-	}
+	var replayed []*sse.Message
+	cb := mockClient(func(m *sse.Message) error {
+		if m != nil {
+			replayed = append(replayed, m)
+		}
+		return nil
+	})
 
-	sub := Subscription{
-		Callback:    cb,
+	sub := sse.Subscription{
+		Client:      cb,
 		LastEventID: lastEventID,
 		Topics:      topics,
 	}
 
 	_ = p.Replay(sub)
 
-	sub.LastEventID = EventID{}
+	sub.LastEventID = sse.EventID{}
 	_ = p.Replay(sub)
 
-	sub.LastEventID = ID("mama")
+	sub.LastEventID = sse.ID("mama")
 	_ = p.Replay(sub)
 
-	sub.LastEventID = ID("10")
+	sub.LastEventID = sse.ID("10")
 	_ = p.Replay(sub)
 
 	return replayed
 }
 
-func testReplayError(tb testing.TB, p ReplayProvider) {
+func testReplayError(tb testing.TB, p sse.ReplayProvider, tm *tests.Time) {
 	tb.Helper()
 
-	_, isExpiry := p.(*ValidReplayProvider)
+	tm.Reset()
+	tm.Add(time.Hour)
 
-	var now time.Time
-	if isExpiry {
-		now = time.Now()
-		timeNow = func() time.Time { return now.Add(time.Hour) }
-	}
+	p.Put(msg(tb, "a", "1"), []string{sse.DefaultTopic})
+	p.Put(msg(tb, "b", "2"), []string{sse.DefaultTopic})
 
-	putMessages(p,
-		msg(tb, "a", "1", DefaultTopic),
-		msg(tb, "b", "2", DefaultTopic),
-	)
+	cb := mockClient(func(_ *sse.Message) error { return nil })
 
-	cb := func(_ *Message) bool { return false }
-	if isExpiry {
-		timeNow = func() time.Time { return now }
-	}
+	tm.Rewind()
 
-	success := p.Replay(Subscription{
-		Callback:    cb,
-		LastEventID: ID("1"),
-		Topics:      []string{DefaultTopic},
+	err := p.Replay(sse.Subscription{
+		Client:      cb,
+		LastEventID: sse.ID("1"),
+		Topics:      []string{sse.DefaultTopic},
 	})
 
-	require.False(tb, success, "received invalid error")
-}
-
-func putMessages(p ReplayProvider, msgs ...messageWithTopics) {
-	for i := range msgs {
-		msgs[i].message = p.Put(msgs[i].message, msgs[i].topics)
-	}
+	require.NoError(tb, err, "received invalid error")
 }
 
 func TestValidReplayProvider(t *testing.T) {
 	t.Parallel()
-	t.Cleanup(func() { timeNow = time.Now })
 
-	p := &ValidReplayProvider{
+	tm := &tests.Time{}
+	p := &sse.ValidReplayProvider{
 		TTL:     time.Millisecond * 5,
 		AutoIDs: true,
+		Now:     tm.Now,
 	}
 
 	require.NoError(t, p.GC(), "unexpected GC error") // no elements, noop
+	require.NoError(t, p.Replay(sse.Subscription{}), "replay failed on provider without messages")
 
 	now := time.Now()
 	initialNow := now
-	timeNow = func() time.Time { return now }
+	tm.Set(now)
 
-	putMessages(p,
-		msg(t, "hi", "", DefaultTopic),
-		msg(t, "there", "", "t"),
-	)
-	now = now.Add(p.TTL)
-	putMessages(p,
-		msg(t, "world", "", DefaultTopic),
-		msg(t, "again", "", "t"),
-	)
-	now = now.Add(p.TTL * 3)
-	putMessages(p,
-		msg(t, "world", "", DefaultTopic),
-		msg(t, "x", "", "t"),
-	)
-	now = now.Add(p.TTL * 5)
-	putMessages(p, msg(t, "again", "", "t"))
+	p.Put(msg(t, "hi", ""), []string{sse.DefaultTopic})
+	p.Put(msg(t, "there", ""), []string{"t"})
+	tm.Add(p.TTL)
+	p.Put(msg(t, "world", ""), []string{sse.DefaultTopic})
+	p.Put(msg(t, "again", ""), []string{"t"})
+	tm.Add(p.TTL * 3)
+	p.Put(msg(t, "world", ""), []string{sse.DefaultTopic})
+	p.Put(msg(t, "x", ""), []string{"t"})
+	tm.Add(p.TTL * 5)
+	p.Put(msg(t, "again", ""), []string{"t"})
 
-	now = initialNow.Add(p.TTL)
+	tm.Set(initialNow.Add(p.TTL))
 
 	require.NoError(t, p.GC(), "unexpected GC error")
 
-	now = now.Add(p.TTL)
+	tm.Set(now.Add(p.TTL))
 
-	replayed := replay(t, p, ID("3"), DefaultTopic, "topic with no messages")[0]
+	replayed := replay(t, p, sse.ID("3"), sse.DefaultTopic, "topic with no messages")[0]
 	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
 
-	testReplayError(t, &ValidReplayProvider{})
+	testReplayError(t, &sse.ValidReplayProvider{Now: tm.Now}, tm)
 }
 
 func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
-	p := &FiniteReplayProvider{Count: 3}
+	p := &sse.FiniteReplayProvider{Count: 3}
 
-	putMessages(p,
-		msg(t, "", "1", ""),
-		msg(t, "hello", "2", DefaultTopic),
-		msg(t, "there", "3", "t"),
-		msg(t, "world", "4", DefaultTopic),
-	)
+	require.NoError(t, p.Replay(sse.Subscription{}), "replay failed on provider without messages")
 
-	replayed := replay(t, p, ID("2"))[0]
+	p.Put(msg(t, "", "1"), []string{sse.DefaultTopic})
+	p.Put(msg(t, "hello", "2"), []string{sse.DefaultTopic})
+	p.Put(msg(t, "there", "3"), []string{"t"})
+	p.Put(msg(t, "world", "4"), []string{sse.DefaultTopic})
+
+	replayed := replay(t, p, sse.ID("2"))[0]
 	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
 
-	putMessages(p,
-		msg(t, "", "5", "t"),
-		msg(t, "", "6", "t"),
-		msg(t, "again", "7", DefaultTopic),
-	)
+	p.Put(msg(t, "", "5"), []string{"t"})
+	p.Put(msg(t, "", "6"), []string{"t"})
+	p.Put(msg(t, "again", "7"), []string{sse.DefaultTopic})
 
-	replayed = replay(t, p, ID("4"), DefaultTopic, "topic with no messages")[0]
+	replayed = replay(t, p, sse.ID("4"), sse.DefaultTopic, "topic with no messages")[0]
 	require.Equal(t, "id: 7\ndata: again\n\n", replayed.String())
 
-	testReplayError(t, &FiniteReplayProvider{Count: 10})
+	testReplayError(t, &sse.FiniteReplayProvider{Count: 10}, nil)
 }

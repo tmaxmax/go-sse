@@ -34,25 +34,25 @@ func (f *FiniteReplayProvider) Put(message *Message, topics []string) *Message {
 
 // Replay replays the messages in the buffer to the listener.
 // It doesn't take into account the messages' expiry times.
-func (f *FiniteReplayProvider) Replay(subscription Subscription) bool {
+func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 	if f.b == nil {
-		return true
+		return nil
 	}
 
 	events := f.b.slice(subscription.LastEventID)
-	if events == nil {
-		return true
+	if len(events) == 0 {
+		return nil
 	}
 
 	for _, e := range events {
 		if topicsIntersect(subscription.Topics, e.topics) {
-			if !subscription.Callback(e.message) {
-				return false
+			if err := subscription.Client.Send(e.message); err != nil {
+				return err
 			}
 		}
 	}
 
-	return true
+	return subscription.Client.Flush()
 }
 
 // ValidReplayProvider is a ReplayProvider that replays all the buffered non-expired events.
@@ -61,6 +61,10 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) bool {
 // expire.
 // The events must have an ID unless the AutoIDs flag is toggled.
 type ValidReplayProvider struct {
+	// The function used to retrieve the current time. Defaults to time.Now.
+	// Useful when testing.
+	Now func() time.Time
+
 	b        buffer
 	expiries []time.Time
 
@@ -70,16 +74,13 @@ type ValidReplayProvider struct {
 	AutoIDs bool
 }
 
-// timeNow is used by tests to get a deterministic time.
-var timeNow = time.Now
-
 // Put puts the message into the provider's buffer.
 func (v *ValidReplayProvider) Put(message *Message, topics []string) *Message {
 	if v.b == nil {
 		v.b = getBuffer(v.AutoIDs, 0)
 	}
 
-	v.expiries = append(v.expiries, timeNow().Add(v.TTL))
+	v.expiries = append(v.expiries, v.now().Add(v.TTL))
 	return v.b.queue(message, topics)
 }
 
@@ -89,7 +90,7 @@ func (v *ValidReplayProvider) GC() error {
 		return nil
 	}
 
-	now := timeNow()
+	now := v.now()
 
 	for {
 		e := v.b.front()
@@ -105,34 +106,37 @@ func (v *ValidReplayProvider) GC() error {
 }
 
 // Replay replays all the valid messages to the listener.
-func (v *ValidReplayProvider) Replay(subscription Subscription) bool {
+func (v *ValidReplayProvider) Replay(subscription Subscription) error {
 	if v.b == nil {
-		return true
+		return nil
 	}
 
 	events := v.b.slice(subscription.LastEventID)
-	if events == nil {
-		return true
+	if len(events) == 0 {
+		return nil
 	}
 
-	now := timeNow()
+	now := v.now()
 	expiriesOffset := v.b.len() - len(events)
 
 	for i, e := range events {
 		if v.expiries[i+expiriesOffset].After(now) && topicsIntersect(subscription.Topics, e.topics) {
-			if !subscription.Callback(e.message) {
-				return false
+			if err := subscription.Client.Send(e.message); err != nil {
+				return err
 			}
 		}
 	}
 
-	return true
+	return subscription.Client.Flush()
 }
 
-var (
-	_ ReplayProvider = (*FiniteReplayProvider)(nil)
-	_ ReplayProvider = (*ValidReplayProvider)(nil)
-)
+func (v *ValidReplayProvider) now() time.Time {
+	if v.Now == nil {
+		return time.Now()
+	}
+
+	return v.Now()
+}
 
 // topicsIntersect returns true if the given topic slices have at least one topic in common.
 func topicsIntersect(a, b []string) bool {

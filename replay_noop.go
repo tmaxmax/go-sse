@@ -5,6 +5,6 @@ package sse
 type noopReplayProvider struct{}
 
 func (n noopReplayProvider) Put(m *Message, _ []string) *Message { return m }
-func (n noopReplayProvider) Replay(_ Subscription) bool          { return true }
+func (n noopReplayProvider) Replay(_ Subscription) error         { return nil }
 
 var _ ReplayProvider = (*noopReplayProvider)(nil)

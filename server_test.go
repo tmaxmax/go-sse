@@ -3,6 +3,7 @@ package sse_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -37,8 +38,12 @@ func (m *mockProvider) Subscribe(ctx context.Context, sub sse.Subscription) erro
 	e := &sse.Message{}
 	e.AppendData("hello")
 
-	if !sub.Callback(e) {
-		return errors.New("callback failed")
+	if err := sub.Client.Send(e); err != nil {
+		return fmt.Errorf("send failed: %w", err)
+	}
+
+	if err := sub.Client.Flush(); err != nil {
+		return fmt.Errorf("flush failed: %w", err)
 	}
 
 	<-ctx.Done()
@@ -142,6 +147,27 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
 }
 
+func TestServer_OnSession(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Invalid", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("", "/", http.NoBody)
+		p := newMockProvider(t, nil)
+
+		(&sse.Server{
+			Provider: p,
+			OnSession: func(s *sse.Session) (sse.Subscription, bool) {
+				http.Error(s.Res, "this is invalid", http.StatusBadRequest)
+				return sse.Subscription{}, false
+			},
+		}).ServeHTTP(rec, req)
+
+		require.Equal(t, "this is invalid\n", rec.Body.String(), "invalid response body")
+		require.Equal(t, http.StatusBadRequest, rec.Code, "invalid response code")
+	})
+}
+
 type flushResponseWriter interface {
 	http.Flusher
 	http.ResponseWriter
@@ -166,73 +192,6 @@ func TestServer_ServeHTTP_connectionError(t *testing.T) {
 	(&sse.Server{Provider: p}).ServeHTTP(&responseWriterErr{rec}, req)
 	_, ok := <-p.Closed
 	require.False(t, ok)
-}
-
-func TestUpgrade(t *testing.T) {
-	t.Parallel()
-
-	rec := httptest.NewRecorder()
-
-	conn, err := sse.Upgrade(rec)
-	require.NoError(t, err, "unexpected NewConnection error")
-	require.False(t, rec.Flushed, "response writer was flushed")
-	require.NoError(t, conn.Send(&sse.Message{}), "unexpected Send error")
-
-	r := rec.Result()
-	defer r.Body.Close()
-
-	expectedHeaders := http.Header{
-		"Content-Type": []string{"text/event-stream"},
-	}
-
-	require.Equal(t, expectedHeaders, r.Header, "invalid response headers")
-
-	_, err = sse.Upgrade(nil)
-	require.Equal(t, sse.ErrUpgradeUnsupported, err, "invalid NewConnection error")
-}
-
-var errWriteFailed = errors.New("err")
-
-type errorWriter struct {
-	Flushed bool
-}
-
-func (e *errorWriter) WriteHeader(_ int)           {}
-func (e *errorWriter) Header() http.Header         { return http.Header{} }
-func (e *errorWriter) Write(_ []byte) (int, error) { return 0, errWriteFailed }
-func (e *errorWriter) Flush()                      { e.Flushed = true }
-
-func TestUpgradedRequest_Send(t *testing.T) {
-	t.Parallel()
-
-	rec := httptest.NewRecorder()
-
-	conn, err := sse.Upgrade(rec)
-	require.NoError(t, err, "unexpected NewConnection error")
-
-	rec.Flushed = false
-
-	ev := sse.Message{}
-	ev.AppendData("sarmale")
-	expected, _ := ev.MarshalText()
-
-	require.NoError(t, conn.Send(&ev), "unexpected Send error")
-	require.True(t, rec.Flushed, "writer wasn't flushed")
-	require.Equal(t, expected, rec.Body.Bytes(), "body not written correctly")
-}
-
-func TestUpgradedRequest_Send_error(t *testing.T) {
-	t.Parallel()
-
-	rec := &errorWriter{}
-
-	conn, err := sse.Upgrade(rec)
-	require.NoError(t, err, "unexpected NewConnection error")
-
-	rec.Flushed = false
-
-	require.ErrorIs(t, conn.Send(&sse.Message{ID: sse.ID("")}), errWriteFailed, "invalid Send error")
-	require.True(t, rec.Flushed, "writer wasn't flushed")
 }
 
 func getMessage(tb testing.TB) *sse.Message {

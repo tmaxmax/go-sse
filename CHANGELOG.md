@@ -4,6 +4,8 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## [Unreleased]
 
+This version brings a number of refactors to the server-side tooling the library offers. Constructors and construction related types are removed, for ease of use and reduced API size, concerns regarding topics and expiry were separated from `Message`, logging of the `Server` is updated to structured logging and messages can be now published to multiple topics at once.
+
 ### Removed
 
 - `Message.ExpiresAt` is no more.
@@ -17,6 +19,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 - `Server.Provider` is no more.
 - `NewServer`, `ServerOption` and associated are no more.
 - The `Logger` interface and the capability of the `Server` to use types that implement `Logger` as logging systems.
+- `SubscriptionCallback` is no more (see the change to the `Subscription` type in the "Changed" section).
 
 ### Added
 
@@ -24,6 +27,10 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 - Because the `FiniteReplayProvider` constructor was removed, the fields `FiniteReplayProvider.{Count,AutoIDs}` were added for configuration.
 - Because the `Joe` constructor was removed, the fields `Joe.{ReplayProvider,ReplayGCInterval}` were added for configuration.
 - Because the `Server` constructor was removed, the field `Server.Provider` was added for configuration.
+- New `MessageWriter` interface; used by providers to send messages and implemented by `Session` (previously named `Request`).
+- New `ResponseWriter` interface, which is a `http.ResponseWriter` augmented with a `Flush` method.
+- `ValidReplayProvider` has a new field `Now` which allows providing a custom current time getter, like `time.Now`, to the provider. Enables deterministic testing of dependents on `ValidReplayProvider`.
+- New `Server.OnSession` field, which enables customization of `Server`'s response and subscriptions.
 
 ### Changed
 
@@ -35,6 +42,12 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 - `ReplayProvider.Put` now takes a non-empty slice of topics.
 - `Provider.Stop` is now `Provider.Shutdown` and takes now a `context.Context` as a parameter.
 - `Server.Shutdown` takes now a `context.Context` as a parameter.
+- `Request` is now named `Session` and exposes the HTTP request, response writer, and the last event ID of the request.
+- A new method `Flush` is added to `Session`; messages are no longer flushed by default, which allows providers, replay providers to batch send messages.
+- `Upgrade` now takes an `*http.Request` as its second parameter.
+- `Subscription` now has a `Client` field of type `MessageWriter` instead of a `Callback`.
+- Given the `Subscription` change, `Provider.Subscribe` and `ReplayProvider.Replay` now report message sending errors
+
 
 ## [0.5.2] - 2023-07-12
 

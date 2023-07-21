@@ -23,9 +23,9 @@ func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) *sse.Message {
 	return msg
 }
 
-func (m *mockReplayProvider) Replay(_ sse.Subscription) bool {
+func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
 	m.callsReplay++
-	return true
+	return nil
 }
 
 func (m *mockReplayProvider) GC() error {
@@ -46,6 +46,11 @@ func msg(tb testing.TB, data, id string) *sse.Message {
 
 	return e
 }
+
+type mockClient func(m *sse.Message) error
+
+func (c mockClient) Send(m *sse.Message) error { return c(m) }
+func (c mockClient) Flush() error              { return c(nil) }
 
 func TestJoe_Shutdown(t *testing.T) {
 	t.Parallel()
@@ -80,10 +85,12 @@ func TestJoe_Shutdown(t *testing.T) {
 	t.Cleanup(cancel)
 	go j.Subscribe(subctx, sse.Subscription{ //nolint:errcheck // we don't care about this error
 		Topics: []string{sse.DefaultTopic},
-		Callback: func(_ *sse.Message) bool {
-			time.Sleep(time.Millisecond * 8)
-			return true
-		},
+		Client: mockClient(func(m *sse.Message) error {
+			if m != nil {
+				time.Sleep(time.Millisecond * 8)
+			}
+			return nil
+		}),
 	})
 	time.Sleep(time.Millisecond)
 
@@ -110,12 +117,14 @@ func subscribe(t testing.TB, p sse.Provider, ctx context.Context, topics ...stri
 
 		var msgs []*sse.Message
 
-		fn := func(m *sse.Message) bool {
-			msgs = append(msgs, m)
-			return true
-		}
+		c := mockClient(func(m *sse.Message) error {
+			if m != nil {
+				msgs = append(msgs, m)
+			}
+			return nil
+		})
 
-		_ = p.Subscribe(ctx, sse.Subscription{Callback: fn, Topics: topics})
+		_ = p.Subscribe(ctx, sse.Subscription{Client: c, Topics: topics})
 
 		ch <- msgs
 	}()
@@ -213,18 +222,22 @@ func TestJoe_errors(t *testing.T) {
 	_ = j.Publish(msg(t, "hello", "0"), []string{sse.DefaultTopic})
 	_ = j.Publish(msg(t, "hello", "1"), []string{sse.DefaultTopic})
 
+	callErr := errors.New("artificial fail")
+
 	var called int
-	cb := func(_ *sse.Message) bool {
-		called++
-		return false
-	}
+	client := mockClient(func(m *sse.Message) error {
+		if m != nil {
+			called++
+		}
+		return callErr
+	})
 
 	err := j.Subscribe(context.Background(), sse.Subscription{
-		Callback:    cb,
+		Client:      client,
 		LastEventID: sse.ID("0"),
 		Topics:      []string{sse.DefaultTopic},
 	})
-	require.NoError(t, err, "error not received from replay")
+	require.Equal(t, callErr, err, "error not received from replay")
 
 	_ = j.Publish(msg(t, "world", "2"), []string{sse.DefaultTopic})
 
@@ -244,8 +257,8 @@ func TestJoe_errors(t *testing.T) {
 		_ = j.Publish(msg(t, "", "4"), []string{sse.DefaultTopic})
 	}()
 
-	err = j.Subscribe(ctx, sse.Subscription{Callback: cb, Topics: []string{sse.DefaultTopic}})
-	require.NoError(t, err, "error not received from send")
+	err = j.Subscribe(ctx, sse.Subscription{Client: client, Topics: []string{sse.DefaultTopic}})
+	require.Equal(t, callErr, err, "error not received from send")
 	require.Equal(t, 1, called, "callback was called after subscribe returned")
 
 	<-done

@@ -55,7 +55,7 @@ import "github.com/tmaxmax/go-sse"
 s := sse.NewServer()
 ```
 
-The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L160) to learn how to implement your own custom logic.
+The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L127) to learn how to implement your own custom logic.
 
 To initialize a server:
 
@@ -68,6 +68,7 @@ The `sse.Server` has some additional configuration options:
 ```go
 s := &sse.Server{
     Provider: /* what goes here? find out next! */,
+    OnSession: /* see Go docs for this one */,
 }
 ```
 

@@ -23,15 +23,11 @@ import (
 	"sync"
 )
 
-// SubscriptionCallback is a function that is called when a subscriber receives a message.
-// If this callback returns false, the provider must remove the subscription.
-type SubscriptionCallback func(message *Message) bool
-
 // The Subscription struct is used to subscribe to a given provider.
 type Subscription struct {
-	// A non-nil function that is called for each new event. The callback of a single subscription will
-	// never be called in parallel, but callbacks from multiple subscriptions may be called in parallel.
-	Callback SubscriptionCallback
+	// The client to which messages are sent. The implementation of the interface does not have to be
+	// thread-safe – providers will not call methods on it concurrently.
+	Client MessageWriter
 	// An optional last event ID indicating the event to resume the stream from.
 	// The events will replay starting from the first valid event sent after the one with the given ID.
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
@@ -94,61 +90,32 @@ const DefaultTopic = ""
 // When creating a server, if no provider is specified using the WithProvider
 // option, the Joe provider found in this package with no replay provider is used.
 type Server struct {
+	// The provider used to publish and subscribe clients to events.
+	// Defaults to Joe.
 	Provider Provider
+	// A callback that's called when a SSE session is started.
+	// You can use this to authorize the session, set the topics
+	// the client should be subscribed to and so on. Using the
+	// Res field of the Session you can write an error response
+	// to the client.
+	//
+	// The boolean returned indicates whether the returned subscription
+	// is valid or not. If it is valid, the Provider will receive it
+	// and events will be sent to this client, otherwise the request
+	// will be ended.
+	//
+	// If this is not set, the client will be subscribed to the provider
+	// using the DefaultTopic.
+	OnSession func(*Session) (Subscription, bool)
 
 	provider Provider
 	initDone sync.Once
 }
 
-type writeFlusher interface {
-	http.ResponseWriter
-	http.Flusher
-}
-
-// An UpgradedRequest is used to send events to the client.
-// Create one using the Upgrade function.
-type UpgradedRequest struct {
-	w          writeFlusher
-	didUpgrade bool
-}
-
-// Send sends the given event to the client. It returns any errors that occurred while writing the event.
-func (u *UpgradedRequest) Send(e *Message) error {
-	if !u.didUpgrade {
-		u.w.Header()[headerContentType] = headerContentTypeValue
-		u.w.Flush()
-		u.didUpgrade = true
-	}
-	if _, err := e.WriteTo(u.w); err != nil {
-		return err
-	}
-	u.w.Flush()
-	return nil
-}
-
-// Upgrade upgrades an HTTP request to support server-sent events.
-// It returns a Connection that's used to send events to the client or an
-// error if the upgrade failed.
-//
-// The headers required by the SSE protocol are only sent when calling
-// the Send method for the first time. If other operations are done before
-// sending messages, other headers and status codes can safely be set.
-func Upgrade(w http.ResponseWriter) (UpgradedRequest, error) {
-	fw, ok := w.(writeFlusher)
-	if !ok {
-		return UpgradedRequest{}, ErrUpgradeUnsupported
-	}
-
-	return UpgradedRequest{w: fw}, nil
-}
-
-// ErrUpgradeUnsupported is returned when a request can't be upgraded to support server-sent events.
-var ErrUpgradeUnsupported = errors.New("go-sse.server: upgrade unsupported")
-
 // ServeHTTP implements a default HTTP handler for a server.
 //
 // This handler upgrades the request, subscribes it to the server's provider and
-// starts sending incoming events to the client, while logging any write errors.
+// starts sending incoming events to the client, while logging any errors.
 // It also sends the Last-Event-ID header's value, if present.
 //
 // If the request isn't upgradeable, it writes a message to the client along with
@@ -156,51 +123,26 @@ var ErrUpgradeUnsupported = errors.New("go-sse.server: upgrade unsupported")
 // an error, it writes the error message to the client and a 500 Internal Server ConnectionError
 // response code.
 //
-// If you need different behavior, you can create a custom handler.
+// To customize behavior, use the OnSession callback or create your custom handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.init()
 	// Make sure to keep the ServeHTTP implementation line number in sync with the number in the README!
 
-	conn, err := Upgrade(w)
+	sess, err := Upgrade(w, r)
 	if err != nil {
 		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
 		return
 	}
 
-	id := EventID{}
-	// Clients must not send empty Last-Event-Id headers:
-	// https://html.spec.whatwg.org/multipage/server-sent-events.html#sse-processing-model
-	if h := r.Header[headerLastEventID]; len(h) != 0 && h[0] != "" {
-		// We ignore the validity flag because if the given ID is invalid then an unset ID will be returned,
-		// which providers are required to ignore.
-		id, _ = NewID(h[0])
-	}
-
-	cb := func(m *Message) bool {
-		if err := conn.Send(m); err != nil {
-			return false
-		}
-		return true
-	}
-	sub := Subscription{
-		Callback:    cb,
-		LastEventID: id,
-		Topics:      []string{DefaultTopic},
+	sub, ok := s.getSubscription(sess)
+	if !ok {
+		return
 	}
 
 	if err = s.provider.Subscribe(r.Context(), sub); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
-
-// Canonicalized header keys.
-const (
-	headerLastEventID = "Last-Event-Id"
-	headerContentType = "Content-Type"
-)
-
-// Pre-allocated header value.
-var headerContentTypeValue = []string{"text/event-stream"}
 
 // Publish sends the event to all subscribes that are subscribed to the topic the event is published to.
 // The topics are optional - if none are specified, the event is published to the DefaultTopic.
@@ -229,6 +171,18 @@ func (s *Server) init() {
 			s.provider = &Joe{}
 		}
 	})
+}
+
+func (s *Server) getSubscription(sess *Session) (Subscription, bool) {
+	if s.OnSession != nil {
+		return s.OnSession(sess)
+	}
+
+	return Subscription{
+		Client:      sess,
+		LastEventID: sess.LastEventID,
+		Topics:      defaultTopicSlice,
+	}, true
 }
 
 var defaultTopicSlice = []string{DefaultTopic}
