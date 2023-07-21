@@ -31,6 +31,7 @@ This version brings a number of refactors to the server-side tooling the library
 - New `ResponseWriter` interface, which is a `http.ResponseWriter` augmented with a `Flush` method.
 - `ValidReplayProvider` has a new field `Now` which allows providing a custom current time getter, like `time.Now`, to the provider. Enables deterministic testing of dependents on `ValidReplayProvider`.
 - New `Server.OnSession` field, which enables customization of `Server`'s response and subscriptions.
+- New `Server.Logger` field, which enables structured logging with logger retrieved from the request and customizable config of logged information.
 
 ### Changed
 

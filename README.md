@@ -69,6 +69,7 @@ The `sse.Server` has some additional configuration options:
 s := &sse.Server{
     Provider: /* what goes here? find out next! */,
     OnSession: /* see Go docs for this one */,
+    Logger: /* see Go docs for this one, too */,
 }
 ```
 

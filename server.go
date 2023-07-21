@@ -21,6 +21,8 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+
+	"golang.org/x/exp/slog"
 )
 
 // The Subscription struct is used to subscribe to a given provider.
@@ -107,6 +109,13 @@ type Server struct {
 	// If this is not set, the client will be subscribed to the provider
 	// using the DefaultTopic.
 	OnSession func(*Session) (Subscription, bool)
+	// Logger can be used to get a custom logger from the request context,
+	// which could have been set beforehand through a middleware, for example.
+	// By default, nothing is logged by the server. If this function is present
+	// and returns a non-nil logger, then info will be logged. Add to the logger
+	// the data you want to be logged together with what the library adds,
+	// for example identification info like request IP, origin etc.
+	Logger func(*http.Request) *slog.Logger
 
 	provider Provider
 	initDone sync.Once
@@ -128,19 +137,45 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.init()
 	// Make sure to keep the ServeHTTP implementation line number in sync with the number in the README!
 
+	l := s.logger(r)
+	if l != nil {
+		l.InfoContext(r.Context(), "sse: starting new session")
+	}
+
 	sess, err := Upgrade(w, r)
 	if err != nil {
+		if l != nil {
+			l.ErrorContext(r.Context(), "sse: unsupported")
+		}
+
 		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
 		return
 	}
 
 	sub, ok := s.getSubscription(sess)
 	if !ok {
+		if l != nil {
+			l.WarnContext(r.Context(), "sse: invalid subscription")
+		}
+
 		return
 	}
 
+	if l != nil {
+		l.InfoContext(r.Context(), "sse: subscribing session", "topics", getTopicsLog(sub.Topics), "lastEventID", sub.LastEventID)
+	}
+
 	if err = s.provider.Subscribe(r.Context(), sub); err != nil {
+		if l != nil {
+			l.ErrorContext(r.Context(), "sse: subscribe error", "err", err)
+		}
+
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if l != nil {
+		l.InfoContext(r.Context(), "sse: session ended")
 	}
 }
 
@@ -185,6 +220,14 @@ func (s *Server) getSubscription(sess *Session) (Subscription, bool) {
 	}, true
 }
 
+func (s *Server) logger(r *http.Request) *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger(r)
+	}
+
+	return nil
+}
+
 var defaultTopicSlice = []string{DefaultTopic}
 
 func getTopics(initial []string) []string {
@@ -193,4 +236,29 @@ func getTopics(initial []string) []string {
 	}
 
 	return initial
+}
+
+func getTopicsLog(topics []string) string {
+	seen := map[string]struct{}{}
+	ret := ""
+
+	for i, t := range topics {
+		if _, ok := seen[t]; ok {
+			continue
+		}
+
+		seen[t] = struct{}{}
+
+		if i > 0 {
+			ret += ","
+		}
+
+		if t == DefaultTopic {
+			ret += "<sse:default>"
+		} else {
+			ret += t
+		}
+	}
+
+	return ret
 }

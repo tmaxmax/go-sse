@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse"
+	"golang.org/x/exp/slog"
 )
 
 type mockProvider struct {
@@ -71,6 +73,23 @@ func newMockProvider(tb testing.TB, subErr error) *mockProvider {
 	return &mockProvider{Closed: make(chan struct{}), SubError: subErr}
 }
 
+func newMockLogger(w io.Writer) func(*http.Request) *slog.Logger {
+	h := slog.NewTextHandler(w, &slog.HandlerOptions{
+		AddSource: false,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Value.Kind() == slog.KindTime {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})
+	l := slog.New(h)
+
+	return func(r *http.Request) *slog.Logger {
+		return l
+	}
+}
+
 func TestServer_ShutdownPublish(t *testing.T) {
 	t.Parallel()
 
@@ -108,12 +127,14 @@ func TestServer_ServeHTTP(t *testing.T) {
 	req.Header.Set("Last-Event-ID", "5")
 
 	go cancel()
-	(&sse.Server{Provider: p}).ServeHTTP(rec, req)
+	sb := &strings.Builder{}
+	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(rec, req)
 
 	require.True(t, p.Subscribed, "Subscribe wasn't called")
 	require.Equal(t, sse.ID("5"), p.Sub.LastEventID, "Invalid last event ID received")
 	require.Equal(t, "data: hello\n\n", rec.Body.String(), "Invalid response body")
 	require.Equal(t, http.StatusOK, rec.Code, "invalid response code")
+	require.Equal(t, "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=<sse:default> lastEventID=5\nlevel=INFO msg=\"sse: session ended\"\n", sb.String(), "invalid log output")
 }
 
 type noFlusher struct {
@@ -127,11 +148,13 @@ func TestServer_ServeHTTP_unsupportedRespWriter(t *testing.T) {
 	req, cancel := request(t, "", "http://localhost", nil)
 	defer cancel()
 	p := newMockProvider(t, nil)
+	sb := &strings.Builder{}
 
-	(&sse.Server{Provider: p}).ServeHTTP(noFlusher{rec}, req)
+	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(noFlusher{rec}, req)
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
 	require.Equal(t, "Server-sent events unsupported\n", rec.Body.String(), "invalid response body")
+	require.Equal(t, "level=INFO msg=\"sse: starting new session\"\nlevel=ERROR msg=\"sse: unsupported\"\n", sb.String(), "invalid log output")
 }
 
 func TestServer_ServeHTTP_subscribeError(t *testing.T) {
@@ -140,11 +163,13 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req, _ := http.NewRequest("", "http://localhost", http.NoBody)
 	p := newMockProvider(t, errors.New("can't subscribe"))
+	sb := &strings.Builder{}
 
-	(&sse.Server{Provider: p}).ServeHTTP(rec, req)
+	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(rec, req)
 
 	require.Equal(t, p.SubError.Error()+"\n", rec.Body.String(), "invalid response body")
 	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
+	require.Equal(t, "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=<sse:default> lastEventID=\"\"\nlevel=ERROR msg=\"sse: subscribe error\" err=\"can't subscribe\"\n", sb.String(), "invalid log output")
 }
 
 func TestServer_OnSession(t *testing.T) {
@@ -154,9 +179,11 @@ func TestServer_OnSession(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("", "/", http.NoBody)
 		p := newMockProvider(t, nil)
+		sb := &strings.Builder{}
 
 		(&sse.Server{
 			Provider: p,
+			Logger:   newMockLogger(sb),
 			OnSession: func(s *sse.Session) (sse.Subscription, bool) {
 				http.Error(s.Res, "this is invalid", http.StatusBadRequest)
 				return sse.Subscription{}, false
@@ -165,6 +192,7 @@ func TestServer_OnSession(t *testing.T) {
 
 		require.Equal(t, "this is invalid\n", rec.Body.String(), "invalid response body")
 		require.Equal(t, http.StatusBadRequest, rec.Code, "invalid response code")
+		require.Equal(t, "level=INFO msg=\"sse: starting new session\"\nlevel=WARN msg=\"sse: invalid subscription\"\n", sb.String(), "invalid log output")
 	})
 }
 
