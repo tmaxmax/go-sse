@@ -2,9 +2,9 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2023-07-22
 
-This version brings a number of refactors to the server-side tooling the library offers. Constructors and construction related types are removed, for ease of use and reduced API size, concerns regarding topics and expiry were separated from `Message`, logging of the `Server` is updated to structured logging and messages can be now published to multiple topics at once.
+This version brings a number of refactors to the server-side tooling the library offers. Constructors and construction related types are removed, for ease of use and reduced API size, concerns regarding topics and expiry were separated from `Message`, logging of the `Server` is upgraded to structured logging and messages can be now published to multiple topics at once. Request upgrading has also been refactored to provide a more functional API, and the `Server` logic can now be customized without having to create a distinct handler.
 
 ### Removed
 
@@ -17,8 +17,8 @@ This version brings a number of refactors to the server-side tooling the library
 - `JoeConfig` is no more.
 - `Server.Subscribe` is no more – it never made sense.
 - `Server.Provider` is no more.
-- `NewServer`, `ServerOption` and associated are no more.
-- The `Logger` interface and the capability of the `Server` to use types that implement `Logger` as logging systems.
+- `NewServer`, `ServerOption` and friends are no more.
+- The `Logger` interface and the capability of the `Server` to use types that implement `Logger` as logging systems is removed.
 - `SubscriptionCallback` is no more (see the change to the `Subscription` type in the "Changed" section).
 
 ### Added
@@ -47,7 +47,7 @@ This version brings a number of refactors to the server-side tooling the library
 - A new method `Flush` is added to `Session`; messages are no longer flushed by default, which allows providers, replay providers to batch send messages.
 - `Upgrade` now takes an `*http.Request` as its second parameter.
 - `Subscription` now has a `Client` field of type `MessageWriter` instead of a `Callback`.
-- Given the `Subscription` change, `Provider.Subscribe` and `ReplayProvider.Replay` now report message sending errors
+- Given the `Subscription` change, `Provider.Subscribe` and `ReplayProvider.Replay` now report message sending errors.
 
 
 ## [0.5.2] - 2023-07-12
@@ -195,6 +195,7 @@ Documentation and examples were also fixed and improved.
 [#5]: https://github.com/tmaxmax/go-sse/pull/5
 [#2]: https://github.com/tmaxmax/go-sse/pull/2
 
+[0.6.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.6.0
 [0.5.2]: https://github.com/tmaxmax/go-sse/releases/tag/v0.5.2
 [0.5.1]: https://github.com/tmaxmax/go-sse/releases/tag/v0.5.1
 [0.5.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.5.0
