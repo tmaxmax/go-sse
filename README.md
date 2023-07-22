@@ -165,7 +165,7 @@ data: to see you.
 
 You can also see that `go-sse` takes care of splitting input by lines into new fields, as required by the specification.
 
-Keep in mind that providers, such as the `ValidReplayProvider` used above, will ignore events without IDs. To have our event expire, as configured, we must set an ID for the event:
+Keep in mind that providers, such as the `ValidReplayProvider` used above, will panic if they receive events without IDs. To have our event expire, as configured, we must set an ID for the event:
 
 ```go
 m.ID = sse.ID("unique")
@@ -182,13 +182,13 @@ data: to see you.
 
 Now that it has an ID, the event will be considered expired 5 minutes after it's been published – it won't be replayed to clients after the expiry!
 
-An `EventID` type is also exposed, which is a special type that denotes an event's ID. An ID must not have newlines, so we use a special function that validates the ID beforehand. The `ID` constructor function panics (it is useful when creating IDs from static strings), but there's also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
+`sse.ID` is a function that returns an `EventID` – a special type that denotes an event's ID. An ID must not have newlines, so we must use special functions which validate the value beforehand. The `ID` constructor function we've used above panics (it is useful when creating IDs from static strings), but there's also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
 
 ```go
 id, err := sse.NewID("invalid\nID")
 ```
 
-Here, `err` will be non-nil and `id` will be an invalid value: no `id` field will be sent to clients if you set an event's ID using that value!
+Here, `err` will be non-nil and `id` will be an unset value: no `id` field will be sent to clients if you set an event's ID using that value!
 
 Setting the event's type (the `event` field) is equally easy:
 
