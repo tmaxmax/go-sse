@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -13,9 +14,46 @@ import (
 	"time"
 
 	"github.com/tmaxmax/go-sse"
+	"golang.org/x/exp/slog"
 )
 
-var sseHandler sse.Server
+const (
+	topicRandomNumbers = "numbers"
+	topicMetrics       = "metrics"
+)
+
+var sseHandler = &sse.Server{
+	Provider: &sse.Joe{
+		ReplayProvider: &sse.ValidReplayProvider{
+			TTL:     time.Minute * 5,
+			AutoIDs: true,
+		},
+		ReplayGCInterval: time.Minute,
+	},
+	Logger: func(r *http.Request) *slog.Logger {
+		return slog.With("ua", r.UserAgent(), "ip", r.RemoteAddr, "host", r.Host, "origin", r.Header.Get("Origin"))
+	},
+	OnSession: func(s *sse.Session) (sse.Subscription, bool) {
+		topics := s.Req.URL.Query()["topic"]
+		for _, topic := range topics {
+			if topic != topicRandomNumbers && topic != topicMetrics {
+				fmt.Fprintf(s.Res, "invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics)
+				s.Res.WriteHeader(http.StatusBadRequest)
+				return sse.Subscription{}, false
+			}
+		}
+		if len(topics) == 0 {
+			// Provide default topics, if none are given.
+			topics = []string{topicRandomNumbers, topicMetrics}
+		}
+
+		return sse.Subscription{
+			Client:      s,
+			LastEventID: s.LastEventID,
+			Topics:      append(topics, sse.DefaultTopic), // the shutdown message is sent on the default topic
+		}, true
+	},
+}
 
 func cors(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +72,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.Handle("/", SnapshotHTTPEndpoint)
-	mux.Handle("/events", &sseHandler)
+	mux.Handle("/events", sseHandler)
 
 	s := &http.Server{
 		Addr:              "0.0.0.0:8080",
@@ -73,7 +111,7 @@ func main() {
 		for {
 			select {
 			case <-timer.C:
-				_ = sseHandler.Publish(generateRandomNumbers())
+				_ = sseHandler.Publish(generateRandomNumbers(), topicRandomNumbers)
 			case <-ctx.Done():
 				return
 			}
@@ -101,7 +139,7 @@ func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
 			}
 			e.AppendData(strconv.FormatInt(v, 10))
 
-			_ = sseHandler.Publish(e)
+			_ = sseHandler.Publish(e, topicMetrics)
 		case <-ctx.Done():
 			return
 		}
