@@ -1,7 +1,9 @@
 package sse
 
 import (
+	"errors"
 	"strconv"
+	"strings"
 )
 
 // A buffer is the underlying storage for a provider. Its methods are used by the provider to implement
@@ -34,6 +36,16 @@ func (b *bufferBase) front() *messageWithTopics {
 	return &b.buf[0]
 }
 
+func (b *bufferBase) queue(message *Message, topics []string) *Message {
+	if len(topics) == 0 {
+		panic(errors.New("go-sse: no topics provided for Message.\n" + formatMessagePanicString(message)))
+	}
+
+	b.buf = append(b.buf, messageWithTopics{message: message, topics: topics})
+
+	return message
+}
+
 type bufferNoID struct {
 	lastRemovedID EventID
 	bufferBase
@@ -41,12 +53,21 @@ type bufferNoID struct {
 
 func (b *bufferNoID) queue(message *Message, topics []string) *Message {
 	if !message.ID.IsSet() {
-		return nil
+		// We could maybe return this as an error and change the ReplayProvider
+		// interface to return the error. The issue with that is the following:
+		// even if we return this message as an error, providers can't handle it
+		// in any meaningful manner – for example, Joe has no way to report
+		// a replay.Put error, as that's not run on the main goroutine.
+		// A panic seems fitting, as putting a message without an ID when using
+		// a provider that doesn't add IDs is breaking the API contract – that is,
+		// the provider expects a message with an ID. It seems to be an irrecoverable
+		// error which should be caught in development.
+		panicString := "go-sse: a Message without an ID was given to a provider that doesn't set IDs automatically.\n" + formatMessagePanicString(message)
+
+		panic(errors.New(panicString))
 	}
 
-	b.buf = append(b.buf, messageWithTopics{message: message, topics: topics})
-
-	return message
+	return b.bufferBase.queue(message, topics)
 }
 
 func (b *bufferNoID) dequeue() {
@@ -87,9 +108,8 @@ func (b *bufferAutoID) queue(message *Message, topics []string) *Message {
 	message = message.Clone()
 	message.ID = ID(strconv.FormatInt(b.upcomingID, autoIDBase))
 	b.upcomingID++
-	b.buf = append(b.buf, messageWithTopics{message: message, topics: topics})
 
-	return message
+	return b.bufferBase.queue(message, topics)
 }
 
 func (b *bufferAutoID) dequeue() {
@@ -115,4 +135,14 @@ func getBuffer(autoIDs bool, capacity int) buffer {
 		return &bufferAutoID{bufferBase: base}
 	}
 	return &bufferNoID{bufferBase: base}
+}
+
+func formatMessagePanicString(m *Message) string {
+	ret := "The message is the following:\n"
+	for _, line := range strings.SplitAfter(m.String(), "\n") {
+		if strings.TrimSpace(line) != "" {
+			ret += "│ " + line
+		}
+	}
+	return ret + "└─■"
 }

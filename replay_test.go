@@ -113,6 +113,21 @@ func TestFiniteReplayProvider(t *testing.T) {
 
 	require.NoError(t, p.Replay(sse.Subscription{}), "replay failed on provider without messages")
 
+	require.PanicsWithError(t, `go-sse: a Message without an ID was given to a provider that doesn't set IDs automatically.
+The message is the following:
+│ event: panic
+└─■`, func() {
+		p.Put(&sse.Message{Type: sse.Type("panic")}, []string{sse.DefaultTopic})
+	})
+
+	require.PanicsWithError(t, `go-sse: no topics provided for Message.
+The message is the following:
+│ id: 5
+│ event: panic
+└─■`, func() {
+		p.Put(&sse.Message{ID: sse.ID("5"), Type: sse.Type("panic")}, nil)
+	})
+
 	p.Put(msg(t, "", "1"), []string{sse.DefaultTopic})
 	p.Put(msg(t, "hello", "2"), []string{sse.DefaultTopic})
 	p.Put(msg(t, "there", "3"), []string{"t"})

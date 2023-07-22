@@ -36,7 +36,7 @@ This version brings a number of refactors to the server-side tooling the library
 ### Changed
 
 - `ReplayProvider.Put` takes a simple `*Message` and returns a `*Message`, instead of changing the `*Message` to which the `**Message` parameter points.
-  It also takes a slice of topics, given that the `Message` doesn't hold the topic itself anymore.
+  It also takes a slice of topics, given that the `Message` doesn't hold the topic itself anymore. If the Message cannot be put, the method must now panic – see documentation for info.
 - Because `Message.ExpiresAt` is removed, the `ValidReplayProvider` sets the expiry itself.
 - `Server.Publish` now takes a list of topics.
 - `Provider.Publish` now takes a non-empty slice of topics.

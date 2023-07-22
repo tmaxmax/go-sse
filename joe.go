@@ -28,9 +28,11 @@ import (
 // If not specified otherwise, the errors returned are implementation-specific.
 type ReplayProvider interface {
 	// Put adds a new event to the replay buffer. The Message that is returned may not have the
-	// same address, if the replay provider automatically sets IDs. It may also be nil if the
-	// message couldn't be queued – for example, the provider expects the message to have an ID
-	// but it didn't.
+	// same address, if the replay provider automatically sets IDs.
+	//
+	// Put panics if the message couldn't be queued – if no topics are provided, or
+	// a message without an ID is put into a ReplayProvider which does not
+	// automatically set IDs.
 	//
 	// The Put operation may be executed by the replay provider in another goroutine only if
 	// it can ensure that any Replay operation called after the Put goroutine is started
