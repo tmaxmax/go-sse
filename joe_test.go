@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,20 +17,33 @@ type mockReplayProvider struct {
 	callsGC     int
 	callsPut    int
 	callsReplay int
+	shouldPanic string
 }
 
 func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) *sse.Message {
 	m.callsPut++
+	if strings.Contains(m.shouldPanic, "put") {
+		panic("panicked")
+	}
+
 	return msg
 }
 
 func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
 	m.callsReplay++
+	if strings.Contains(m.shouldPanic, "replay") {
+		panic("panicked")
+	}
+
 	return nil
 }
 
 func (m *mockReplayProvider) GC() error {
 	m.callsGC++
+	if strings.Contains(m.shouldPanic, "gc") {
+		panic("panicked")
+	}
+
 	return m.errGC
 }
 
@@ -281,4 +295,24 @@ func TestJoe_GCInterval(t *testing.T) {
 	time.Sleep(interval*time.Duration(expected) + interval/2)
 	require.NoError(t, j.Shutdown(context.Background()))
 	require.Equal(t, expected, rp.callsGC)
+}
+
+func TestJoe_ReplayPanic(t *testing.T) {
+	t.Parallel()
+
+	rp := &mockReplayProvider{shouldPanic: "replay"}
+	j := &sse.Joe{ReplayProvider: rp}
+
+	err := j.Subscribe(context.Background(), sse.Subscription{})
+	time.Sleep(time.Millisecond)
+	require.Equal(t, 1, rp.callsReplay, "replay wasn't called")
+	require.ErrorIs(t, err, sse.ErrReplayFailed, "wrong error returned")
+
+	go func() { _ = j.Subscribe(context.Background(), sse.Subscription{}) }()
+	time.Sleep(time.Millisecond)
+	require.Equal(t, 1, rp.callsReplay, "replay was called")
+
+	// TODO: Tests for all panics.
+
+	require.NoError(t, j.Shutdown(context.Background()))
 }

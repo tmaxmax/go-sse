@@ -2,6 +2,8 @@ package sse
 
 import (
 	"context"
+	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -68,7 +70,7 @@ type ReplayProviderWithGC interface {
 	// GC triggers a cleanup. After GC returns, all the messages that are invalid according
 	// to the provider's criteria should be impossible to replay again.
 	//
-	// If GC returns an error, the provider is not required to try to trigger another
+	// If GC returns an error or panics, the provider is not required to try to trigger another
 	// GC ever again. Make sure that before you return a non-nil value you handle
 	// temporary errors accordingly, with blocking as shortly as possible.
 	//
@@ -96,8 +98,11 @@ type (
 //
 // Joe optionally supports event replaying with the help of a replay provider.
 //
-// If due to some unexpected scenario (the replay provider has a bug, for example) a panic occurs,
-// Joe will remove all subscribers, so requests don't hang.
+// If the replay provider panics, the subscription for which it panicked is considered failed
+// and an error is returned, and thereafter the replay provider is not used anymore – no replays
+// will be attempted for future subscriptions.
+// If due to some other unexpected scenario something panics internally, Joe will remove all subscribers
+// and close itself, so subscribers don't end up blocked.
 //
 // He serves simple use-cases well, as he's light on resources, and does not require any external
 // services. Also, he is the default provider for Servers.
@@ -205,10 +210,15 @@ func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan ti
 	defer j.closeSubscribers()
 	defer stopGCSignal()
 
+	canReplay := true
+
 	for {
 		select {
 		case msg := <-j.message:
-			toDispatch := replay.Put(msg.message, msg.topics)
+			toDispatch := msg.message
+			if canReplay {
+				toDispatch = j.tryPut(msg, replay, &canReplay)
+			}
 
 			for done, sub := range j.subscribers {
 				if topicsIntersect(sub.Topics, msg.topics) {
@@ -224,7 +234,12 @@ func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan ti
 				}
 			}
 		case sub := <-j.subscription:
-			if err := replay.Replay(sub.Subscription); err != nil {
+			var err error
+			if canReplay {
+				err = j.tryReplay(sub.Subscription, replay, &canReplay)
+			}
+
+			if err != nil {
 				sub.done <- err
 				close(sub.done)
 			} else {
@@ -248,6 +263,31 @@ func (j *Joe) closeSubscribers() {
 	}
 }
 
+func (*Joe) tryReplay(sub Subscription, replay ReplayProvider, canReplay *bool) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			*canReplay = false
+			err = ErrReplayFailed
+			log.Printf("panic: %v\n%s", r, debug.Stack())
+		}
+	}()
+
+	err = replay.Replay(sub)
+
+	return
+}
+
+func (*Joe) tryPut(msg messageWithTopics, replay ReplayProvider, canReplay *bool) *Message {
+	defer func() {
+		if r := recover(); r != nil {
+			*canReplay = false
+			log.Printf("panic: %v\n%s", r, debug.Stack())
+		}
+	}()
+
+	return replay.Put(msg.message, msg.topics)
+}
+
 func (j *Joe) init() {
 	j.initDone.Do(func() {
 		j.message = make(chan messageWithTopics)
@@ -267,7 +307,16 @@ func (j *Joe) init() {
 
 		provider, hasGC := replay.(ReplayProviderWithGC)
 		if hasGC {
-			gcFn = provider.GC
+			gcFn = func() (err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						err = ErrReplayFailed
+						log.Printf("panic: %v\n%s", r, debug.Stack())
+					}
+				}()
+				err = provider.GC()
+				return
+			}
 		} else {
 			replayGCInterval = 0
 		}

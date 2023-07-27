@@ -80,6 +80,11 @@ var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 // it is an error to call Provider.Publish without any topics, though.
 var ErrNoTopic = errors.New("go-sse.server: no topics specified")
 
+// ErrReplayFailed is a sentinel error returned by providers when a subscription fails because
+// the replay provider panicked. The subscription should be retried, as the behaviour of providers
+// is to disable the replay provider and never replay messages again, if it panicked.
+var ErrReplayFailed = errors.New("go-sse.server: replay failed unexpectedly")
+
 // DefaultTopic is the identifier for the topic that is implied when no topics are specified for a Subscription
 // or a Message. Providers are required to implement this behavior to ensure handlers don't break if providers
 // are changed.

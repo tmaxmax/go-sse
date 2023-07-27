@@ -4,7 +4,11 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## Unreleased
 
-This version brings some minor internal changes to Joe which do not have an outside effect.
+This version brings some internal changes to Joe, which makes it faster and more resilient.
+
+### Changed
+
+- If a `ReplayProvider` method panics when called by `Joe`, instead of closing itself completely it just stops replaying, putting or GC-ing messages to upcoming clients. `Joe` continues to function as if no replay provider was given. A stack trace is printed to stderr when such a panic occurs.
 
 ## [0.6.0] - 2023-07-22
 
