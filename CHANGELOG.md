@@ -2,6 +2,10 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+This version brings some minor internal changes to Joe which do not have an outside effect.
+
 ## [0.6.0] - 2023-07-22
 
 This version brings a number of refactors to the server-side tooling the library offers. Constructors and construction related types are removed, for ease of use and reduced API size, concerns regarding topics and expiry were separated from `Message`, logging of the `Server` is upgraded to structured logging and messages can be now published to multiple topics at once. Request upgrading has also been refactored to provide a more functional API, and the `Server` logic can now be customized without having to create a distinct handler.

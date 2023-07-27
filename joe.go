@@ -107,7 +107,7 @@ type Joe struct {
 	unsubscription chan subscriber
 	done           chan struct{}
 	closed         chan struct{}
-	topics         map[string]subscribers
+	subscribers    map[subscriber]Subscription
 
 	// An optional replay provider that Joe uses to resend older messages to new subscribers.
 	ReplayProvider ReplayProvider
@@ -193,18 +193,8 @@ func (j *Joe) Shutdown(ctx context.Context) (err error) {
 	return
 }
 
-func (j *Joe) topic(identifier string) subscribers {
-	if _, ok := j.topics[identifier]; !ok {
-		j.topics[identifier] = subscribers{}
-	}
-	return j.topics[identifier]
-}
-
 func (j *Joe) removeSubscriber(sub subscriber) {
-	for _, subs := range j.topics {
-		delete(subs, sub)
-	}
-
+	delete(j.subscribers, sub)
 	close(sub)
 }
 
@@ -219,24 +209,17 @@ func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan ti
 		select {
 		case msg := <-j.message:
 			toDispatch := replay.Put(msg.message, msg.topics)
-			seen := map[subscriber]struct{}{}
 
-			for _, topic := range msg.topics {
-				for done, c := range j.topics[topic] {
-					if _, ok := seen[done]; ok {
-						continue
-					}
-
-					err := c.Send(toDispatch)
+			for done, sub := range j.subscribers {
+				if topicsIntersect(sub.Topics, msg.topics) {
+					err := sub.Client.Send(toDispatch)
 					if err == nil {
-						err = c.Flush()
+						err = sub.Client.Flush()
 					}
 
 					if err != nil {
 						done <- err
 						j.removeSubscriber(done)
-					} else {
-						seen[done] = struct{}{}
 					}
 				}
 			}
@@ -244,11 +227,8 @@ func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan ti
 			if err := replay.Replay(sub.Subscription); err != nil {
 				sub.done <- err
 				close(sub.done)
-				continue
-			}
-
-			for _, topic := range sub.Topics {
-				j.topic(topic)[sub.done] = sub.Client
+			} else {
+				j.subscribers[sub.done] = sub.Subscription
 			}
 		case sub := <-j.unsubscription:
 			j.removeSubscriber(sub)
@@ -263,17 +243,8 @@ func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan ti
 }
 
 func (j *Joe) closeSubscribers() {
-	seen := map[subscriber]struct{}{}
-
-	for _, subs := range j.topics {
-		for sub := range subs {
-			if _, ok := seen[sub]; ok {
-				continue
-			}
-
-			seen[sub] = struct{}{}
-			close(sub)
-		}
+	for done := range j.subscribers {
+		j.removeSubscriber(done)
 	}
 }
 
@@ -284,7 +255,7 @@ func (j *Joe) init() {
 		j.unsubscription = make(chan subscriber)
 		j.done = make(chan struct{})
 		j.closed = make(chan struct{})
-		j.topics = map[string]subscribers{}
+		j.subscribers = map[subscriber]Subscription{}
 
 		replay := j.ReplayProvider
 		if replay == nil {
