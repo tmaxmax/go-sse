@@ -21,7 +21,7 @@ type MessageWriter interface {
 	Flush() error
 }
 
-// A Session is a HTTP request from a SSE client.
+// A Session is an HTTP request from an SSE client.
 // Create one using the Upgrade function.
 //
 // Using a Session you can also access the initial HTTP request,
@@ -33,7 +33,7 @@ type Session struct {
 	// The initial HTTP request. Can be used to retrieve authentication data,
 	// topics, or data from context – a logger, for example.
 	Req *http.Request
-	// Last evend ID of the client. It is unset if no ID was provided in the Last-Event-Id
+	// Last event ID of the client. It is unset if no ID was provided in the Last-Event-Id
 	// request header.
 	LastEventID EventID
 
@@ -74,7 +74,7 @@ func (s *Session) doUpgrade() error {
 	return nil
 }
 
-// Upgrade upgrades a HTTP request to support server-sent events.
+// Upgrade upgrades an HTTP request to support server-sent events.
 // It returns a Session that's used to send events to the client, or an
 // error if the upgrade failed.
 //

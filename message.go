@@ -257,7 +257,7 @@ func (u *UnmarshalError) Unwrap() error {
 	return u.Reason
 }
 
-// ErrUnexpectedEOF is returned when unmarshaling a Message from an input that doesn't end in a newline.
+// ErrUnexpectedEOF is returned when unmarshalling a Message from an input that doesn't end in a newline.
 var ErrUnexpectedEOF = parser.ErrUnexpectedEOF
 
 func (e *Message) reset() {
@@ -272,7 +272,7 @@ func (e *Message) reset() {
 // Therefore, previous fields present on the Message will be overwritten
 // (i.e. event, ID, comments, data, retry).
 //
-// Unmarshaling ignores fields with invalid names. If no valid fields are found,
+// Unmarshalling ignores fields with invalid names. If no valid fields are found,
 // an error is returned. For a field to be valid it must end in a newline - if the last
 // field of the event doesn't end in one, an error is returned.
 //

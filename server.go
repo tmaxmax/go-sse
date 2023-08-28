@@ -95,7 +95,7 @@ type Server struct {
 	// The provider used to publish and subscribe clients to events.
 	// Defaults to Joe.
 	Provider Provider
-	// A callback that's called when a SSE session is started.
+	// A callback that's called when an SSE session is started.
 	// You can use this to authorize the session, set the topics
 	// the client should be subscribed to and so on. Using the
 	// Res field of the Session you can write an error response
