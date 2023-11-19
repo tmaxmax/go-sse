@@ -76,15 +76,21 @@ func (c *Client) NewConnection(r *http.Request) *Connection {
 	return conn
 }
 
-func (c *Client) newBackoff(ctx context.Context) (backoff.BackOff, *time.Duration) {
+func (c *Client) newBackoff(ctx context.Context) (b backoff.BackOff, setRetry func(time.Duration)) {
 	base := backoff.NewExponentialBackOff()
 	base.InitialInterval = c.DefaultReconnectionTime
-	initialReconnectionTime := &base.InitialInterval
-	b := backoff.WithContext(base, ctx)
+	b = backoff.WithContext(base, ctx)
 	if c.MaxRetries >= 0 {
-		return backoff.WithMaxRetries(b, uint64(c.MaxRetries)), initialReconnectionTime
+		rb := backoff.WithMaxRetries(b, uint64(c.MaxRetries))
+		return rb, func(d time.Duration) {
+			base.InitialInterval = d
+			rb.Reset()
+		}
 	}
-	return b, initialReconnectionTime
+	return b, func(d time.Duration) {
+		base.InitialInterval = d
+		b.Reset()
+	}
 }
 
 func contentType(header string) string {

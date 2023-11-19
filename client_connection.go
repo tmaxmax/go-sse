@@ -40,15 +40,14 @@ type EventCallbackRemover func()
 //
 // Connections must not be copied after they are created.
 type Connection struct { //nolint:govet // The current order aids readability.
-	mu               sync.RWMutex
-	request          *http.Request
-	callbacks        map[string]map[int]EventCallback
-	callbacksAll     map[int]EventCallback
-	reconnectionTime *time.Duration
-	lastEventID      string
-	client           Client
-	callbackID       int
-	isRetry          bool
+	mu           sync.RWMutex
+	request      *http.Request
+	callbacks    map[string]map[int]EventCallback
+	callbacksAll map[int]EventCallback
+	lastEventID  string
+	client       Client
+	callbackID   int
+	isRetry      bool
 }
 
 // SubscribeMessages subscribes the given callback to all events without type (without or with empty `event` field).
@@ -166,7 +165,7 @@ func (c *Connection) dispatch(ev Event) {
 	}
 }
 
-func (c *Connection) read(r io.Reader, reset func()) error {
+func (c *Connection) read(r io.Reader, setRetry func(time.Duration)) error {
 	p := parser.New(r)
 	ev, dirty := Event{}, false
 
@@ -193,8 +192,7 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 				break
 			}
 			if n > 0 {
-				*c.reconnectionTime = time.Duration(n) * time.Millisecond
-				reset()
+				setRetry(time.Duration(n) * time.Millisecond)
 			}
 			dirty = true
 		default:
@@ -225,9 +223,8 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 // inside a *ConnectionError.
 func (c *Connection) Connect() error {
 	ctx := c.request.Context()
-	b, interval := c.client.newBackoff(ctx)
+	b, setRetry := c.client.newBackoff(ctx)
 
-	c.reconnectionTime = interval
 	c.request.Header.Set("Accept", "text/event-stream")
 	c.request.Header.Set("Connection", "keep-alive")
 	c.request.Header.Set("Cache", "no-cache")
@@ -254,7 +251,7 @@ func (c *Connection) Connect() error {
 
 		b.Reset()
 
-		err = c.read(res.Body, b.Reset)
+		err = c.read(res.Body, setRetry)
 		if errors.Is(err, ctx.Err()) {
 			return backoff.Permanent(err)
 		}
