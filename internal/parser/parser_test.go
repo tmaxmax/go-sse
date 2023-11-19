@@ -69,6 +69,7 @@ data: still, here's some data: you deserve it
 				newEventField(t, "something glitched before why are there two newlines"),
 				newDataField(t, "still, here's some data: you deserve it"),
 			},
+			err: io.EOF,
 		},
 		{
 			name:  "Valid input with long string",
@@ -77,6 +78,7 @@ data: still, here's some data: you deserve it
 				newIDField(t, "2"),
 				newDataField(t, longString),
 			},
+			err: io.EOF,
 		},
 		{
 			name:  "Error",
@@ -98,6 +100,7 @@ data: still, here's some data: you deserve it
 				{},
 				{},
 			},
+			err: io.EOF,
 		},
 	}
 

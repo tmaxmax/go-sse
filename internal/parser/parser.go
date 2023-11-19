@@ -58,6 +58,10 @@ type Parser struct {
 func (r *Parser) Next(f *Field) bool {
 	if !r.fieldScanner.Next(f) {
 		if !r.inputScanner.Scan() {
+			// Do this to signal EOF, which bufio.Scanner suppresses.
+			if r.inputScanner.Err() == nil {
+				r.inputScanner = nil
+			}
 			return false
 		}
 
@@ -80,12 +84,18 @@ func (r *Parser) Next(f *Field) bool {
 	return true
 }
 
-// Err returns the last read error.
+// Err returns the last read error. At the end of input
+// it will always be equal to io.EOF.
 func (r *Parser) Err() error {
-	if err := r.inputScanner.Err(); err != nil {
+	if err := r.fieldScanner.Err(); err != nil {
 		return err
 	}
-	return r.fieldScanner.Err()
+	if r.inputScanner == nil {
+		// Recover the EOF suppressed by bufio.Scanner.
+		// We need it inside the client, to know when to retry.
+		return io.EOF
+	}
+	return r.inputScanner.Err()
 }
 
 // Buffer sets the buffer used to scan the input.
