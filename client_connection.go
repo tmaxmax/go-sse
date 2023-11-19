@@ -22,7 +22,7 @@ type Event struct {
 	LastEventID string
 	// The event's type. It is empty if the event is unnamed.
 	Type string
-	// The events's payload.
+	// The event's payload.
 	Data string
 }
 
@@ -51,7 +51,7 @@ type Connection struct { //nolint:govet // The current order aids readability.
 	isRetry          bool
 }
 
-// SubscribeMessages subscribes the given callback to all events without type (without or with empty `event“ field).
+// SubscribeMessages subscribes the given callback to all events without type (without or with empty `event` field).
 // Remove the callback by calling the returned function.
 func (c *Connection) SubscribeMessages(cb EventCallback) EventCallbackRemover {
 	return c.SubscribeEvent("", cb)
@@ -64,7 +64,7 @@ func (c *Connection) SubscribeEvent(typ string, cb EventCallback) EventCallbackR
 	return c.addSubscriber(typ, cb)
 }
 
-// SubscribeToAll subscribes the given callbcak to all events, with or without type.
+// SubscribeToAll subscribes the given callback to all events, with or without type.
 // Remove the callback by calling the returned function.
 func (c *Connection) SubscribeToAll(cb EventCallback) EventCallbackRemover {
 	return c.addSubscriberToAll(cb)

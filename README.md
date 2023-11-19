@@ -385,7 +385,7 @@ If the server doesn't set a retry time, the client's `DefaultReconnectionTime` i
 
 ### The "Hello world" server's client
 
-Let's use what we know to create a client for the prevoius server example:
+Let's use what we know to create a client for the previous server example:
 
 ```go
 package main
