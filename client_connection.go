@@ -1,11 +1,11 @@
 package sse
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -128,38 +128,13 @@ func (e *ConnectionError) Unwrap() error {
 	return e.Err
 }
 
-// Temporary returns whether the underlying error is temporary.
-func (e *ConnectionError) Temporary() bool {
-	var t interface{ Temporary() bool }
-	if errors.As(e.Err, &t) {
-		return t.Temporary()
-	}
-	return false
-}
-
-// Timeout returns whether the underlying error is caused by a timeout.
-func (e *ConnectionError) Timeout() bool {
-	var t interface{ Timeout() bool }
-	if errors.As(e.Err, &t) {
-		return t.Timeout()
-	}
-	return false
-}
-
-func (e *ConnectionError) toPermanent() error {
-	if e.Temporary() || e.Timeout() {
-		return e
-	}
-	return backoff.Permanent(e)
-}
-
 func (c *Connection) resetRequest() error {
 	if !c.isRetry {
 		c.isRetry = true
 		return nil
 	}
 	if err := resetRequestBody(c.request); err != nil {
-		return &ConnectionError{Req: c.request, Reason: "unable to reset request body", Err: err}
+		return err
 	}
 	if c.lastEventID == "" {
 		c.request.Header.Del("Last-Event-ID")
@@ -239,36 +214,27 @@ func (c *Connection) read(r io.Reader, reset func()) error {
 	}
 
 	err := p.Err()
-	if dirty && err == nil {
+	if dirty && err == io.EOF { //nolint:errorlint // Our scanner returns io.EOF unwrapped
 		c.dispatch(ev)
 	}
-	if isSuccess(err) {
-		return nil
-	}
-	e := &ConnectionError{Req: c.request, Reason: "reading response body failed", Err: err}
-	return e.toPermanent()
-}
 
-func isSuccess(err error) bool {
-	return err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, parser.ErrUnexpectedEOF)
+	return err
 }
 
 // Connect sends the request the connection was created with to the server
 // and, if successful, it starts receiving events. The caller goroutine
 // is blocked until the request's context is done or an error occurs.
 //
-// Connect returns a nil error on success. On non-nil errors, the connection
-// is reattempted for the number of times the Client is configured with,
-// using an exponential backoff that has the initial time set to either the
-// client's default value or to the retry value received from the server.
-// If an error is permanent (e.g. no internet connection), no retries are done.
-// All errors returned are of type *ConnectionError.
+// If the request's context is cancelled, Connect returns its error.
+// Otherwise, if the maximum number or retries is made, the last error
+// that occurred is returned. Connect never returns otherwise – either
+// the context is cancelled, or it's done retrying.
 //
-// After Connect returns, all subscriptions will be closed. Make sure to wait
-// for the subscribers' goroutines to exit, as they may still be running after
-// Connect has returned. Connect cannot be called twice for the same connection.
+// All errors returned other than the context errors will be wrapped
+// inside a *ConnectionError.
 func (c *Connection) Connect() error {
-	b, interval := c.client.newBackoff(c.request.Context())
+	ctx := c.request.Context()
+	b, interval := c.client.newBackoff(ctx)
 
 	c.reconnectionTime = interval
 	c.request.Header.Set("Accept", "text/event-stream")
@@ -277,24 +243,32 @@ func (c *Connection) Connect() error {
 
 	op := func() error {
 		if err := c.resetRequest(); err != nil {
-			return backoff.Permanent(err)
+			wrapped := &ConnectionError{Req: c.request, Reason: "request reset failed", Err: err}
+			return backoff.Permanent(wrapped)
 		}
 
-		res, err := c.client.do(c.request)
+		res, err := c.client.HTTPClient.Do(c.request)
 		if err != nil {
-			e := &ConnectionError{Req: c.request, Reason: "unable to execute request", Err: err}
-			return e.toPermanent()
+			concrete := err.(*url.Error) //nolint:errorlint // We know the concrete type here
+			if errors.Is(err, ctx.Err()) {
+				return backoff.Permanent(concrete.Err)
+			}
+			return &ConnectionError{Req: c.request, Reason: "connection to server failed", Err: concrete.Err}
 		}
 		defer res.Body.Close()
 
 		if err := c.client.ResponseValidator(res); err != nil {
-			e := &ConnectionError{Req: c.request, Reason: "response validation failed", Err: err}
-			return e.toPermanent()
+			return &ConnectionError{Req: c.request, Reason: "response validation failed", Err: err}
 		}
 
 		b.Reset()
 
-		return c.read(res.Body, b.Reset)
+		err = c.read(res.Body, b.Reset)
+		if errors.Is(err, ctx.Err()) {
+			return backoff.Permanent(err)
+		}
+
+		return &ConnectionError{Req: c.request, Reason: "connection to server lost", Err: err}
 	}
 
 	err := backoff.RetryNotify(op, b, c.client.OnRetry)

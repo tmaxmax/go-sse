@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,14 +21,6 @@ type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (r roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return r(req)
-}
-
-type temporaryError struct {
-	error
-}
-
-func (t temporaryError) Temporary() bool {
-	return true
 }
 
 func reqCtx(tb testing.TB, ctx context.Context, method, address string, body io.Reader) *http.Request { //nolint
@@ -92,12 +83,12 @@ func TestConnection_Connect_retry(t *testing.T) {
 	var firstReconnectionTime time.Duration
 	var retryAttempts int
 
-	tempErr := temporaryError{errors.New("a temporary error take it or leave it")}
+	testErr := errors.New("done")
 
 	c := &sse.Client{
 		HTTPClient: &http.Client{
 			Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
-				return nil, tempErr
+				return nil, testErr
 			}),
 		},
 		OnRetry: func(_ error, duration time.Duration) {
@@ -109,13 +100,45 @@ func TestConnection_Connect_retry(t *testing.T) {
 		MaxRetries:              3,
 		DefaultReconnectionTime: time.Millisecond,
 	}
-	r, err := http.NewRequest("", "", http.NoBody)
-	require.NoError(t, err, "failed to create request")
-	err = c.NewConnection(r).Connect()
+	r := req(t, "", "", http.NoBody)
+	err := c.NewConnection(r).Connect()
 
-	require.ErrorIs(t, err, tempErr, "invalid error received from Connect")
+	require.ErrorIs(t, err, testErr, "invalid error received from Connect")
 	require.Equal(t, c.MaxRetries, retryAttempts, "connection was not retried enough times")
 	require.InEpsilon(t, c.DefaultReconnectionTime, firstReconnectionTime, backoff.DefaultRandomizationFactor, "reconnection time incorrectly set")
+}
+
+func TestConnection_Connect_noRetryCtxErr(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case ts := <-ticker.C:
+				fmt.Fprintf(w, "id: %s\n\n", ts)
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}))
+	t.Cleanup(ts.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	c := &sse.Client{
+		HTTPClient:        ts.Client(),
+		ResponseValidator: sse.NoopValidator,
+	}
+
+	r := reqCtx(t, ctx, "", ts.URL, http.NoBody)
+	go func() {
+		time.Sleep(time.Millisecond)
+		cancel()
+	}()
+	err := c.NewConnection(r).Connect()
+	require.ErrorIs(t, err, ctx.Err())
 }
 
 type readerWrapper struct {
@@ -155,7 +178,9 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 		},
 	}
 
-	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(time.Millisecond * 5)
+	}))
 	defer ts.Close()
 	httpClient := ts.Client()
 	rt := httpClient.Transport
@@ -170,22 +195,28 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			firstTry := true
-
 			c.HTTPClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				if firstTry {
 					firstTry = false
-					return nil, temporaryError{errors.New("hehe")}
+					return nil, errors.New("fail")
 				}
 				return rt.RoundTrip(r)
 			})
 
-			r := req(t, "", ts.URL, test.body)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*3)
+			defer cancel()
+
+			r := reqCtx(t, ctx, "", ts.URL, test.body)
 			if test.getBody != nil {
 				r.GetBody = test.getBody
 			}
 
 			err := c.NewConnection(r).Connect()
-			require.ErrorIs(t, err, test.err, "incorrect error received from Connect")
+			if test.err != nil {
+				require.ErrorIs(t, err, test.err, "incorrect error received from Connect")
+			} else {
+				require.Equal(t, ctx.Err(), err)
+			}
 		})
 	}
 }
@@ -203,6 +234,7 @@ func TestConnection_Connect_validator(t *testing.T) {
 		{
 			name:      "No validation error",
 			validator: sse.NoopValidator,
+			err:       io.EOF,
 		},
 		{
 			name: "Validation error",
@@ -218,6 +250,7 @@ func TestConnection_Connect_validator(t *testing.T) {
 
 	c := &sse.Client{
 		HTTPClient: ts.Client(),
+		MaxRetries: 0,
 	}
 
 	for _, test := range tests {
@@ -280,6 +313,8 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 
 			if test.expectErr {
 				require.Error(t, err, "expected Connect error")
+			} else {
+				require.ErrorIs(t, err, io.EOF)
 			}
 		})
 	}
@@ -387,7 +422,7 @@ func TestConnection_Subscriptions(t *testing.T) {
 	defer unsubMessages()
 	expectedMessages := []sse.Event{firstEvent, fourthEvent}
 
-	require.NoError(t, conn.Connect(), "unexpected Connect error")
+	require.ErrorIs(t, conn.Connect(), sse.ErrUnexpectedEOF, "incorrect Connect error")
 	unsubAll()
 	require.Equal(t, expectedAll, <-all, "unexpected events for all")
 	unsubTest()
@@ -407,7 +442,7 @@ func TestConnection_dispatchDirty(t *testing.T) {
 	c := &sse.Client{
 		HTTPClient:        ts.Client(),
 		ResponseValidator: sse.NoopValidator,
-		MaxRetries:        -1, // for coverage, test will fail if a retry is actually made
+		MaxRetries:        0,
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 	expected := sse.Event{Data: "hello\nworld"}
@@ -417,7 +452,7 @@ func TestConnection_dispatchDirty(t *testing.T) {
 		got = e
 	})
 
-	require.NoError(t, conn.Connect(), "unexpected Connect error")
+	require.ErrorIs(t, conn.Connect(), io.EOF, "unexpected Connect error")
 	require.Equal(t, expected, got, "unexpected event received")
 }
 
@@ -439,6 +474,7 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 	c := &sse.Client{
 		HTTPClient:        ts.Client(),
 		ResponseValidator: sse.NoopValidator,
+		MaxRetries:        0,
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
@@ -483,7 +519,7 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 		}
 	}()
 
-	require.NoError(t, conn.Connect(), "unexpected Connect error")
+	require.ErrorIs(t, conn.Connect(), io.EOF, "unexpected Connect error")
 	require.Equal(t, expectedAll, <-all, "unexpected events for all")
 	require.Equal(t, expectedSome, <-some, "unexpected events for some")
 	require.Equal(t, expectedOne, <-one, "unexpected events for one")
@@ -546,121 +582,36 @@ func TestConnection_serverError(t *testing.T) {
 	require.Equal(t, expected, <-all, "unexpected values for all")
 }
 
-type reconnectWriterError bool
-
-func (r reconnectWriterError) Error() string   { return "write error" }
-func (r reconnectWriterError) Temporary() bool { return bool(r) }
-func (r reconnectWriterError) Timeout() bool   { return !bool(r) }
-
-type reconnectWriter struct {
-	event string
-}
-
-func (r *reconnectWriter) Read(p []byte) (int, error) {
-	if r.event != "" {
-		n := copy(p, r.event)
-		r.event = r.event[n:]
-		return n, nil
-	}
-	return 0, reconnectWriterError(rand.Intn(2) == 0)
-}
-
-func (r *reconnectWriter) Close() error { return nil }
-
-func newReconnectWriter(tb testing.TB, id, retry string) *reconnectWriter {
-	tb.Helper()
-
-	var event string
-	event += "id: " + id + "\n"
-	if retry == "" {
-		event += "\n"
-	} else {
-		event += "retry: " + retry + "\n\n"
-	}
-
-	return &reconnectWriter{event: event}
-}
-
-func newReconnectResponse(tb testing.TB, r *http.Request, id, retry string) *http.Response {
-	tb.Helper()
-
-	code := http.StatusOK
-	cr := *r
-	cr.Body = nil
-
-	return &http.Response{
-		StatusCode:    code,
-		Status:        fmt.Sprintf("%d %s", code, http.StatusText(code)),
-		Proto:         "HTTP/1.1",
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Header:        http.Header{"Content-Type": []string{"text/event-stream"}},
-		Body:          newReconnectWriter(tb, id, retry),
-		ContentLength: -1,
-		Request:       &cr,
-	}
-}
-
-const reconnectRetries = 3
-
-type reconnectTransport struct {
-	tb         testing.TB
-	setIDs     [reconnectRetries]string
-	setRetries [reconnectRetries]string
-	recvIDs    []string
-	recvBodies []string
-	attempt    int
-}
-
-func (r *reconnectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	r.recvIDs = append(r.recvIDs, req.Header.Get("Last-Event-ID"))
-	b, _ := io.ReadAll(req.Body)
-	r.recvBodies = append(r.recvBodies, string(b))
-
-	r.attempt++
-	if r.attempt > reconnectRetries {
-		return nil, errors.New("reconnectTransport: RoundTrip permanently failed")
-	}
-
-	return newReconnectResponse(r.tb, req, r.setIDs[r.attempt-1], r.setRetries[r.attempt-1]), nil
-}
-
-func (r *reconnectTransport) IDs() []string    { return r.recvIDs }
-func (r *reconnectTransport) Bodies() []string { return r.recvBodies }
-
-func newReconnectTransport(tb testing.TB, ids, retries [reconnectRetries]string) *reconnectTransport {
-	tb.Helper()
-
-	return &reconnectTransport{
-		tb:         tb,
-		setIDs:     ids,
-		setRetries: retries,
-	}
-}
-
 func TestConnection_reconnect(t *testing.T) {
-	bodyText := "body"
-	expectedIDs := []string{"", "1", "1", ""}
-	expectedRetries := []time.Duration{time.Millisecond, time.Millisecond, 2 * time.Millisecond}
-	expectedBodies := []string{bodyText, bodyText, bodyText, bodyText}
+	try := 0
+	lastEventIDs := []string(nil)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastEventIDs = append(lastEventIDs, r.Header.Get("Last-Event-Id"))
+		try++
+		fmt.Fprintf(w, "id: %d\n\n", try)
+	}))
+	t.Cleanup(ts.Close)
 
-	var recvRetries []time.Duration
-	onRetry := func(_ error, duration time.Duration) {
-		recvRetries = append(recvRetries, duration)
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 
-	rt := newReconnectTransport(t, [3]string{"1", "\000mama", ""}, [3]string{"1", "mama", "2"})
+	retries := 0
 	c := sse.Client{
-		HTTPClient: &http.Client{Transport: rt},
-		OnRetry:    onRetry,
-		MaxRetries: reconnectRetries,
+		HTTPClient: ts.Client(),
+		OnRetry: func(err error, d time.Duration) {
+			retries++
+			if retries == 3 {
+				cancel()
+			}
+		},
+		DefaultReconnectionTime: time.Nanosecond,
+		ResponseValidator:       sse.NoopValidator,
+		MaxRetries:              -1,
 	}
-	conn := c.NewConnection(req(t, "", "", strings.NewReader(bodyText)))
 
-	require.Error(t, conn.Connect(), "expected Connect error")
-	require.Equal(t, expectedIDs, rt.IDs(), "incorrect Last-Event-IDs received")
-	require.Equal(t, expectedBodies, rt.Bodies(), "incorrect bodies received")
-	for i := range expectedRetries {
-		require.InEpsilon(t, expectedRetries[i], recvRetries[i], backoff.DefaultRandomizationFactor, "invalid retry value")
-	}
+	r := reqCtx(t, ctx, "", ts.URL, http.NoBody)
+	err := c.NewConnection(r).Connect()
+
+	require.Equal(t, ctx.Err(), err)
+	require.Equal(t, []string{"", "1", "2"}, lastEventIDs)
 }

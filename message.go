@@ -258,6 +258,10 @@ func (u *UnmarshalError) Unwrap() error {
 }
 
 // ErrUnexpectedEOF is returned when unmarshaling a Message from an input that doesn't end in a newline.
+//
+// If it returned from a Connection, it means that the data from the server has reached EOF
+// in the middle of an incomplete event and retries are disabled (normally the client retries
+// the connection in this situation).
 var ErrUnexpectedEOF = parser.ErrUnexpectedEOF
 
 func (e *Message) reset() {

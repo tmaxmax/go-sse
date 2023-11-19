@@ -341,6 +341,33 @@ err := conn.Connect()
 
 By calling `Connect`, the request created above will be sent to the server, and if successful, the subscribed callbacks will be called when new events are received. `Connect` returns only after all callbacks have finished executing.
 To stop calling a certain callback, call the unsubscribe function returned when subscribing. You can also subscribe new callbacks after calling Connect from a different goroutine.
+When using a `context.Context` to stop the connection, the error returned will be the context error – be it `context.Canceled`, `context.DeadlineExceeded` or a custom cause (when using `context.WithCancelCause`). In other words, a successfully closed `Connection` will always return an error – if the context error is not relevant, you can ignore it. For example:
+
+```go
+if err := conn.Connect(); !errors.Is(err, context.Canceled) {
+    // handle error
+}
+```
+
+A context created with `context.WithCancel`, or one with `context.WithCancelCause` and cancelled with the error `context.Canceled` is assumed above.
+
+There may be situations where the connection does not have to live for indeterminately long – for example when using the OpenAI API. In those situations, configure the client to not retry the connection and ignore `io.EOF` on return:
+
+```go
+client := sse.Client{
+    MaxRetries: 0,
+    // other settings...
+}
+
+req, _ := http.NewRequest(http.MethodPost, "https://api.openai.com/...", body)
+conn := client.NewConnection(req)
+
+conn.SubscribeMessages(/* callback */)
+
+if err := conn.Connect(); !errors.Is(err, io.EOF) {
+    // handle error
+}
+```
 
 ### Connection lost?
 

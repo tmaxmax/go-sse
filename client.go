@@ -42,6 +42,8 @@ type Client struct {
 	// The maximum number of reconnection to attempt when an error occurs.
 	// If MaxRetries is negative (-1), infinite reconnection attempts will be done.
 	// Defaults to 0 (no retries).
+	//
+	// This counter is reset if a reconnection attempt is successful.
 	MaxRetries int
 	// The initial reconnection delay. Subsequent reconnections use a longer
 	// time. This can be overridden by retry values sent by the server.
@@ -72,10 +74,6 @@ func (c *Client) NewConnection(r *http.Request) *Connection {
 	}
 
 	return conn
-}
-
-func (c *Client) do(r *http.Request) (*http.Response, error) {
-	return c.HTTPClient.Do(r)
 }
 
 func (c *Client) newBackoff(ctx context.Context) (backoff.BackOff, *time.Duration) {

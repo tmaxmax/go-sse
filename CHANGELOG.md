@@ -4,7 +4,19 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## Unreleased
 
-This version brings some internal changes to Joe, which makes it faster and more resilient.
+This version overhauls connection retry. Some internal changes to Joe were also made, which makes it faster and more resilient.
+
+### Removed
+
+- `ConnectionError.Temporary`
+- `ConnectionError.Timeout`
+
+### Changed
+
+- Go's `Timeout` and `Temporary` interfaces are not used anymore – the client makes no assumptions and retries on every network or response read error. The only cases when `Connection.Connect` returns now are either when there are no more retries left (when the number is not infinite), or when the request context was cancelled.
+- `*url.Error`s that occur on the HTTP request are now unwrapped and their cause is put inside a `ConnectionError`.
+- `Connection.Connect` doesn't suppress any errors anymore: the request context errors are returned as is, all other errors are wrapped inside `ConnectionError`.
+- On reconnection attempt, the response reset error is now wrapped inside `ConnectionError`. With this change, all errors other than the context errors are wrapped inside `ConnectionError`.
 
 ### Changed
 
