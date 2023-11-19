@@ -2,7 +2,7 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.7.0] - 2023-11-19
 
 This version overhauls connection retry and fixes the connection event dispatch order issue. Some internal changes to Joe were also made, which makes it faster and more resilient.
 
