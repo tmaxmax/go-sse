@@ -41,7 +41,6 @@ type EventCallbackRemover func()
 // Connections must not be copied after they are created.
 type Connection struct { //nolint:govet // The current order aids readability.
 	mu               sync.RWMutex
-	wg               sync.WaitGroup
 	request          *http.Request
 	callbacks        map[string]map[int]EventCallback
 	callbacksAll     map[int]EventCallback
@@ -144,13 +143,6 @@ func (c *Connection) resetRequest() error {
 	return nil
 }
 
-func (c *Connection) executeCallback(cb EventCallback, ev Event) {
-	go func() {
-		defer c.wg.Done()
-		cb(ev)
-	}()
-}
-
 func (c *Connection) dispatch(ev Event) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -166,12 +158,11 @@ func (c *Connection) dispatch(ev Event) {
 	}
 	ev.LastEventID = c.lastEventID
 
-	c.wg.Add(cbCount)
 	for _, cb := range c.callbacks[ev.Type] {
-		c.executeCallback(cb, ev)
+		cb(ev)
 	}
 	for _, cb := range c.callbacksAll {
-		c.executeCallback(cb, ev)
+		cb(ev)
 	}
 }
 
@@ -272,7 +263,6 @@ func (c *Connection) Connect() error {
 	}
 
 	err := backoff.RetryNotify(op, b, c.client.OnRetry)
-	c.wg.Wait()
 
 	return err
 }

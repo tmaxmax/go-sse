@@ -4,7 +4,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## Unreleased
 
-This version overhauls connection retry. Some internal changes to Joe were also made, which makes it faster and more resilient.
+This version overhauls connection retry and fixes the connection event dispatch order issue. Some internal changes to Joe were also made, which makes it faster and more resilient.
 
 ### Removed
 
@@ -17,6 +17,7 @@ This version overhauls connection retry. Some internal changes to Joe were also 
 - `*url.Error`s that occur on the HTTP request are now unwrapped and their cause is put inside a `ConnectionError`.
 - `Connection.Connect` doesn't suppress any errors anymore: the request context errors are returned as is, all other errors are wrapped inside `ConnectionError`.
 - On reconnection attempt, the response reset error is now wrapped inside `ConnectionError`. With this change, all errors other than the context errors are wrapped inside `ConnectionError`.
+- Subscription callbacks are no longer called in individual goroutines. This caused messages to be received in an indereminate order. Make sure that your callbacks do not block for too long!
 
 ### Changed
 
