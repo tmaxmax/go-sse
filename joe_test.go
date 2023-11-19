@@ -14,10 +14,10 @@ import (
 
 type mockReplayProvider struct {
 	errGC       error
+	shouldPanic string
 	callsGC     int
 	callsPut    int
 	callsReplay int
-	shouldPanic string
 }
 
 func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) *sse.Message {
@@ -311,8 +311,6 @@ func TestJoe_ReplayPanic(t *testing.T) {
 	go func() { _ = j.Subscribe(context.Background(), sse.Subscription{}) }()
 	time.Sleep(time.Millisecond)
 	require.Equal(t, 1, rp.callsReplay, "replay was called")
-
-	// TODO: Tests for all panics.
 
 	require.NoError(t, j.Shutdown(context.Background()))
 }

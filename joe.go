@@ -80,7 +80,6 @@ type ReplayProviderWithGC interface {
 
 type (
 	subscriber   chan<- error
-	subscribers  map[subscriber]MessageWriter
 	subscription struct {
 		done subscriber
 		Subscription
