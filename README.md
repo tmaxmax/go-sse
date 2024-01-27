@@ -5,7 +5,7 @@
 [![codecov](https://codecov.io/gh/tmaxmax/go-sse/branch/master/graph/badge.svg?token=EP52XJI4RO)](https://codecov.io/gh/tmaxmax/go-sse)
 [![Go Report Card](https://goreportcard.com/badge/github.com/tmaxmax/go-sse)](https://goreportcard.com/report/github.com/tmaxmax/go-sse)
 
-Note: This is a branch which modifies v0.7.0 to implement an SSE client with a constant back-off strategy. Unless you have special requirements use the tagged release. **This branch will not be supported in the future with updates – please make sure to migrate when the new version is released!**
+> IMPORTANT: This is a branch which modifies v0.7.0 to implement an SSE client with a constant back-off strategy. Unless you have special requirements use the tagged release. **This branch will not be supported in the future with updates – please make sure to migrate when the new version is released!**
 
 Lightweight, fully spec-compliant HTML5 server-sent events library.
 
