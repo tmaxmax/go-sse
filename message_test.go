@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse/internal/parser"
+	"github.com/tmaxmax/go-sse/internal/tests"
 )
 
 func TestNew(t *testing.T) {
@@ -37,7 +37,7 @@ func TestNew(t *testing.T) {
 		ID:    ID("lol"),
 	}
 
-	require.Equal(t, expected, e, "invalid event")
+	tests.DeepEqual(t, e, expected, "invalid event")
 }
 
 func TestEvent_WriteTo(t *testing.T) {
@@ -47,8 +47,8 @@ func TestEvent_WriteTo(t *testing.T) {
 		e := &Message{}
 		w := &strings.Builder{}
 		n, _ := e.WriteTo(w)
-		require.Zero(t, n, "bytes were written")
-		require.Empty(t, w.String())
+		tests.Equal(t, n, 0, "bytes were written")
+		tests.Equal(t, w.String(), "", "message should produce no output")
 	})
 
 	t.Run("Valid", func(t *testing.T) {
@@ -64,8 +64,8 @@ func TestEvent_WriteTo(t *testing.T) {
 
 		written, _ := e.WriteTo(w)
 
-		require.Equal(t, output, w.String(), "event written incorrectly")
-		require.Equal(t, expectedWritten, written, "written byte count wrong")
+		tests.Equal(t, w.String(), output, "event written incorrectly")
+		tests.Equal(t, written, expectedWritten, "written byte count wrong")
 	})
 
 	type retryTest struct {
@@ -82,7 +82,7 @@ func TestEvent_WriteTo(t *testing.T) {
 	for _, v := range retryTests {
 		t.Run(fmt.Sprintf("Retry/%s", v.value), func(t *testing.T) {
 			e := &Message{Retry: v.value}
-			require.Equal(t, v.expected, e.String(), "incorrect output")
+			tests.Equal(t, e.String(), v.expected, "incorrect output")
 		})
 	}
 }
@@ -100,7 +100,7 @@ func TestEvent_UnmarshalText(t *testing.T) {
 	nilEvent := Message{}
 	nilEvent.reset()
 
-	tests := []test{
+	tt := []test{
 		{
 			name:        "No input",
 			expected:    nilEvent,
@@ -139,14 +139,14 @@ func TestEvent_UnmarshalText(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for _, test := range tt {
 		t.Run(test.name, func(t *testing.T) {
 			e := Message{}
 
 			if err := e.UnmarshalText([]byte(test.input)); (test.expectedErr != nil && err.Error() != test.expectedErr.Error()) || (test.expectedErr == nil && err != nil) {
 				t.Fatalf("Invalid unmarshal error: got %q, want %q", err, test.expectedErr)
 			}
-			require.Equal(t, test.expected, e, "invalid unmarshal")
+			tests.DeepEqual(t, e, test.expected, "invalid unmarshal")
 		})
 	}
 }

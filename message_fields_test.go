@@ -3,7 +3,7 @@ package sse
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/tmaxmax/go-sse/internal/tests"
 )
 
 func mustMessageField(tb testing.TB, value string) messageField { //nolint:unparam // May receive other values.
@@ -21,13 +21,13 @@ func TestNewMessageField(t *testing.T) {
 	t.Parallel()
 
 	id, err := newMessageField("")
-	require.NoError(t, err, "field evaluated as invalid")
-	require.True(t, id.IsSet(), "field is not set")
-	require.Equal(t, "", id.String(), "field incorrectly set")
+	tests.Equal(t, err, nil, "field evaluated as invalid")
+	tests.Expect(t, id.IsSet(), "field is not set")
+	tests.Equal(t, id.String(), "", "field incorrectly set")
 
 	id, err = newMessageField("in\nvalid")
-	require.Error(t, err, "field evaluated as valid")
-	require.Empty(t, id, "field isn't unset")
+	tests.Expect(t, err != nil, "field evaluated as valid")
+	tests.Expect(t, !id.IsSet() && id.String() == "", "field isn't unset")
 }
 
 func TestMessageField_UnmarshalJSON(t *testing.T) {
@@ -40,14 +40,14 @@ func TestMessageField_UnmarshalJSON(t *testing.T) {
 		expectErr bool
 	}
 
-	tests := []test{
+	tt := []test{
 		{name: "Valid input", input: []byte("\"\""), output: mustMessageField(t, "")},
 		{name: "Null input", input: []byte("null")},
 		{name: "Invalid JSON value", input: []byte("525482"), expectErr: true},
 		{name: "Invalid input", input: []byte("\"multi\\nline\""), expectErr: true},
 	}
 
-	for _, test := range tests {
+	for _, test := range tt {
 		test := test
 
 		t.Run(test.name, func(t *testing.T) {
@@ -57,12 +57,12 @@ func TestMessageField_UnmarshalJSON(t *testing.T) {
 			err := id.UnmarshalJSON(test.input)
 
 			if test.expectErr {
-				require.Error(t, err, "expected error")
+				tests.Expect(t, err != nil, "expected error")
 			} else {
-				require.NoError(t, err, "unexpected error")
+				tests.Equal(t, err, nil, "unexpected error")
 			}
 
-			require.Equal(t, test.output, id, "unexpected unmarshal result")
+			tests.Equal(t, id, test.output, "unexpected unmarshal result")
 		})
 	}
 }
@@ -73,13 +73,13 @@ func TestMessageField_UnmarshalText(t *testing.T) {
 	var id messageField
 	err := id.UnmarshalText([]byte(""))
 
-	require.Equal(t, mustMessageField(t, ""), id, "unexpected unmarshal result")
-	require.NoError(t, err, "unexpected error")
+	tests.Equal(t, id, mustMessageField(t, ""), "unexpected unmarshal result")
+	tests.Equal(t, err, nil, "unexpected error")
 
 	err = id.UnmarshalText([]byte("in\nvalid"))
 
-	require.Error(t, err, "expected error")
-	require.Empty(t, id, "ID is not unset after invalid unmarshal")
+	tests.Expect(t, err != nil, "expected error")
+	tests.Expect(t, !id.IsSet() && id.String() == "", "ID is not unset after invalid unmarshal")
 }
 
 func TestMessageField_MarshalJSON(t *testing.T) {
@@ -88,14 +88,14 @@ func TestMessageField_MarshalJSON(t *testing.T) {
 	var id messageField
 	v, err := id.MarshalJSON()
 
-	require.NoError(t, err, "unexpected error")
-	require.Equal(t, "null", string(v), "invalid JSON result")
+	tests.Equal(t, err, nil, "unexpected error")
+	tests.Equal(t, string(v), "null", "invalid JSON result")
 
 	id = mustMessageField(t, "")
 	v, err = id.MarshalJSON()
 
-	require.NoError(t, err, "unexpected error")
-	require.Equal(t, "\"\"", string(v), "invalid JSON result")
+	tests.Equal(t, err, nil, "unexpected error")
+	tests.Equal(t, string(v), "\"\"", "invalid JSON result")
 }
 
 func TestMessageField_MarshalText(t *testing.T) {
@@ -104,14 +104,14 @@ func TestMessageField_MarshalText(t *testing.T) {
 	var id messageField
 	v, err := id.MarshalText()
 
-	require.Error(t, err, "expected error")
-	require.Nil(t, v, "invalid result")
+	tests.Expect(t, err != nil, "expected error")
+	tests.DeepEqual(t, v, nil, "invalid result")
 
 	id = mustMessageField(t, "")
 	v, err = id.MarshalText()
 
-	require.NoError(t, err, "unexpected error")
-	require.Equal(t, []byte{}, v, "unexpected result")
+	tests.Equal(t, err, nil, "unexpected error")
+	tests.DeepEqual(t, v, []byte{}, "unexpected result")
 }
 
 func TestMessageField_Scan(t *testing.T) {
@@ -120,20 +120,20 @@ func TestMessageField_Scan(t *testing.T) {
 	var id messageField
 
 	err := id.Scan(nil)
-	require.NoError(t, err, "unexpected error")
-	require.Empty(t, id, "unexpected result")
+	tests.Equal(t, err, nil, "unexpected error")
+	tests.Equal(t, id, messageField{}, "unexpected result")
 
 	err = id.Scan("")
-	require.NoError(t, err, "unexpected error")
-	require.Equal(t, mustMessageField(t, ""), id, "unexpected result")
+	tests.Equal(t, err, nil, "unexpected error")
+	tests.Equal(t, id, mustMessageField(t, ""), "unexpected result")
 
 	err = id.Scan([]byte(""))
-	require.NoError(t, err, "unexpected error")
-	require.Equal(t, mustMessageField(t, ""), id, "unexpected result")
+	tests.Equal(t, err, nil, "unexpected error")
+	tests.Equal(t, id, mustMessageField(t, ""), "unexpected result")
 
 	err = id.Scan(5)
-	require.Error(t, err, "expected error")
-	require.Empty(t, id, "invalid result")
+	tests.Expect(t, err != nil, "expected error")
+	tests.Equal(t, id, messageField{}, "invalid result")
 }
 
 func TestMessageField_Value(t *testing.T) {
@@ -141,23 +141,23 @@ func TestMessageField_Value(t *testing.T) {
 
 	var id messageField
 	v, err := id.Value()
-	require.NoError(t, err, "unexpected error")
-	require.Nil(t, v, "unexpected value")
+	tests.Equal(t, err, nil, "unexpected error")
+	tests.Equal(t, v, nil, "unexpected value")
 
 	id = mustMessageField(t, "")
 	v, err = id.Value()
-	require.NoError(t, err, "unexpected error")
-	require.Equal(t, "", v, "unexpected value")
+	tests.Equal(t, err, nil, "unexpected error")
+	tests.Equal(t, v, "", "unexpected value")
 }
 
 func TestFieldConstructors(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewID("a\nb")
-	require.EqualError(t, err, "invalid event ID: input is multiline")
+	tests.Equal(t, err.Error(), "invalid event ID: input is multiline", "unexpected error message")
 	_, err = NewType("a\nb")
-	require.EqualError(t, err, "invalid event type: input is multiline")
+	tests.Equal(t, err.Error(), "invalid event type: input is multiline", "unexpected error message")
 
-	require.Panics(t, func() { ID("a\nb") })
-	require.Panics(t, func() { Type("a\nb") })
+	tests.Panics(t, func() { ID("a\nb") }, "id creation should panic")
+	tests.Panics(t, func() { Type("a\nb") }, "id creation should panic")
 }

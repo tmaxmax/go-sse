@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse"
+	"github.com/tmaxmax/go-sse/internal/tests"
 )
 
 func TestUpgrade(t *testing.T) {
@@ -19,10 +19,10 @@ func TestUpgrade(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	sess, err := sse.Upgrade(rec, req)
-	require.NoError(t, err, "unexpected  error")
-	require.False(t, rec.Flushed, "response writer was flushed")
-	require.NoError(t, sess.Send(&sse.Message{ID: sess.LastEventID}), "unexpected Send error")
-	require.NoError(t, sess.Flush(), "unexpected Flush error")
+	tests.Equal(t, err, nil, "unexpected  error")
+	tests.Expect(t, !rec.Flushed, "response writer was flushed")
+	tests.Equal(t, sess.Send(&sse.Message{ID: sess.LastEventID}), nil, "unexpected Send error")
+	tests.Equal(t, sess.Flush(), nil, "unexpected Flush error")
 
 	r := rec.Result()
 	t.Cleanup(func() { _ = r.Body.Close() })
@@ -33,13 +33,13 @@ func TestUpgrade(t *testing.T) {
 	expectedBody := "id: hello\n\n"
 
 	body, err := io.ReadAll(r.Body)
-	require.NoError(t, err)
+	tests.Equal(t, err, nil, "failed to read response body")
 
-	require.Equal(t, expectedHeaders, r.Header, "invalid response headers")
-	require.Equal(t, expectedBody, string(body), "invalid response body (and Last-Event-Id)")
+	tests.DeepEqual(t, r.Header, expectedHeaders, "invalid response headers")
+	tests.Equal(t, expectedBody, string(body), "invalid response body (and Last-Event-Id)")
 
 	_, err = sse.Upgrade(nil, nil)
-	require.ErrorIs(t, err, sse.ErrUpgradeUnsupported, "invalid Upgrade error")
+	tests.ErrorIs(t, err, sse.ErrUpgradeUnsupported, "invalid Upgrade error")
 }
 
 var errWriteFailed = errors.New("err")
@@ -59,7 +59,7 @@ func TestUpgradedRequest_Send(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	conn, err := sse.Upgrade(rec, httptest.NewRequest(http.MethodGet, "/", http.NoBody))
-	require.NoError(t, err, "unexpected NewConnection error")
+	tests.Equal(t, err, nil, "unexpected NewConnection error")
 
 	rec.Flushed = false
 
@@ -67,9 +67,9 @@ func TestUpgradedRequest_Send(t *testing.T) {
 	ev.AppendData("sarmale")
 	expected, _ := ev.MarshalText()
 
-	require.NoError(t, conn.Send(&ev), "unexpected Send error")
-	require.True(t, rec.Flushed, "writer wasn't flushed")
-	require.Equal(t, expected, rec.Body.Bytes(), "body not written correctly")
+	tests.Equal(t, conn.Send(&ev), nil, "unexpected Send error")
+	tests.Expect(t, rec.Flushed, "writer wasn't flushed")
+	tests.DeepEqual(t, rec.Body.Bytes(), expected, "body not written correctly")
 }
 
 func TestUpgradedRequest_Send_error(t *testing.T) {
@@ -78,10 +78,10 @@ func TestUpgradedRequest_Send_error(t *testing.T) {
 	rec := &errorWriter{}
 
 	conn, err := sse.Upgrade(rec, httptest.NewRequest(http.MethodGet, "/", http.NoBody))
-	require.NoError(t, err, "unexpected NewConnection error")
+	tests.Equal(t, err, nil, "unexpected NewConnection error")
 
 	rec.Flushed = false
 
-	require.ErrorIs(t, conn.Send(&sse.Message{ID: sse.ID("")}), errWriteFailed, "invalid Send error")
-	require.True(t, rec.Flushed, "writer wasn't flushed")
+	tests.ErrorIs(t, conn.Send(&sse.Message{ID: sse.ID("")}), errWriteFailed, "invalid Send error")
+	tests.Expect(t, rec.Flushed, "writer wasn't flushed")
 }

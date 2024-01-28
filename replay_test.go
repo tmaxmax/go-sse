@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse"
 	"github.com/tmaxmax/go-sse/internal/tests"
 )
@@ -63,7 +62,7 @@ func testReplayError(tb testing.TB, p sse.ReplayProvider, tm *tests.Time) {
 		Topics:      []string{sse.DefaultTopic},
 	})
 
-	require.NoError(tb, err, "received invalid error")
+	tests.Equal(tb, err, nil, "received invalid error")
 }
 
 func TestValidReplayProvider(t *testing.T) {
@@ -76,8 +75,8 @@ func TestValidReplayProvider(t *testing.T) {
 		Now:     tm.Now,
 	}
 
-	require.NoError(t, p.GC(), "unexpected GC error") // no elements, noop
-	require.NoError(t, p.Replay(sse.Subscription{}), "replay failed on provider without messages")
+	tests.Equal(t, p.GC(), nil, "unexpected GC error") // no elements, noop
+	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
 
 	now := time.Now()
 	initialNow := now
@@ -96,12 +95,12 @@ func TestValidReplayProvider(t *testing.T) {
 
 	tm.Set(initialNow.Add(p.TTL))
 
-	require.NoError(t, p.GC(), "unexpected GC error")
+	tests.Equal(t, p.GC(), nil, "unexpected GC error")
 
 	tm.Set(now.Add(p.TTL))
 
 	replayed := replay(t, p, sse.ID("3"), sse.DefaultTopic, "topic with no messages")[0]
-	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
+	tests.Equal(t, replayed.String(), "id: 4\ndata: world\n\n", "invalid message received")
 
 	testReplayError(t, &sse.ValidReplayProvider{Now: tm.Now}, tm)
 }
@@ -111,22 +110,28 @@ func TestFiniteReplayProvider(t *testing.T) {
 
 	p := &sse.FiniteReplayProvider{Count: 3}
 
-	require.NoError(t, p.Replay(sse.Subscription{}), "replay failed on provider without messages")
+	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
 
-	require.PanicsWithError(t, `go-sse: a Message without an ID was given to a provider that doesn't set IDs automatically.
+	r := tests.Panics(t, func() {
+		p.Put(&sse.Message{Type: sse.Type("panic")}, []string{sse.DefaultTopic})
+	}, "messages without IDs cannot be put in a replay provider")
+	rerr, isErr := r.(error)
+	tests.Expect(t, isErr, "should panic with error")
+	tests.Equal(t, rerr.Error(), `go-sse: a Message without an ID was given to a provider that doesn't set IDs automatically.
 The message is the following:
 │ event: panic
-└─■`, func() {
-		p.Put(&sse.Message{Type: sse.Type("panic")}, []string{sse.DefaultTopic})
-	})
+└─■`, "invalid panic error message")
 
-	require.PanicsWithError(t, `go-sse: no topics provided for Message.
+	r = tests.Panics(t, func() {
+		p.Put(&sse.Message{ID: sse.ID("5"), Type: sse.Type("panic")}, nil)
+	}, "messages cannot be put without a topic")
+	rerr, isErr = r.(error)
+	tests.Expect(t, isErr, "should panic with error")
+	tests.Equal(t, rerr.Error(), `go-sse: no topics provided for Message.
 The message is the following:
 │ id: 5
 │ event: panic
-└─■`, func() {
-		p.Put(&sse.Message{ID: sse.ID("5"), Type: sse.Type("panic")}, nil)
-	})
+└─■`, "invalid panic error message")
 
 	p.Put(msg(t, "", "1"), []string{sse.DefaultTopic})
 	p.Put(msg(t, "hello", "2"), []string{sse.DefaultTopic})
@@ -134,14 +139,14 @@ The message is the following:
 	p.Put(msg(t, "world", "4"), []string{sse.DefaultTopic})
 
 	replayed := replay(t, p, sse.ID("2"))[0]
-	require.Equal(t, "id: 4\ndata: world\n\n", replayed.String())
+	tests.Equal(t, replayed.String(), "id: 4\ndata: world\n\n", "invalid replayed message")
 
 	p.Put(msg(t, "", "5"), []string{"t"})
 	p.Put(msg(t, "", "6"), []string{"t"})
 	p.Put(msg(t, "again", "7"), []string{sse.DefaultTopic})
 
 	replayed = replay(t, p, sse.ID("4"), sse.DefaultTopic, "topic with no messages")[0]
-	require.Equal(t, "id: 7\ndata: again\n\n", replayed.String())
+	tests.Equal(t, replayed.String(), "id: 7\ndata: again\n\n", "invalid replayed message")
 
 	testReplayError(t, &sse.FiniteReplayProvider{Count: 10}, nil)
 }

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse"
 	"github.com/tmaxmax/go-sse/internal/parser"
+	"github.com/tmaxmax/go-sse/internal/tests"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -27,7 +27,7 @@ func reqCtx(tb testing.TB, ctx context.Context, method, address string, body io.
 	tb.Helper()
 
 	r, err := http.NewRequestWithContext(ctx, method, address, body)
-	require.NoError(tb, err, "failed to create request")
+	tests.Equal(tb, err, nil, "failed to create request")
 
 	return r
 }
@@ -62,21 +62,21 @@ func toEv(tb testing.TB, s string) (ev sse.Event) {
 		}
 	}
 
-	require.NoError(tb, p.Err(), "unexpected toEv fail")
+	tests.Equal(tb, p.Err(), nil, "unexpected toEv fail")
 
 	return
 }
 
 func TestClient_NewConnection(t *testing.T) {
-	require.Panics(t, func() {
+	tests.Panics(t, func() {
 		sse.NewConnection(nil)
-	})
+	}, "a connection cannot be created without a request")
 
 	c := sse.Client{}
 	r := req(t, "", "", nil)
 	_ = c.NewConnection(r)
 
-	require.Equal(t, c.HTTPClient, http.DefaultClient)
+	tests.Equal(t, c.HTTPClient, http.DefaultClient, "incorrect default HTTP client")
 }
 
 func TestConnection_Connect_retry(t *testing.T) {
@@ -103,9 +103,11 @@ func TestConnection_Connect_retry(t *testing.T) {
 	r := req(t, "", "", http.NoBody)
 	err := c.NewConnection(r).Connect()
 
-	require.ErrorIs(t, err, testErr, "invalid error received from Connect")
-	require.Equal(t, c.MaxRetries, retryAttempts, "connection was not retried enough times")
-	require.InEpsilon(t, c.DefaultReconnectionTime, firstReconnectionTime, backoff.DefaultRandomizationFactor, "reconnection time incorrectly set")
+	tests.ErrorIs(t, err, testErr, "invalid error received from Connect")
+	tests.Equal(t, retryAttempts, c.MaxRetries, "connection was not retried enough times")
+
+	timeDelta := time.Duration(float64(c.DefaultReconnectionTime) * backoff.DefaultRandomizationFactor)
+	tests.Expect(t, c.DefaultReconnectionTime-timeDelta <= firstReconnectionTime && firstReconnectionTime <= c.DefaultReconnectionTime+timeDelta, "reconnection time incorrectly set")
 }
 
 func TestConnection_Connect_noRetryCtxErr(t *testing.T) {
@@ -138,7 +140,7 @@ func TestConnection_Connect_noRetryCtxErr(t *testing.T) {
 		cancel()
 	}()
 	err := c.NewConnection(r).Connect()
-	require.ErrorIs(t, err, ctx.Err())
+	tests.ErrorIs(t, err, ctx.Err(), "invalid connect error")
 }
 
 type readerWrapper struct {
@@ -155,7 +157,7 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 
 	getBodyErr := errors.New("haha")
 
-	tests := []test{
+	tt := []test{
 		{
 			name: "No body",
 		},
@@ -192,7 +194,7 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 		DefaultReconnectionTime: time.Nanosecond,
 	}
 
-	for _, test := range tests {
+	for _, test := range tt {
 		t.Run(test.name, func(t *testing.T) {
 			firstTry := true
 			c.HTTPClient.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -213,9 +215,9 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 
 			err := c.NewConnection(r).Connect()
 			if test.err != nil {
-				require.ErrorIs(t, err, test.err, "incorrect error received from Connect")
+				tests.ErrorIs(t, err, test.err, "incorrect error received from Connect")
 			} else {
-				require.Equal(t, ctx.Err(), err)
+				tests.Equal(t, err, ctx.Err(), "connection error should be context error")
 			}
 		})
 	}
@@ -230,7 +232,7 @@ func TestConnection_Connect_validator(t *testing.T) {
 		name      string
 	}
 
-	tests := []test{
+	tt := []test{
 		{
 			name:      "No validation error",
 			validator: sse.NoopValidator,
@@ -253,12 +255,12 @@ func TestConnection_Connect_validator(t *testing.T) {
 		MaxRetries: 0,
 	}
 
-	for _, test := range tests {
+	for _, test := range tt {
 		t.Run(test.name, func(t *testing.T) {
 			c.ResponseValidator = test.validator
 
 			err := c.NewConnection(req(t, "", ts.URL, nil)).Connect()
-			require.ErrorIs(t, err, test.err, "incorrect error received from Connect")
+			tests.ErrorIs(t, err, test.err, "incorrect error received from Connect")
 		})
 	}
 }
@@ -270,7 +272,7 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 		expectErr bool
 	}
 
-	tests := []test{
+	tt := []test{
 		{
 			name: "Valid request",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -303,7 +305,7 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for _, test := range tt {
 		t.Run(test.name, func(t *testing.T) {
 			ts := httptest.NewServer(test.handler)
 			defer ts.Close()
@@ -312,9 +314,9 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 			err := c.NewConnection(req(t, "", ts.URL, nil)).Connect()
 
 			if test.expectErr {
-				require.Error(t, err, "expected Connect error")
+				tests.Expect(t, err != nil, "expected Connect error")
 			} else {
-				require.ErrorIs(t, err, io.EOF)
+				tests.ErrorIs(t, err, io.EOF, "should propagate EOF error")
 			}
 		})
 	}
@@ -422,15 +424,15 @@ func TestConnection_Subscriptions(t *testing.T) {
 	defer unsubMessages()
 	expectedMessages := []sse.Event{firstEvent, fourthEvent}
 
-	require.ErrorIs(t, conn.Connect(), sse.ErrUnexpectedEOF, "incorrect Connect error")
+	tests.ErrorIs(t, conn.Connect(), sse.ErrUnexpectedEOF, "incorrect Connect error")
 	unsubAll()
-	require.Equal(t, expectedAll, <-all, "unexpected events for all")
+	tests.DeepEqual(t, <-all, expectedAll, "unexpected events for all")
 	unsubTest()
-	require.Equal(t, expectedTest, <-test, "unexpected events for test")
+	tests.DeepEqual(t, <-test, expectedTest, "unexpected events for test")
 	unsubTest2()
-	require.Equal(t, expectedTest2, <-test2, "unexpected events for test2")
+	tests.DeepEqual(t, <-test2, expectedTest2, "unexpected events for test2")
 	unsubMessages()
-	require.Equal(t, expectedMessages, <-messages, "unexpected events for messages")
+	tests.DeepEqual(t, <-messages, expectedMessages, "unexpected events for messages")
 }
 
 func TestConnection_dispatchDirty(t *testing.T) {
@@ -452,8 +454,8 @@ func TestConnection_dispatchDirty(t *testing.T) {
 		got = e
 	})
 
-	require.ErrorIs(t, conn.Connect(), io.EOF, "unexpected Connect error")
-	require.Equal(t, expected, got, "unexpected event received")
+	tests.ErrorIs(t, conn.Connect(), io.EOF, "unexpected Connect error")
+	tests.Equal(t, got, expected, "unexpected event received")
 }
 
 func TestConnection_Unsubscriptions(t *testing.T) {
@@ -519,11 +521,11 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 		}
 	}()
 
-	require.ErrorIs(t, conn.Connect(), io.EOF, "unexpected Connect error")
-	require.Equal(t, expectedAll, <-all, "unexpected events for all")
-	require.Equal(t, expectedSome, <-some, "unexpected events for some")
-	require.Equal(t, expectedOne, <-one, "unexpected events for one")
-	require.Equal(t, expectedMessages, <-messages, "unexpected events for messages")
+	tests.ErrorIs(t, conn.Connect(), io.EOF, "unexpected Connect error")
+	tests.DeepEqual(t, <-all, expectedAll, "unexpected events for all")
+	tests.DeepEqual(t, <-some, expectedSome, "unexpected events for some")
+	tests.DeepEqual(t, <-one, expectedOne, "unexpected events for one")
+	tests.DeepEqual(t, <-messages, expectedMessages, "unexpected events for messages")
 }
 
 func TestConnection_serverError(t *testing.T) {
@@ -577,9 +579,9 @@ func TestConnection_serverError(t *testing.T) {
 		}
 	}()
 
-	require.Error(t, conn.Connect(), "expected Connect error")
+	tests.Expect(t, conn.Connect() != nil, "expected Connect error")
 	unsubAll()
-	require.Equal(t, expected, <-all, "unexpected values for all")
+	tests.DeepEqual(t, <-all, expected, "unexpected values for all")
 }
 
 func TestConnection_reconnect(t *testing.T) {
@@ -612,6 +614,6 @@ func TestConnection_reconnect(t *testing.T) {
 	r := reqCtx(t, ctx, "", ts.URL, http.NoBody)
 	err := c.NewConnection(r).Connect()
 
-	require.Equal(t, ctx.Err(), err)
-	require.Equal(t, []string{"", "1", "2"}, lastEventIDs)
+	tests.Equal(t, err, ctx.Err(), "expected context error")
+	tests.DeepEqual(t, lastEventIDs, []string{"", "1", "2"}, "incorrect last event IDs")
 }

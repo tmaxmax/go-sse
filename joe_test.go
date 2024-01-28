@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse"
+	"github.com/tmaxmax/go-sse/internal/tests"
 )
 
 type mockReplayProvider struct {
@@ -74,23 +74,23 @@ func TestJoe_Shutdown(t *testing.T) {
 		ReplayProvider: rp,
 	}
 
-	require.NoError(t, j.Shutdown(context.Background()))
-	require.ErrorIs(t, j.Shutdown(context.Background()), sse.ErrProviderClosed)
-	require.ErrorIs(t, j.Subscribe(context.Background(), sse.Subscription{}), sse.ErrProviderClosed)
-	require.ErrorIs(t, j.Publish(nil, nil), sse.ErrNoTopic)
-	require.ErrorIs(t, j.Publish(nil, []string{sse.DefaultTopic}), sse.ErrProviderClosed)
-	require.Zero(t, rp.callsPut)
-	require.Zero(t, rp.callsReplay)
-	require.Zero(t, rp.callsGC)
+	tests.Equal(t, j.Shutdown(context.Background()), nil, "joe should close successfully")
+	tests.Equal(t, j.Shutdown(context.Background()), sse.ErrProviderClosed, "joe should already be closed")
+	tests.Equal(t, j.Subscribe(context.Background(), sse.Subscription{}), sse.ErrProviderClosed, "no operation should be allowed on closed joe")
+	tests.Equal(t, j.Publish(nil, nil), sse.ErrNoTopic, "parameter validation should happen first")
+	tests.Equal(t, j.Publish(nil, []string{sse.DefaultTopic}), sse.ErrProviderClosed, "no operation should be allowed on closed joe")
+	tests.Equal(t, rp.callsPut, 0, "joe should not have used the replay provider")
+	tests.Equal(t, rp.callsReplay, 0, "joe should not have used the replay provider")
+	tests.Equal(t, rp.callsGC, 0, "joe should not have used the replay provider")
 
 	j = &sse.Joe{}
 	// trigger internal initialization, so the concurrent Shutdowns aren't serialized by the internal sync.Once.
 	_ = j.Publish(&sse.Message{}, []string{sse.DefaultTopic})
 	//nolint
-	require.NotPanics(t, func() {
+	tests.NotPanics(t, func() {
 		go j.Shutdown(context.Background())
 		j.Shutdown(context.Background())
-	})
+	}, "concurrent shutdown should work")
 
 	log.Println()
 
@@ -112,7 +112,7 @@ func TestJoe_Shutdown(t *testing.T) {
 
 	sctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*5)
 	t.Cleanup(cancel)
-	require.ErrorIs(t, j.Shutdown(sctx), context.DeadlineExceeded)
+	tests.ErrorIs(t, j.Shutdown(sctx), context.DeadlineExceeded, "shutdown should stop on closed context")
 
 	<-subctx.Done()
 }
@@ -179,11 +179,11 @@ func TestJoe_SubscribePublish(t *testing.T) {
 
 	sub := subscribe(t, j, ctx)
 	<-ctx.waitingOnDone
-	require.NoError(t, j.Publish(msg(t, "hello", ""), []string{sse.DefaultTopic}))
+	tests.Equal(t, j.Publish(msg(t, "hello", ""), []string{sse.DefaultTopic}), nil, "publish should succeed")
 	cancel()
-	require.NoError(t, j.Publish(msg(t, "world", ""), []string{sse.DefaultTopic}))
+	tests.Equal(t, j.Publish(msg(t, "world", ""), []string{sse.DefaultTopic}), nil, "publish should succeed")
 	msgs := <-sub
-	require.Equal(t, "data: hello\n\n", msgs[0].String())
+	tests.Equal(t, "data: hello\n\n", msgs[0].String(), "invalid data received")
 
 	ctx2, cancel2 := newMockContext(t)
 	defer cancel2()
@@ -191,11 +191,11 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	sub2 := subscribe(t, j, ctx2)
 	<-ctx2.waitingOnDone
 
-	require.NoError(t, j.Shutdown(context.Background()))
+	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
 	msgs = <-sub2
-	require.Zero(t, msgs, "unexpected messages received")
-	require.Equal(t, 2, rp.callsPut, "invalid put calls")
-	require.Equal(t, 2, rp.callsReplay, "invalid replay calls")
+	tests.Equal(t, len(msgs), 0, "unexpected messages received")
+	tests.Equal(t, rp.callsPut, 2, "invalid put calls")
+	tests.Equal(t, rp.callsReplay, 2, "invalid replay calls")
 }
 
 func TestJoe_Subscribe_multipleTopics(t *testing.T) {
@@ -222,7 +222,7 @@ func TestJoe_Subscribe_multipleTopics(t *testing.T) {
 data: world
 
 `
-	require.Equal(t, expected, msgs[0].String()+msgs[1].String(), "unexpected data received")
+	tests.Equal(t, expected, msgs[0].String()+msgs[1].String(), "unexpected data received")
 }
 
 func TestJoe_errors(t *testing.T) {
@@ -251,11 +251,11 @@ func TestJoe_errors(t *testing.T) {
 		LastEventID: sse.ID("0"),
 		Topics:      []string{sse.DefaultTopic},
 	})
-	require.Equal(t, callErr, err, "error not received from replay")
+	tests.Equal(t, err, callErr, "error not received from replay")
 
 	_ = j.Publish(msg(t, "world", "2"), []string{sse.DefaultTopic})
 
-	require.Equal(t, 1, called, "callback was called after subscribe returned")
+	tests.Expect(t, called == 1, "callback was called after subscribe returned")
 
 	called = 0
 	ctx, cancel := newMockContext(t)
@@ -272,8 +272,8 @@ func TestJoe_errors(t *testing.T) {
 	}()
 
 	err = j.Subscribe(ctx, sse.Subscription{Client: client, Topics: []string{sse.DefaultTopic}})
-	require.Equal(t, callErr, err, "error not received from send")
-	require.Equal(t, 1, called, "callback was called after subscribe returned")
+	tests.Equal(t, err, callErr, "error not received from send")
+	tests.Equal(t, called, 1, "callback was called after subscribe returned")
 
 	<-done
 }
@@ -293,8 +293,8 @@ func TestJoe_GCInterval(t *testing.T) {
 	expected := 2
 
 	time.Sleep(interval*time.Duration(expected) + interval/2)
-	require.NoError(t, j.Shutdown(context.Background()))
-	require.Equal(t, expected, rp.callsGC)
+	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
+	tests.Equal(t, rp.callsGC, expected, "GC was not called properly")
 }
 
 func TestJoe_ReplayPanic(t *testing.T) {
@@ -305,12 +305,12 @@ func TestJoe_ReplayPanic(t *testing.T) {
 
 	err := j.Subscribe(context.Background(), sse.Subscription{})
 	time.Sleep(time.Millisecond)
-	require.Equal(t, 1, rp.callsReplay, "replay wasn't called")
-	require.ErrorIs(t, err, sse.ErrReplayFailed, "wrong error returned")
+	tests.Equal(t, rp.callsReplay, 1, "replay wasn't called")
+	tests.ErrorIs(t, err, sse.ErrReplayFailed, "wrong error returned")
 
 	go func() { _ = j.Subscribe(context.Background(), sse.Subscription{}) }()
 	time.Sleep(time.Millisecond)
-	require.Equal(t, 1, rp.callsReplay, "replay was called")
+	tests.Equal(t, rp.callsReplay, 1, "replay was called")
 
-	require.NoError(t, j.Shutdown(context.Background()))
+	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
 }

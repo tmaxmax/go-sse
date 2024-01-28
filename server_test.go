@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/tmaxmax/go-sse"
+	"github.com/tmaxmax/go-sse/internal/tests"
 	"golang.org/x/exp/slog"
 )
 
@@ -97,16 +97,16 @@ func TestServer_ShutdownPublish(t *testing.T) {
 	s := &sse.Server{Provider: p}
 
 	_ = s.Publish(&sse.Message{})
-	require.True(t, p.Published, "Publish wasn't called")
-	require.Equal(t, []any{*p.Pub, p.PubTopics}, []any{sse.Message{}, []string{sse.DefaultTopic}}, "incorrect message")
+	tests.Expect(t, p.Published, "Publish wasn't called")
+	tests.DeepEqual(t, []any{*p.Pub, p.PubTopics}, []any{sse.Message{}, []string{sse.DefaultTopic}}, "incorrect message")
 
 	p.Published = false
 	_ = s.Publish(&sse.Message{}, "topic")
-	require.True(t, p.Published, "Publish wasn't called")
-	require.Equal(t, []any{*p.Pub, p.PubTopics}, []any{sse.Message{}, []string{"topic"}}, "incorrect message")
+	tests.Expect(t, p.Published, "Publish wasn't called")
+	tests.DeepEqual(t, []any{*p.Pub, p.PubTopics}, []any{sse.Message{}, []string{"topic"}}, "incorrect message")
 
 	_ = s.Shutdown(context.Background())
-	require.True(t, p.Stopped, "Stop wasn't called")
+	tests.Expect(t, p.Stopped, "Stop wasn't called")
 }
 
 func request(tb testing.TB, method, address string, body io.Reader) (*http.Request, context.CancelFunc) { //nolint
@@ -130,11 +130,11 @@ func TestServer_ServeHTTP(t *testing.T) {
 	sb := &strings.Builder{}
 	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(rec, req)
 
-	require.True(t, p.Subscribed, "Subscribe wasn't called")
-	require.Equal(t, sse.ID("5"), p.Sub.LastEventID, "Invalid last event ID received")
-	require.Equal(t, "data: hello\n\n", rec.Body.String(), "Invalid response body")
-	require.Equal(t, http.StatusOK, rec.Code, "invalid response code")
-	require.Equal(t, "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=<sse:default> lastEventID=5\nlevel=INFO msg=\"sse: session ended\"\n", sb.String(), "invalid log output")
+	tests.Expect(t, p.Subscribed, "Subscribe wasn't called")
+	tests.Equal(t, p.Sub.LastEventID, sse.ID("5"), "Invalid last event ID received")
+	tests.Equal(t, rec.Body.String(), "data: hello\n\n", "Invalid response body")
+	tests.Equal(t, rec.Code, http.StatusOK, "invalid response code")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=<sse:default> lastEventID=5\nlevel=INFO msg=\"sse: session ended\"\n", "invalid log output")
 }
 
 type noFlusher struct {
@@ -152,9 +152,9 @@ func TestServer_ServeHTTP_unsupportedRespWriter(t *testing.T) {
 
 	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(noFlusher{rec}, req)
 
-	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
-	require.Equal(t, "Server-sent events unsupported\n", rec.Body.String(), "invalid response body")
-	require.Equal(t, "level=INFO msg=\"sse: starting new session\"\nlevel=ERROR msg=\"sse: unsupported\"\n", sb.String(), "invalid log output")
+	tests.Equal(t, rec.Code, http.StatusInternalServerError, "invalid response code")
+	tests.Equal(t, rec.Body.String(), "Server-sent events unsupported\n", "invalid response body")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=ERROR msg=\"sse: unsupported\"\n", "invalid log output")
 }
 
 func TestServer_ServeHTTP_subscribeError(t *testing.T) {
@@ -167,9 +167,9 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 
 	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(rec, req)
 
-	require.Equal(t, p.SubError.Error()+"\n", rec.Body.String(), "invalid response body")
-	require.Equal(t, http.StatusInternalServerError, rec.Code, "invalid response code")
-	require.Equal(t, "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=<sse:default> lastEventID=\"\"\nlevel=ERROR msg=\"sse: subscribe error\" err=\"can't subscribe\"\n", sb.String(), "invalid log output")
+	tests.Equal(t, rec.Body.String(), p.SubError.Error()+"\n", "invalid response body")
+	tests.Equal(t, rec.Code, http.StatusInternalServerError, "invalid response code")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=<sse:default> lastEventID=\"\"\nlevel=ERROR msg=\"sse: subscribe error\" err=\"can't subscribe\"\n", "invalid log output")
 }
 
 func TestServer_OnSession(t *testing.T) {
@@ -190,9 +190,9 @@ func TestServer_OnSession(t *testing.T) {
 			},
 		}).ServeHTTP(rec, req)
 
-		require.Equal(t, "this is invalid\n", rec.Body.String(), "invalid response body")
-		require.Equal(t, http.StatusBadRequest, rec.Code, "invalid response code")
-		require.Equal(t, "level=INFO msg=\"sse: starting new session\"\nlevel=WARN msg=\"sse: invalid subscription\"\n", sb.String(), "invalid log output")
+		tests.Equal(t, rec.Body.String(), "this is invalid\n", "invalid response body")
+		tests.Equal(t, rec.Code, http.StatusBadRequest, "invalid response code")
+		tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=WARN msg=\"sse: invalid subscription\"\n", "invalid log output")
 	})
 }
 
@@ -219,7 +219,7 @@ func TestServer_ServeHTTP_connectionError(t *testing.T) {
 
 	(&sse.Server{Provider: p}).ServeHTTP(&responseWriterErr{rec}, req)
 	_, ok := <-p.Closed
-	require.False(t, ok)
+	tests.Expect(t, !ok, "request error should not block server")
 }
 
 func getMessage(tb testing.TB) *sse.Message {
