@@ -21,8 +21,6 @@ import (
 	"errors"
 	"net/http"
 	"sync"
-
-	"golang.org/x/exp/slog"
 )
 
 // The Subscription struct is used to subscribe to a given provider.
@@ -90,6 +88,35 @@ var ErrReplayFailed = errors.New("go-sse.server: replay failed unexpectedly")
 // are changed.
 const DefaultTopic = ""
 
+// LogLevel are the supported log levels of the Server's Logger.
+type LogLevel int
+
+// All the available log levels.
+const (
+	LogLevelInfo LogLevel = iota
+	LogLevelWarn
+	LogLevelError
+)
+
+// The Logger interface which the Server expects.
+// Adapt your loggers to this interface in order to use it with the Server.
+type Logger interface {
+	// Log is called by the Server to log an event. The http.Request context
+	// is passed. The message string is useful for display and the data contains
+	// additional information about the event.
+	//
+	// When the log level is Error, the data map will contain an "err" key
+	// with a value of type error. This is the error that triggered the log
+	// event.
+	//
+	// If the data map contains the "lastEventID" key, then it means that
+	// a client is being subscribed. The value corresponding to "lastEventID"
+	// is of type string; there will also be a "topics" key, with a value of
+	// type []string, which contains all the topics the client is being
+	// subscribed to.
+	Log(ctx context.Context, level LogLevel, msg string, data map[string]any)
+}
+
 // A Server is mostly a convenience wrapper around a provider.
 // It implements the http.Handler interface and has some methods
 // for calling the underlying provider's methods.
@@ -114,13 +141,9 @@ type Server struct {
 	// If this is not set, the client will be subscribed to the provider
 	// using the DefaultTopic.
 	OnSession func(*Session) (Subscription, bool)
-	// Logger can be used to get a custom logger from the request context,
-	// which could have been set beforehand through a middleware, for example.
-	// By default, nothing is logged by the server. If this function is present
-	// and returns a non-nil logger, then info will be logged. Add to the logger
-	// the data you want to be logged together with what the library adds,
-	// for example identification info like request IP, origin etc.
-	Logger func(*http.Request) *slog.Logger
+	// If Logger is not nil, the Server will log various information about
+	// the request lifecycle. See the documentation of Logger for more info.
+	Logger Logger
 
 	provider Provider
 	initDone sync.Once
@@ -142,15 +165,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.init()
 	// Make sure to keep the ServeHTTP implementation line number in sync with the number in the README!
 
-	l := s.logger(r)
+	l := s.Logger
+
 	if l != nil {
-		l.InfoContext(r.Context(), "sse: starting new session")
+		l.Log(r.Context(), LogLevelInfo, "sse: starting new session", nil)
 	}
 
 	sess, err := Upgrade(w, r)
 	if err != nil {
 		if l != nil {
-			l.ErrorContext(r.Context(), "sse: unsupported")
+			l.Log(r.Context(), LogLevelError, "sse: unsupported", map[string]any{"err": err})
 		}
 
 		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
@@ -160,19 +184,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sub, ok := s.getSubscription(sess)
 	if !ok {
 		if l != nil {
-			l.WarnContext(r.Context(), "sse: invalid subscription")
+			l.Log(r.Context(), LogLevelWarn, "sse: invalid subscription", nil)
 		}
-
 		return
 	}
 
 	if l != nil {
-		l.InfoContext(r.Context(), "sse: subscribing session", "topics", getTopicsLog(sub.Topics), "lastEventID", sub.LastEventID)
+		l.Log(r.Context(), LogLevelInfo, "sse: subscribing session", map[string]any{"topics": getTopicsLog(sub.Topics), "lastEventID": sub.LastEventID})
 	}
 
 	if err = s.provider.Subscribe(r.Context(), sub); err != nil {
 		if l != nil {
-			l.ErrorContext(r.Context(), "sse: subscribe error", "err", err)
+			l.Log(r.Context(), LogLevelError, "sse: subscribe error", map[string]any{"err": err})
 		}
 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -180,7 +203,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if l != nil {
-		l.InfoContext(r.Context(), "sse: session ended")
+		l.Log(r.Context(), LogLevelInfo, "sse: session ended", nil)
 	}
 }
 
@@ -223,14 +246,6 @@ func (s *Server) getSubscription(sess *Session) (Subscription, bool) {
 		LastEventID: sess.LastEventID,
 		Topics:      defaultTopicSlice,
 	}, true
-}
-
-func (s *Server) logger(r *http.Request) *slog.Logger {
-	if s.Logger != nil {
-		return s.Logger(r)
-	}
-
-	return nil
 }
 
 var defaultTopicSlice = []string{DefaultTopic}

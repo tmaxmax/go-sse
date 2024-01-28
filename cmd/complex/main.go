@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/tmaxmax/go-sse"
-	"golang.org/x/exp/slog"
 )
 
 const (
@@ -30,9 +29,7 @@ var sseHandler = &sse.Server{
 		},
 		ReplayGCInterval: time.Minute,
 	},
-	Logger: func(r *http.Request) *slog.Logger {
-		return slog.With("ua", r.UserAgent(), "ip", r.RemoteAddr, "host", r.Host, "origin", r.Header.Get("Origin"))
-	},
+	Logger: logger{log.New(os.Stderr, "", 0)},
 	OnSession: func(s *sse.Session) (sse.Subscription, bool) {
 		topics := s.Req.URL.Query()["topic"]
 		for _, topic := range topics {
@@ -76,7 +73,7 @@ func main() {
 
 	s := &http.Server{
 		Addr:              "0.0.0.0:8080",
-		Handler:           cors(mux),
+		Handler:           cors(withLogger(mux)),
 		ReadHeaderTimeout: time.Second * 10,
 	}
 	s.RegisterOnShutdown(func() {

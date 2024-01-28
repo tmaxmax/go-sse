@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/tmaxmax/go-sse"
 	"github.com/tmaxmax/go-sse/internal/tests"
-	"golang.org/x/exp/slog"
 )
 
 type mockProvider struct {
@@ -73,21 +73,48 @@ func newMockProvider(tb testing.TB, subErr error) *mockProvider {
 	return &mockProvider{Closed: make(chan struct{}), SubError: subErr}
 }
 
-func newMockLogger(w io.Writer) func(*http.Request) *slog.Logger {
-	h := slog.NewTextHandler(w, &slog.HandlerOptions{
-		AddSource: false,
-		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
-			if a.Value.Kind() == slog.KindTime {
-				return slog.Attr{}
-			}
-			return a
-		},
-	})
-	l := slog.New(h)
+type logger struct {
+	l *log.Logger
+}
 
-	return func(r *http.Request) *slog.Logger {
-		return l
+func quoteString(s string) string {
+	if strings.ContainsAny(s, " \n\t") {
+		return strconv.Quote(s)
 	}
+	return s
+}
+
+func (l logger) Log(ctx context.Context, level sse.LogLevel, msg string, data map[string]any) {
+	levelStr := ""
+	switch level {
+	case sse.LogLevelInfo:
+		levelStr = "INFO"
+	case sse.LogLevelWarn:
+		levelStr = "WARN"
+	case sse.LogLevelError:
+		levelStr = "ERROR"
+	}
+
+	output := fmt.Sprintf("level=%s msg=%s", levelStr, msg)
+	if e, ok := data["err"]; ok {
+		output += fmt.Sprintf(" err=%s", quoteString(e.(error).Error()))
+	}
+	if ts, ok := data["topics"]; ok {
+		topics := ts.([]string)
+		for i, t := range topics {
+			topics[i] = quoteString(t)
+		}
+		output += fmt.Sprintf(" topics=%s", strings.Join(topics, ","))
+	}
+	if id, ok := data["lastEventID"]; ok {
+		output += fmt.Sprintf(" lastEventID=%s", quoteString(id.(string)))
+	}
+
+	l.l.Println(output)
+}
+
+func newMockLogger(w io.Writer) sse.Logger {
+	return logger{l: log.New(w, "", 0)}
 }
 
 func TestServer_ShutdownPublish(t *testing.T) {
