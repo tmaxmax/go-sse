@@ -12,13 +12,13 @@ import (
 )
 
 type mockReplayProvider struct {
+	putc        chan struct{}
+	replayc     chan struct{}
 	shouldPanic string
-	callsPut    int
-	callsReplay int
 }
 
 func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) *sse.Message {
-	m.callsPut++
+	m.putc <- struct{}{}
 	if strings.Contains(m.shouldPanic, "put") {
 		panic("panicked")
 	}
@@ -27,7 +27,7 @@ func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) *sse.Message {
 }
 
 func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
-	m.callsReplay++
+	m.replayc <- struct{}{}
 	if strings.Contains(m.shouldPanic, "replay") {
 		panic("panicked")
 	}
@@ -35,7 +35,23 @@ func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
 	return nil
 }
 
+func (m *mockReplayProvider) replays() int {
+	return len(m.replayc)
+}
+
+func (m *mockReplayProvider) puts() int {
+	return len(m.putc)
+}
+
 var _ sse.ReplayProvider = (*mockReplayProvider)(nil)
+
+func newMockReplayProvider(shouldPanic string, numExpectedCalls int) *mockReplayProvider {
+	return &mockReplayProvider{
+		shouldPanic: shouldPanic,
+		putc:        make(chan struct{}, numExpectedCalls),
+		replayc:     make(chan struct{}, numExpectedCalls),
+	}
+}
 
 func msg(tb testing.TB, data, id string) *sse.Message {
 	tb.Helper()
@@ -57,7 +73,7 @@ func (c mockClient) Flush() error              { return c(nil) }
 func TestJoe_Shutdown(t *testing.T) {
 	t.Parallel()
 
-	rp := &mockReplayProvider{}
+	rp := newMockReplayProvider("", 0)
 	j := &sse.Joe{
 		ReplayProvider: rp,
 	}
@@ -67,8 +83,8 @@ func TestJoe_Shutdown(t *testing.T) {
 	tests.Equal(t, j.Subscribe(context.Background(), sse.Subscription{}), sse.ErrProviderClosed, "no operation should be allowed on closed joe")
 	tests.Equal(t, j.Publish(nil, nil), sse.ErrNoTopic, "parameter validation should happen first")
 	tests.Equal(t, j.Publish(nil, []string{sse.DefaultTopic}), sse.ErrProviderClosed, "no operation should be allowed on closed joe")
-	tests.Equal(t, rp.callsPut, 0, "joe should not have used the replay provider")
-	tests.Equal(t, rp.callsReplay, 0, "joe should not have used the replay provider")
+	tests.Equal(t, rp.puts(), 0, "joe should not have used the replay provider")
+	tests.Equal(t, rp.replays(), 0, "joe should not have used the replay provider")
 
 	j = &sse.Joe{}
 	// trigger internal initialization, so the concurrent Shutdowns aren't serialized by the internal sync.Once.
@@ -153,7 +169,7 @@ func newMockContext(tb testing.TB) (*mockContext, context.CancelFunc) {
 func TestJoe_SubscribePublish(t *testing.T) {
 	t.Parallel()
 
-	rp := &mockReplayProvider{}
+	rp := newMockReplayProvider("", 2)
 	j := &sse.Joe{
 		ReplayProvider: rp,
 	}
@@ -179,8 +195,8 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
 	msgs = <-sub2
 	tests.Equal(t, len(msgs), 0, "unexpected messages received")
-	tests.Equal(t, rp.callsPut, 2, "invalid put calls")
-	tests.Equal(t, rp.callsReplay, 2, "invalid replay calls")
+	tests.Equal(t, rp.puts(), 2, "invalid put calls")
+	tests.Equal(t, rp.puts(), 2, "invalid replay calls")
 }
 
 func TestJoe_Subscribe_multipleTopics(t *testing.T) {
@@ -279,7 +295,7 @@ func (m *mockMessageWriter) Flush() error {
 func TestJoe_ReplayPanic(t *testing.T) {
 	t.Parallel()
 
-	rp := &mockReplayProvider{shouldPanic: "replay"}
+	rp := newMockReplayProvider("replay", 1)
 	j := &sse.Joe{ReplayProvider: rp}
 	wr := &mockMessageWriter{msg: make(chan *sse.Message, 1)}
 
@@ -287,8 +303,8 @@ func TestJoe_ReplayPanic(t *testing.T) {
 	suberr := make(chan error)
 	go func() { suberr <- j.Subscribe(context.Background(), sse.Subscription{Client: wr, Topics: topics}) }()
 
-	time.Sleep(time.Millisecond)
-	tests.Equal(t, rp.callsReplay, 1, "replay wasn't called")
+	_, ok := <-rp.replayc
+	tests.Expect(t, ok, "replay wasn't called")
 
 	msg := &sse.Message{ID: sse.ID("hello")}
 	tests.Equal(t, j.Publish(msg, topics), nil, "unexpected Publish error")
@@ -296,7 +312,7 @@ func TestJoe_ReplayPanic(t *testing.T) {
 
 	go func() { _ = j.Subscribe(context.Background(), sse.Subscription{}) }()
 	time.Sleep(time.Millisecond)
-	tests.Equal(t, rp.callsReplay, 1, "replay was called")
+	tests.Equal(t, rp.replays(), 0, "replay was called")
 
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
 	tests.Equal(t, <-suberr, nil, "unexpected subscribe error")
