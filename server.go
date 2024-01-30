@@ -234,7 +234,12 @@ func (s *Server) init() {
 
 func (s *Server) getSubscription(sess *Session) (Subscription, bool) {
 	if s.OnSession != nil {
-		return s.OnSession(sess)
+		sub, ok := s.OnSession(sess)
+		if ok && len(sub.Topics) == 0 {
+			panic("go-sse: session handlers should return a Subscription to at least 1 topic")
+		}
+
+		return sub, ok
 	}
 
 	return Subscription{

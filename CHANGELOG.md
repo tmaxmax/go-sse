@@ -27,6 +27,7 @@ sse.Backoff{
 }
 ```
 - `Joe` now accepts new subscriptions even if replay providers panic (previously `ErrReplayFailed` would be returned).
+- `Server.ServeHTTP` panics if a custom `OnSession` handler returns a `Subscription` with 0 topics
 
 ### Added
 
