@@ -3,7 +3,6 @@ package sse_test
 import (
 	"context"
 	"errors"
-	"log"
 	"strings"
 	"testing"
 	"time"
@@ -13,9 +12,7 @@ import (
 )
 
 type mockReplayProvider struct {
-	errGC       error
 	shouldPanic string
-	callsGC     int
 	callsPut    int
 	callsReplay int
 }
@@ -36,15 +33,6 @@ func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
 	}
 
 	return nil
-}
-
-func (m *mockReplayProvider) GC() error {
-	m.callsGC++
-	if strings.Contains(m.shouldPanic, "gc") {
-		panic("panicked")
-	}
-
-	return m.errGC
 }
 
 var _ sse.ReplayProvider = (*mockReplayProvider)(nil)
@@ -69,7 +57,7 @@ func (c mockClient) Flush() error              { return c(nil) }
 func TestJoe_Shutdown(t *testing.T) {
 	t.Parallel()
 
-	rp := &mockReplayProvider{errGC: errors.New("")}
+	rp := &mockReplayProvider{}
 	j := &sse.Joe{
 		ReplayProvider: rp,
 	}
@@ -81,7 +69,6 @@ func TestJoe_Shutdown(t *testing.T) {
 	tests.Equal(t, j.Publish(nil, []string{sse.DefaultTopic}), sse.ErrProviderClosed, "no operation should be allowed on closed joe")
 	tests.Equal(t, rp.callsPut, 0, "joe should not have used the replay provider")
 	tests.Equal(t, rp.callsReplay, 0, "joe should not have used the replay provider")
-	tests.Equal(t, rp.callsGC, 0, "joe should not have used the replay provider")
 
 	j = &sse.Joe{}
 	// trigger internal initialization, so the concurrent Shutdowns aren't serialized by the internal sync.Once.
@@ -91,8 +78,6 @@ func TestJoe_Shutdown(t *testing.T) {
 		go j.Shutdown(context.Background())
 		j.Shutdown(context.Background())
 	}, "concurrent shutdown should work")
-
-	log.Println()
 
 	j = &sse.Joe{}
 	subctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*15)
@@ -168,7 +153,7 @@ func newMockContext(tb testing.TB) (*mockContext, context.CancelFunc) {
 func TestJoe_SubscribePublish(t *testing.T) {
 	t.Parallel()
 
-	rp := &mockReplayProvider{errGC: errors.New("")}
+	rp := &mockReplayProvider{}
 	j := &sse.Joe{
 		ReplayProvider: rp,
 	}
@@ -278,23 +263,17 @@ func TestJoe_errors(t *testing.T) {
 	<-done
 }
 
-func TestJoe_GCInterval(t *testing.T) {
-	t.Parallel()
+type mockMessageWriter struct {
+	msg chan *sse.Message
+}
 
-	rp := &mockReplayProvider{}
-	interval := time.Millisecond * 6
-	j := &sse.Joe{
-		ReplayProvider:   rp,
-		ReplayGCInterval: interval,
-	}
-	// trigger internal initialization, so GC is started.
-	_ = j.Publish(&sse.Message{}, []string{sse.DefaultTopic})
+func (m *mockMessageWriter) Send(msg *sse.Message) error {
+	m.msg <- msg
+	return nil
+}
 
-	expected := 2
-
-	time.Sleep(interval*time.Duration(expected) + interval/2)
-	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
-	tests.Equal(t, rp.callsGC, expected, "GC was not called properly")
+func (m *mockMessageWriter) Flush() error {
+	return nil
 }
 
 func TestJoe_ReplayPanic(t *testing.T) {
@@ -302,15 +281,23 @@ func TestJoe_ReplayPanic(t *testing.T) {
 
 	rp := &mockReplayProvider{shouldPanic: "replay"}
 	j := &sse.Joe{ReplayProvider: rp}
+	wr := &mockMessageWriter{msg: make(chan *sse.Message, 1)}
 
-	err := j.Subscribe(context.Background(), sse.Subscription{})
+	topics := []string{sse.DefaultTopic}
+	suberr := make(chan error)
+	go func() { suberr <- j.Subscribe(context.Background(), sse.Subscription{Client: wr, Topics: topics}) }()
+
 	time.Sleep(time.Millisecond)
 	tests.Equal(t, rp.callsReplay, 1, "replay wasn't called")
-	tests.ErrorIs(t, err, sse.ErrReplayFailed, "wrong error returned")
+
+	msg := &sse.Message{ID: sse.ID("hello")}
+	tests.Equal(t, j.Publish(msg, topics), nil, "unexpected Publish error")
+	tests.Equal(t, (<-wr.msg).ID, msg.ID, "message was not sent to client")
 
 	go func() { _ = j.Subscribe(context.Background(), sse.Subscription{}) }()
 	time.Sleep(time.Millisecond)
 	tests.Equal(t, rp.callsReplay, 1, "replay was called")
 
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
+	tests.Equal(t, <-suberr, nil, "unexpected subscribe error")
 }

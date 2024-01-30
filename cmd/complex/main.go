@@ -24,10 +24,10 @@ const (
 var sseHandler = &sse.Server{
 	Provider: &sse.Joe{
 		ReplayProvider: &sse.ValidReplayProvider{
-			TTL:     time.Minute * 5,
-			AutoIDs: true,
+			TTL:        time.Minute * 5,
+			GCInterval: time.Minute,
+			AutoIDs:    true,
 		},
-		ReplayGCInterval: time.Minute,
 	},
 	Logger: logger{log.New(os.Stderr, "", 0)},
 	OnSession: func(s *sse.Session) (sse.Subscription, bool) {

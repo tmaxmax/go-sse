@@ -117,12 +117,11 @@ type ReplayProvider interface {
 
 ```go
 joe = &sse.Joe{
-    ReplayProvider:   &sse.ValidReplayProvider{TTL: time.Minute * 5}, // let's have events expire after 5 minutes
-    ReplayGCInterval: time.Minute,
+    ReplayProvider: &sse.ValidReplayProvider{TTL: time.Minute * 5}, // let's have events expire after 5 minutes 
 }
 ```
 
-will tell Joe to replay all valid events and clean up the expired ones each minute! Replay providers can do so much more (for example, add IDs to events automatically): read the [docs][3] on how to use the existing ones and how to implement yours.
+will tell Joe to replay all valid events! Replay providers can do so much more (for example, add IDs to events automatically): read the [docs][3] on how to use the existing ones and how to implement yours.
 
 You can also implement your own replay providers: maybe you need persistent storage for your events? Or event validity is determined based on other criterias than expiry time? And if you think your replay provider may be useful to others, you are encouraged to share it!
 

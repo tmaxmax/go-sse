@@ -70,12 +70,12 @@ func TestValidReplayProvider(t *testing.T) {
 
 	tm := &tests.Time{}
 	p := &sse.ValidReplayProvider{
-		TTL:     time.Millisecond * 5,
-		AutoIDs: true,
-		Now:     tm.Now,
+		TTL:        time.Millisecond * 5,
+		AutoIDs:    true,
+		Now:        tm.Now,
+		GCInterval: -1,
 	}
 
-	tests.Equal(t, p.GC(), nil, "unexpected GC error") // no elements, noop
 	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
 
 	now := time.Now()
@@ -95,7 +95,7 @@ func TestValidReplayProvider(t *testing.T) {
 
 	tm.Set(initialNow.Add(p.TTL))
 
-	tests.Equal(t, p.GC(), nil, "unexpected GC error")
+	p.GC()
 
 	tm.Set(now.Add(p.TTL))
 

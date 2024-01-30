@@ -2,10 +2,10 @@ package sse
 
 import (
 	"context"
+	"errors"
 	"log"
 	"runtime/debug"
 	"sync"
-	"time"
 )
 
 // A ReplayProvider is a type that can replay older published events to new subscribers.
@@ -60,24 +60,6 @@ type ReplayProvider interface {
 	Replay(subscription Subscription) error
 }
 
-// ReplayProviderWithGC is a ReplayProvider that must have invalid messages cleaned up from time to time.
-// This may be the case for a provider that replays messages that are not expired: at a certain interval,
-// expired messages must be removed from the provider to free up resources.
-//
-// Providers must check if replay providers implement this interface, so they can call GC accordingly.
-type ReplayProviderWithGC interface {
-	ReplayProvider
-	// GC triggers a cleanup. After GC returns, all the messages that are invalid according
-	// to the provider's criteria should be impossible to replay again.
-	//
-	// If GC returns an error or panics, the provider is not required to try to trigger another
-	// GC ever again. Make sure that before you return a non-nil value you handle
-	// temporary errors accordingly, with blocking as shortly as possible.
-	//
-	// If the replay provider implementation is thread-safe the GC operation can be executed in another goroutine.
-	GC() error
-}
-
 type (
 	subscriber   chan<- error
 	subscription struct {
@@ -115,9 +97,6 @@ type Joe struct {
 
 	// An optional replay provider that Joe uses to resend older messages to new subscribers.
 	ReplayProvider ReplayProvider
-	// An optional interval at which Joe triggers a cleanup of expired messages, if the replay provider supports it.
-	// See the desired provider's documentation to determine if periodic cleanup is necessary.
-	ReplayGCInterval time.Duration
 
 	initDone sync.Once
 }
@@ -202,12 +181,11 @@ func (j *Joe) removeSubscriber(sub subscriber) {
 	close(sub)
 }
 
-func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan time.Time, stopGCSignal func()) {
+func (j *Joe) start(replay ReplayProvider) {
 	defer close(j.closed)
 	// defer closing all subscribers instead of closing them when done is closed
 	// so in case of a panic subscribers won't block the request goroutines forever.
 	defer j.closeSubscribers()
-	defer stopGCSignal()
 
 	canReplay := true
 
@@ -246,10 +224,6 @@ func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan ti
 			}
 		case sub := <-j.unsubscription:
 			j.removeSubscriber(sub)
-		case <-gcSignal:
-			if err := gcFn(); err != nil {
-				stopGCSignal()
-			}
 		case <-j.done:
 			return
 		}
@@ -302,38 +276,6 @@ func (j *Joe) init() {
 		if replay == nil {
 			replay = noopReplayProvider{}
 		}
-
-		var gcFn func() error
-		replayGCInterval := j.ReplayGCInterval
-
-		provider, hasGC := replay.(ReplayProviderWithGC)
-		if hasGC {
-			gcFn = func() (err error) {
-				defer func() {
-					if r := recover(); r != nil {
-						err = errReplayPanicked
-						log.Printf("panic: %v\n%s", r, debug.Stack())
-					}
-				}()
-				err = provider.GC()
-				return
-			}
-		} else {
-			replayGCInterval = 0
-		}
-
-		gc, stopGCTicker := ticker(replayGCInterval)
-
-		go j.start(replay, gcFn, gc, stopGCTicker)
+		go j.start(replay)
 	})
-}
-
-// ticker creates a time.Ticker, if duration is positive, and returns its channel and stop function.
-// If the duration is negative, it returns a nil channel and a noop function.
-func ticker(duration time.Duration) (ticks <-chan time.Time, stop func()) {
-	if duration <= 0 {
-		return nil, func() {}
-	}
-	t := time.NewTicker(duration)
-	return t.C, t.Stop
 }

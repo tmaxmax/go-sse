@@ -5,8 +5,6 @@ import (
 )
 
 // FiniteReplayProvider is a replay provider that replays at maximum a certain number of events.
-// GC is a no-op for this provider, as when the maximum number of values is reached
-// and a new value has to be appended, old values are removed from the buffer.
 // The events must have an ID unless the AutoIDs flag is toggled.
 type FiniteReplayProvider struct {
 	b buffer
@@ -56,42 +54,71 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 }
 
 // ValidReplayProvider is a ReplayProvider that replays all the buffered non-expired events.
-// Call its GC method periodically to remove expired events from the buffer and release resources.
 // You can use this provider for replaying an infinite number of events, if the events never
 // expire.
+// The provider removes any expired events when a new event is put and after at least
+// a GCInterval period passed.
 // The events must have an ID unless the AutoIDs flag is toggled.
 type ValidReplayProvider struct {
 	// The function used to retrieve the current time. Defaults to time.Now.
 	// Useful when testing.
 	Now func() time.Time
 
+	lastGC   time.Time
 	b        buffer
 	expiries []time.Time
 
 	// TTL is for how long a message is valid, since it was added.
 	TTL time.Duration
+	// After how long the ReplayProvider should attempt to clean up expired events.
+	// By default cleanup is done after a fourth of the TTL has passed; this means
+	// that messages may be stored for a duration equal to 5/4*TTL. If this is not
+	// desired, set the GC interval to a value sensible for your use case or set
+	// it to -1 – this disables automatic cleanup, enabling you to do it manually
+	// using the GC method.
+	GCInterval time.Duration
 	// AutoIDs configures ValidReplayProvider to automatically set the IDs of events.
 	AutoIDs bool
 }
 
 // Put puts the message into the provider's buffer.
 func (v *ValidReplayProvider) Put(message *Message, topics []string) *Message {
+	now := v.now()
 	if v.b == nil {
 		v.b = getBuffer(v.AutoIDs, 0)
+		v.lastGC = now
+	}
+
+	if v.shouldGC(now) {
+		v.doGC(now)
+		v.lastGC = now
 	}
 
 	v.expiries = append(v.expiries, v.now().Add(v.TTL))
 	return v.b.queue(message, topics)
 }
 
-// GC removes all the expired messages from the provider's buffer.
-func (v *ValidReplayProvider) GC() error {
-	if v.b == nil {
-		return nil
+func (v *ValidReplayProvider) shouldGC(now time.Time) bool {
+	if v.GCInterval < 0 {
+		return false
 	}
 
-	now := v.now()
+	gcInterval := v.GCInterval
+	if gcInterval == 0 {
+		gcInterval = v.TTL / 4
+	}
 
+	return now.Sub(v.lastGC) >= gcInterval
+}
+
+// GC removes all the expired messages from the provider's buffer.
+func (v *ValidReplayProvider) GC() {
+	if v.b != nil {
+		v.doGC(v.now())
+	}
+}
+
+func (v *ValidReplayProvider) doGC(now time.Time) {
 	for {
 		e := v.b.front()
 		if e == nil || v.expiries[0].After(now) {
@@ -101,8 +128,6 @@ func (v *ValidReplayProvider) GC() error {
 		v.b.dequeue()
 		v.expiries = v.expiries[1:]
 	}
-
-	return nil
 }
 
 // Replay replays all the valid messages to the listener.

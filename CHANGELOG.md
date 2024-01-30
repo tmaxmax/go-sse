@@ -10,6 +10,7 @@ This version removes all external dependencies of `go-sse`. All our bugs are bel
 
 - `Client.DefautReconnectionTime`, `Client.MaxRetries` have been replaced with the new `Client.Backoff` configuration field. See the Added section for more info.
 - `ErrReplayFailed` is removed from the public API.
+- `ReplayProviderWithGC` and `Joe.ReplayGCInterval` are no more. The responsibility for garbage collection is assigned to the replay providers.
 
 ### Changed
 
@@ -31,6 +32,7 @@ sse.Backoff{
 
 - The `Logger` interface, `LogLevel` type, and `LogLevel(Info|Warn|Error)` values.
 - `Backoff` and `Client.Backoff` – the backoff strategy is now fully configurable. See the code documentation for info.
+- `ValidReplayProvider.GCInterval`, to configure at which interval expired events should be cleaned up.
 
 ## [0.7.0] - 2023-11-19
 
