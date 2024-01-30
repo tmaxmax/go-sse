@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -11,15 +11,12 @@ import (
 func main() {
 	r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", http.NoBody)
 	conn := sse.NewConnection(r)
-	// Callbacks are called from separate goroutines, we must synchronize access to stdout.
-	// log.Logger does that automatically for us, so we create one that writes to stdout without any prefix or flags.
-	out := log.New(os.Stdout, "", 0)
 
 	conn.SubscribeMessages(func(event sse.Event) {
-		out.Printf("%s\n\n", event.Data)
+		fmt.Printf("%s\n\n", event.Data)
 	})
 
 	if err := conn.Connect(); err != nil {
-		out.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 	}
 }

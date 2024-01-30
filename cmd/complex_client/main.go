@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -26,16 +25,13 @@ func main() {
 
 	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, getRequestURL(sub), http.NoBody)
 	conn := sse.NewConnection(r)
-	// Callbacks are called from separate goroutines, we must synchronize access to stdout.
-	// log.Logger does that automatically for us, so we create one that writes to stdout without any prefix or flags.
-	out := log.New(os.Stdout, "", 0)
 
 	conn.SubscribeToAll(func(event sse.Event) {
 		switch event.Type {
 		case "cycles", "ops":
-			out.Printf("Metric %s: %s\n", event.Type, event.Data)
+			fmt.Printf("Metric %s: %s\n", event.Type, event.Data)
 		case "close":
-			out.Println("Server closed!")
+			fmt.Println("Server closed!")
 			cancel()
 		default: // no event name
 			var sum, num big.Int
@@ -44,12 +40,12 @@ func main() {
 				sum.Add(&sum, &num)
 			}
 
-			out.Printf("Sum of random numbers: %s\n", &sum)
+			fmt.Printf("Sum of random numbers: %s\n", &sum)
 		}
 	})
 
 	if err := conn.Connect(); err != nil {
-		out.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 	}
 }
 
