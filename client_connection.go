@@ -272,7 +272,7 @@ func (c *Connection) doConnect(ctx context.Context, setRetry func(time.Duration)
 	defer res.Body.Close()
 
 	if err := c.client.ResponseValidator(res); err != nil {
-		return true, &ConnectionError{Req: c.request, Reason: "response validation failed", Err: err}
+		return false, &ConnectionError{Req: c.request, Reason: "response validation failed", Err: err}
 	}
 
 	setRetry(0)
