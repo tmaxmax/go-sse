@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"sync"
 )
 
@@ -111,7 +112,7 @@ type Logger interface {
 	//
 	// If the data map contains the "lastEventID" key, then it means that
 	// a client is being subscribed. The value corresponding to "lastEventID"
-	// is of type string; there will also be a "topics" key, with a value of
+	// is of type sse.EventID; there will also be a "topics" key, with a value of
 	// type []string, which contains all the topics the client is being
 	// subscribed to.
 	Log(ctx context.Context, level LogLevel, msg string, data map[string]any)
@@ -190,7 +191,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if l != nil {
-		l.Log(r.Context(), LogLevelInfo, "sse: subscribing session", map[string]any{"topics": getTopicsLog(sub.Topics), "lastEventID": sub.LastEventID})
+		l.Log(r.Context(), LogLevelInfo, "sse: subscribing session", map[string]any{"topics": slices.Clone(sub.Topics), "lastEventID": sub.LastEventID})
 	}
 
 	if err = s.provider.Subscribe(r.Context(), sub); err != nil {
@@ -256,29 +257,4 @@ func getTopics(initial []string) []string {
 	}
 
 	return initial
-}
-
-func getTopicsLog(topics []string) string {
-	seen := map[string]struct{}{}
-	ret := ""
-
-	for i, t := range topics {
-		if _, ok := seen[t]; ok {
-			continue
-		}
-
-		seen[t] = struct{}{}
-
-		if i > 0 {
-			ret += ","
-		}
-
-		if t == DefaultTopic {
-			ret += "<sse:default>"
-		} else {
-			ret += t
-		}
-	}
-
-	return ret
 }

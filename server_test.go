@@ -78,13 +78,13 @@ type logger struct {
 }
 
 func quoteString(s string) string {
-	if strings.ContainsAny(s, " \n\t") {
+	if strings.ContainsAny(s, " \n\t") || s == "" {
 		return strconv.Quote(s)
 	}
 	return s
 }
 
-func (l logger) Log(ctx context.Context, level sse.LogLevel, msg string, data map[string]any) {
+func (l logger) Log(_ context.Context, level sse.LogLevel, msg string, data map[string]any) {
 	levelStr := ""
 	switch level {
 	case sse.LogLevelInfo:
@@ -95,7 +95,7 @@ func (l logger) Log(ctx context.Context, level sse.LogLevel, msg string, data ma
 		levelStr = "ERROR"
 	}
 
-	output := fmt.Sprintf("level=%s msg=%s", levelStr, msg)
+	output := fmt.Sprintf("level=%s msg=%q", levelStr, msg)
 	if e, ok := data["err"]; ok {
 		output += fmt.Sprintf(" err=%s", quoteString(e.(error).Error()))
 	}
@@ -107,7 +107,7 @@ func (l logger) Log(ctx context.Context, level sse.LogLevel, msg string, data ma
 		output += fmt.Sprintf(" topics=%s", strings.Join(topics, ","))
 	}
 	if id, ok := data["lastEventID"]; ok {
-		output += fmt.Sprintf(" lastEventID=%s", quoteString(id.(string)))
+		output += fmt.Sprintf(" lastEventID=%s", quoteString(id.(sse.EventID).String()))
 	}
 
 	l.l.Println(output)
@@ -161,7 +161,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 	tests.Equal(t, p.Sub.LastEventID, sse.ID("5"), "Invalid last event ID received")
 	tests.Equal(t, rec.Body.String(), "data: hello\n\n", "Invalid response body")
 	tests.Equal(t, rec.Code, http.StatusOK, "invalid response code")
-	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=<sse:default> lastEventID=5\nlevel=INFO msg=\"sse: session ended\"\n", "invalid log output")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=\"\" lastEventID=5\nlevel=INFO msg=\"sse: session ended\"\n", "invalid log output")
 }
 
 type noFlusher struct {
@@ -181,7 +181,7 @@ func TestServer_ServeHTTP_unsupportedRespWriter(t *testing.T) {
 
 	tests.Equal(t, rec.Code, http.StatusInternalServerError, "invalid response code")
 	tests.Equal(t, rec.Body.String(), "Server-sent events unsupported\n", "invalid response body")
-	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=ERROR msg=\"sse: unsupported\"\n", "invalid log output")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=ERROR msg=\"sse: unsupported\" err=\"go-sse.server: upgrade unsupported\"\n", "invalid log output")
 }
 
 func TestServer_ServeHTTP_subscribeError(t *testing.T) {
@@ -196,7 +196,7 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 
 	tests.Equal(t, rec.Body.String(), p.SubError.Error()+"\n", "invalid response body")
 	tests.Equal(t, rec.Code, http.StatusInternalServerError, "invalid response code")
-	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=<sse:default> lastEventID=\"\"\nlevel=ERROR msg=\"sse: subscribe error\" err=\"can't subscribe\"\n", "invalid log output")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=\"\" lastEventID=\"\"\nlevel=ERROR msg=\"sse: subscribe error\" err=\"can't subscribe\"\n", "invalid log output")
 }
 
 func TestServer_OnSession(t *testing.T) {

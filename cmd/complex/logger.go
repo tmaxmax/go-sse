@@ -18,7 +18,7 @@ type logger struct {
 //
 //	level=INFO msg="A message about the logged event"
 //	  ua="the user agent" ip="the RemoteAddr" host="the host" origin="the origin"
-//	  lastEventID=5 topics=<sse:default>
+//	  lastEventID=5 topics=""
 //
 // It expects that the given context contains a value mapped to loggerCtxKey{},
 // which will happen because sse.Server passes the request context and we set
@@ -39,7 +39,7 @@ func (l logger) Log(ctx context.Context, level sse.LogLevel, msg string, data ma
 		output += fmt.Sprintf(" err=%q", e.(error).Error())
 	}
 
-	delete(data, "key")
+	delete(data, "err")
 
 	output += "\n  "
 
@@ -51,9 +51,9 @@ func (l logger) Log(ctx context.Context, level sse.LogLevel, msg string, data ma
 
 	for k, v := range data {
 		switch s := v.(type) {
-		case string:
+		case sse.EventID: // key is "lastEventID"
 			output += fmt.Sprintf(" %s=%q", k, s)
-		case []string:
+		case []string: // key is "topics"
 			output += fmt.Sprintf(" %s=%q", k, strings.Join(s, ", "))
 		default:
 			panic(fmt.Errorf("unexpected value type %T", v))
