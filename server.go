@@ -33,11 +33,8 @@ type Subscription struct {
 	// The events will replay starting from the first valid event sent after the one with the given ID.
 	// If the ID is invalid replaying events will be omitted and new events will be sent as normal.
 	LastEventID EventID
-	// The topics to receive message from. If no topic is specified, a default topic is implied.
+	// The topics to receive message from. Must be a non-empty list.
 	// Topics are orthogonal to event types. They are used to filter what the server sends to each client.
-	//
-	// If using a Provider directly, without a Server instance, you must specify at least one topic.
-	// The Server automatically adds the default topic if no topic is specified.
 	Topics []string
 }
 
@@ -46,7 +43,7 @@ type Subscription struct {
 //
 // Providers are required to be thread-safe.
 //
-// After Stop is called, trying to call any method of the provider must return ErrProviderClosed. The providers
+// After Shutdown is called, trying to call any method of the provider must return ErrProviderClosed. The providers
 // may return other implementation-specific errors too, but the close error is guaranteed to be the same across
 // providers.
 type Provider interface {
@@ -74,14 +71,13 @@ type Provider interface {
 // ErrProviderClosed is a sentinel error returned by providers when any operation is attempted after the provider is closed.
 var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 
-// ErrNoTopic is a sentinel error returned by providers when a Message is published without any topics.
+// ErrNoTopic is a sentinel error returned by Providers when a Message is published without any topics.
 // It is not an issue to call Server.Publish without topics, because the Server will add the DefaultTopic;
 // it is an error to call Provider.Publish without any topics, though.
 var ErrNoTopic = errors.New("go-sse.server: no topics specified")
 
 // DefaultTopic is the identifier for the topic that is implied when no topics are specified for a Subscription
-// or a Message. Providers are required to implement this behavior to ensure handlers don't break if providers
-// are changed.
+// or a Message.
 const DefaultTopic = ""
 
 // LogLevel are the supported log levels of the Server's Logger.

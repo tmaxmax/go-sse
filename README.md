@@ -318,17 +318,13 @@ type Event struct {
 
 Pretty self-explanatory, but make sure to read the [docs][6]!
 
-Now, with this knowledge, let's subscribe to all unnamed events and, when the connection is established, print their data to `os.Stdout`:
+Now, with this knowledge, let's subscribe to all unnamed events and, when the connection is established, print their data:
 
 ```go
-out := log.New(os.Stdout, "", 0)
-
 unsubscribe := conn.SubscribeMessages(func(event sse.Event) {
-    out.Printf("Received an unnamed event: %s\n", event.Data)
+    fmt.Printf("Received an unnamed event: %s\n", event.Data)
 })
 ```
-
-We use a `log.Logger` instance because it synchronizes prints with a mutex: for each event the callback is called in a separate goroutine, so access to shared resources must be synchronized by the client.
 
 ### Establishing the connection
 
@@ -354,7 +350,9 @@ There may be situations where the connection does not have to live for indetermi
 
 ```go
 client := sse.Client{
-    MaxRetries: 0,
+    Backoff: sse.Backoff{
+        MaxRetries: -1,
+    },
     // other settings...
 }
 
@@ -390,7 +388,7 @@ Let's use what we know to create a client for the previous server example:
 package main
 
 import (
-    "log"
+    "fmt"
     "net/http"
     "os"
 
@@ -400,14 +398,13 @@ import (
 func main() {
     r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", nil)
     conn := sse.NewConnection(r)
-    out := log.New(os.Stdout, "", 0)
 
     conn.SubscribeMessages(func(ev sse.Event) {
-        out.Printf("%s\n\n", ev.Data)
+        fmt.Printf("%s\n\n", ev.Data)
     })
 
     if err := conn.Connect(); err != nil {
-        out.Println(err)
+        fmt.Fprintln(os.Stderr, err)
     }
 }
 ```

@@ -4,7 +4,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## Unreleased
 
-This version removes all external dependencies of `go-sse`. All our bugs are belong to us! It also does some small API cleanups.
+This version removes all external dependencies of `go-sse`. All our bugs are belong to us! It also does some API and documentation cleanups.
 
 ### Removed
 

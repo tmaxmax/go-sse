@@ -34,7 +34,7 @@ type EventCallback func(Event)
 type EventCallbackRemover func()
 
 // Connection is a connection to an events stream. Created using the Client struct,
-// a Connection processes the incoming events and sends them to the subscribed channels.
+// a Connection processes the incoming events and calls the subscribed event callbacks.
 // If the connection to the server temporarily fails, the connection will be reattempted.
 // Retry values received from servers will be taken into account.
 //
