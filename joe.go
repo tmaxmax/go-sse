@@ -238,7 +238,7 @@ func (j *Joe) start(replay ReplayProvider, gcFn func() error, gcSignal <-chan ti
 				err = j.tryReplay(sub.Subscription, replay, &canReplay)
 			}
 
-			if err != nil {
+			if err != nil && err != errReplayPanicked { //nolint:errorlint // This is our error.
 				sub.done <- err
 				close(sub.done)
 			} else {
@@ -262,11 +262,13 @@ func (j *Joe) closeSubscribers() {
 	}
 }
 
+var errReplayPanicked = errors.New("replay failed unexpectedly")
+
 func (*Joe) tryReplay(sub Subscription, replay ReplayProvider, canReplay *bool) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			*canReplay = false
-			err = ErrReplayFailed
+			err = errReplayPanicked
 			log.Printf("panic: %v\n%s", r, debug.Stack())
 		}
 	}()
@@ -309,7 +311,7 @@ func (j *Joe) init() {
 			gcFn = func() (err error) {
 				defer func() {
 					if r := recover(); r != nil {
-						err = ErrReplayFailed
+						err = errReplayPanicked
 						log.Printf("panic: %v\n%s", r, debug.Stack())
 					}
 				}()

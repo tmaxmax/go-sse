@@ -4,11 +4,12 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## Unreleased
 
-This version removes all external dependencies of `go-sse`. All our bugs are belong to us!
+This version removes all external dependencies of `go-sse`. All our bugs are belong to us! It also does some small API cleanups.
 
 ### Removed
 
 - `Client.DefautReconnectionTime`, `Client.MaxRetries` have been replaced with the new `Client.Backoff` configuration field. See the Added section for more info.
+- `ErrReplayFailed` is removed from the public API.
 
 ### Changed
 
@@ -24,6 +25,7 @@ sse.Backoff{
     MaxRetries:         -1,               // previously no retries by default, currently unbounded
 }
 ```
+- `Joe` now accepts new subscriptions even if replay providers panic (previously `ErrReplayFailed` would be returned).
 
 ### Added
 
