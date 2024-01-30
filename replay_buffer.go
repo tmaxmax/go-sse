@@ -46,6 +46,13 @@ func (b *bufferBase) queue(message *Message, topics []string) *Message {
 	return message
 }
 
+func (b *bufferBase) dequeue() {
+	// It may seem at first glance that the backing array would grow indefinitely,
+	// but factor in that when the slice is reallocated all the dequeued elements
+	// from the beginning become reclaimable.
+	b.buf = b.buf[1:]
+}
+
 type bufferNoID struct {
 	lastRemovedID EventID
 	bufferBase
@@ -72,7 +79,7 @@ func (b *bufferNoID) queue(message *Message, topics []string) *Message {
 
 func (b *bufferNoID) dequeue() {
 	b.lastRemovedID = b.buf[0].message.ID
-	b.buf = b.buf[1:]
+	b.bufferBase.dequeue()
 }
 
 func (b *bufferNoID) slice(atID EventID) []messageWithTopics {
@@ -114,7 +121,7 @@ func (b *bufferAutoID) queue(message *Message, topics []string) *Message {
 
 func (b *bufferAutoID) dequeue() {
 	b.firstID++
-	b.buf = b.buf[1:]
+	b.bufferBase.dequeue()
 }
 
 func (b *bufferAutoID) slice(atID EventID) []messageWithTopics {
