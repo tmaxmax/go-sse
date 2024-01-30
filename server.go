@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"slices"
 	"sync"
 )
 
@@ -182,7 +181,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if l != nil {
-		l.Log(r.Context(), LogLevelInfo, "sse: subscribing session", map[string]any{"topics": slices.Clone(sub.Topics), "lastEventID": sub.LastEventID})
+		l.Log(r.Context(), LogLevelInfo, "sse: subscribing session", map[string]any{"topics": slicesClone(sub.Topics), "lastEventID": sub.LastEventID})
 	}
 
 	if err = s.provider.Subscribe(r.Context(), sub); err != nil {
@@ -253,4 +252,8 @@ func getTopics(initial []string) []string {
 	}
 
 	return initial
+}
+
+func slicesClone(s []string) []string {
+	return append([]string(nil), s...)
 }
