@@ -6,13 +6,29 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 This version removes all external dependencies of `go-sse`. All our bugs are belong to us!
 
+### Removed
+
+- `Client.DefautReconnectionTime`, `Client.MaxRetries` have been replaced with the new `Client.Backoff` configuration field. See the Added section for more info.
+
 ### Changed
 
 - `Server.Logger` is now of a new type: the `Logger` interface. The dependency on x/exp/slog is removed. This opens up the possibility to adapt any existing logger to be usable with `Server`.
+- The default backoff behavior has changed. The _previous_ defaults map to the new `Backoff` configuration as follows:
+```go
+sse.Backoff{
+    InitialInterval:    5 * time.Second,  // currently 500ms
+    Multiplier:         1.5,              // currently the same
+    Jitter:             0.5,              // currently the same
+    MaxInterval:        60 * time.Second, // currently unbounded
+    MaxElapsedDuration: 15 * time.Minute, // currently unbounded
+    MaxRetries:         -1,               // previously no retries by default, currently unbounded
+}
+```
 
 ### Added
 
 - The `Logger` interface, `LogLevel` type, and `LogLevel(Info|Warn|Error)` values.
+- `Backoff` and `Client.Backoff` – the backoff strategy is now fully configurable. See the code documentation for info.
 
 ## [0.7.0] - 2023-11-19
 

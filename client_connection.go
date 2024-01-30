@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/tmaxmax/go-sse/internal/parser"
 )
 
@@ -223,45 +223,66 @@ func (c *Connection) read(r io.Reader, setRetry func(time.Duration)) error {
 // inside a *ConnectionError.
 func (c *Connection) Connect() error {
 	ctx := c.request.Context()
-	b, setRetry := c.client.newBackoff(ctx)
+	backoff := c.client.Backoff.new()
 
 	c.request.Header.Set("Accept", "text/event-stream")
 	c.request.Header.Set("Connection", "keep-alive")
 	c.request.Header.Set("Cache", "no-cache")
 
-	op := func() error {
-		if err := c.resetRequest(); err != nil {
-			wrapped := &ConnectionError{Req: c.request, Reason: "request reset failed", Err: err}
-			return backoff.Permanent(wrapped)
-		}
+	t := time.NewTimer(0)
+	defer t.Stop()
 
-		res, err := c.client.HTTPClient.Do(c.request)
-		if err != nil {
-			concrete := err.(*url.Error) //nolint:errorlint // We know the concrete type here
-			if errors.Is(err, ctx.Err()) {
-				return backoff.Permanent(concrete.Err)
+	for {
+		select {
+		case <-t.C:
+			shouldRetry, err := c.doConnect(ctx, backoff.reset)
+			if !shouldRetry {
+				return err
 			}
-			return &ConnectionError{Req: c.request, Reason: "connection to server failed", Err: concrete.Err}
+
+			next, shouldRetry := backoff.next()
+			if !shouldRetry {
+				return err
+			}
+
+			if c.client.OnRetry != nil {
+				c.client.OnRetry(err, next)
+			}
+
+			t.Reset(next)
+		case <-ctx.Done():
+			return ctx.Err()
 		}
-		defer res.Body.Close()
+	}
+}
 
-		if err := c.client.ResponseValidator(res); err != nil {
-			return &ConnectionError{Req: c.request, Reason: "response validation failed", Err: err}
-		}
-
-		b.Reset()
-
-		err = c.read(res.Body, setRetry)
-		if errors.Is(err, ctx.Err()) {
-			return backoff.Permanent(err)
-		}
-
-		return &ConnectionError{Req: c.request, Reason: "connection to server lost", Err: err}
+func (c *Connection) doConnect(ctx context.Context, setRetry func(time.Duration)) (shouldRetry bool, err error) {
+	if err := c.resetRequest(); err != nil {
+		return false, &ConnectionError{Req: c.request, Reason: "request reset failed", Err: err}
 	}
 
-	err := backoff.RetryNotify(op, b, c.client.OnRetry)
+	res, err := c.client.HTTPClient.Do(c.request)
+	if err != nil {
+		concrete := err.(*url.Error) //nolint:errorlint // We know the concrete type here
+		if errors.Is(err, ctx.Err()) {
+			return false, concrete.Err
+		}
+		return true, &ConnectionError{Req: c.request, Reason: "connection to server failed", Err: concrete.Err}
+	}
+	defer res.Body.Close()
 
-	return err
+	if err := c.client.ResponseValidator(res); err != nil {
+		return true, &ConnectionError{Req: c.request, Reason: "response validation failed", Err: err}
+	}
+
+	setRetry(0)
+
+	err = c.read(res.Body, setRetry)
+	if errors.Is(err, ctx.Err()) {
+		return false, err
+	}
+
+	return true, &ConnectionError{Req: c.request, Reason: "connection to server lost", Err: err}
 }
 
 // ErrNoGetBody is a sentinel error returned when the connection cannot be reattempted

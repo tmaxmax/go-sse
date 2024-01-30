@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/tmaxmax/go-sse"
 	"github.com/tmaxmax/go-sse/internal/parser"
 	"github.com/tmaxmax/go-sse/internal/tests"
@@ -97,17 +96,19 @@ func TestConnection_Connect_retry(t *testing.T) {
 				firstReconnectionTime = duration
 			}
 		},
-		MaxRetries:              3,
-		DefaultReconnectionTime: time.Millisecond,
+		Backoff: sse.Backoff{
+			MaxRetries:      3,
+			InitialInterval: time.Millisecond,
+		},
 	}
 	r := req(t, "", "", http.NoBody)
 	err := c.NewConnection(r).Connect()
 
 	tests.ErrorIs(t, err, testErr, "invalid error received from Connect")
-	tests.Equal(t, retryAttempts, c.MaxRetries, "connection was not retried enough times")
+	tests.Equal(t, retryAttempts, c.Backoff.MaxRetries, "connection was not retried enough times")
 
-	timeDelta := time.Duration(float64(c.DefaultReconnectionTime) * backoff.DefaultRandomizationFactor)
-	tests.Expect(t, c.DefaultReconnectionTime-timeDelta <= firstReconnectionTime && firstReconnectionTime <= c.DefaultReconnectionTime+timeDelta, "reconnection time incorrectly set")
+	timeDelta := time.Duration(float64(c.Backoff.InitialInterval) * sse.DefaultClient.Backoff.Jitter)
+	tests.Expect(t, c.Backoff.InitialInterval-timeDelta <= firstReconnectionTime && firstReconnectionTime <= c.Backoff.InitialInterval+timeDelta, "reconnection time incorrectly set")
 }
 
 func TestConnection_Connect_noRetryCtxErr(t *testing.T) {
@@ -188,10 +189,12 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 	rt := httpClient.Transport
 
 	c := &sse.Client{
-		HTTPClient:              httpClient,
-		ResponseValidator:       sse.NoopValidator,
-		MaxRetries:              1,
-		DefaultReconnectionTime: time.Nanosecond,
+		HTTPClient:        httpClient,
+		ResponseValidator: sse.NoopValidator,
+		Backoff: sse.Backoff{
+			MaxRetries:      1,
+			InitialInterval: time.Nanosecond,
+		},
 	}
 
 	for _, test := range tt {
@@ -252,7 +255,9 @@ func TestConnection_Connect_validator(t *testing.T) {
 
 	c := &sse.Client{
 		HTTPClient: ts.Client(),
-		MaxRetries: 0,
+		Backoff: sse.Backoff{
+			MaxRetries: -1,
+		},
 	}
 
 	for _, test := range tt {
@@ -310,7 +315,7 @@ func TestConnection_Connect_defaultValidator(t *testing.T) {
 			ts := httptest.NewServer(test.handler)
 			defer ts.Close()
 
-			c := &sse.Client{HTTPClient: ts.Client()}
+			c := &sse.Client{HTTPClient: ts.Client(), Backoff: sse.Backoff{MaxRetries: -1}}
 			err := c.NewConnection(req(t, "", ts.URL, nil)).Connect()
 
 			if test.expectErr {
@@ -400,6 +405,7 @@ func TestConnection_Subscriptions(t *testing.T) {
 	c := &sse.Client{
 		HTTPClient:        ts.Client(),
 		ResponseValidator: sse.NoopValidator,
+		Backoff:           sse.Backoff{MaxRetries: -1},
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
@@ -444,7 +450,9 @@ func TestConnection_dispatchDirty(t *testing.T) {
 	c := &sse.Client{
 		HTTPClient:        ts.Client(),
 		ResponseValidator: sse.NoopValidator,
-		MaxRetries:        0,
+		Backoff: sse.Backoff{
+			MaxRetries: -1,
+		},
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 	expected := sse.Event{Data: "hello\nworld"}
@@ -476,7 +484,9 @@ func TestConnection_Unsubscriptions(t *testing.T) {
 	c := &sse.Client{
 		HTTPClient:        ts.Client(),
 		ResponseValidator: sse.NoopValidator,
-		MaxRetries:        0,
+		Backoff: sse.Backoff{
+			MaxRetries: -1,
+		},
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
 
@@ -553,6 +563,7 @@ func TestConnection_serverError(t *testing.T) {
 	c := sse.Client{
 		HTTPClient:        ts.Client(),
 		ResponseValidator: sse.NoopValidator,
+		Backoff:           sse.Backoff{MaxRetries: -1},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -606,9 +617,10 @@ func TestConnection_reconnect(t *testing.T) {
 				cancel()
 			}
 		},
-		DefaultReconnectionTime: time.Nanosecond,
-		ResponseValidator:       sse.NoopValidator,
-		MaxRetries:              -1,
+		Backoff: sse.Backoff{
+			InitialInterval: time.Nanosecond,
+		},
+		ResponseValidator: sse.NoopValidator,
 	}
 
 	r := reqCtx(t, ctx, "", ts.URL, http.NoBody)
