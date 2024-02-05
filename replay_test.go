@@ -108,7 +108,8 @@ func TestValidReplayProvider(t *testing.T) {
 func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
-	p := &sse.FiniteReplayProvider{Count: 3}
+	p, err := sse.NewFiniteReplayProvider(3, false)
+	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
 
@@ -148,5 +149,8 @@ The message is the following:
 	replayed = replay(t, p, sse.ID("4"), sse.DefaultTopic, "topic with no messages")[0]
 	tests.Equal(t, replayed.String(), "id: 7\ndata: again\n\n", "invalid replayed message")
 
-	testReplayError(t, &sse.FiniteReplayProvider{Count: 10}, nil)
+	tr, err := sse.NewFiniteReplayProvider(10, false)
+	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
+
+	testReplayError(t, tr, nil)
 }
