@@ -38,7 +38,6 @@ type FiniteReplayProvider struct {
 	buf       []messageWithTopics
 	head      int
 	tail      int
-	count     int
 	autoIDs   bool
 	currentID int64
 }
