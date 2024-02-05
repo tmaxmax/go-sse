@@ -3,7 +3,6 @@ package sse
 import (
 	"errors"
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -25,7 +24,6 @@ func NewFiniteReplayProvider(
 	return &FiniteReplayProvider{
 		cap:     count,
 		buf:     make([]messageWithTopics, count),
-		count:   count,
 		autoIDs: autoIDs,
 	}, nil
 }
@@ -33,7 +31,6 @@ func NewFiniteReplayProvider(
 // FiniteReplayProvider is a replay provider that replays at maximum a certain number of events.
 // The events must have an ID unless the AutoIDs flag is toggled.
 type FiniteReplayProvider struct {
-	mut       sync.RWMutex
 	cap       int
 	buf       []messageWithTopics
 	head      int
@@ -50,9 +47,6 @@ func (f *FiniteReplayProvider) Put(message *Message, topics []string) *Message {
 			"go-sse: no topics provided for Message.\n" +
 				formatMessagePanicString(message)))
 	}
-
-	f.mut.Lock()
-	defer f.mut.Unlock()
 
 	if f.autoIDs {
 		f.currentID++
@@ -85,10 +79,7 @@ func (f *FiniteReplayProvider) Put(message *Message, topics []string) *Message {
 // Replay replays the messages in the buffer to the listener.
 // It doesn't take into account the messages' expiry times.
 func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
-	f.mut.RLock()
-
 	if f.head == f.tail {
-		f.mut.RUnlock()
 		return nil
 	}
 
@@ -110,8 +101,6 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 		n = f.tail - f.head
 		copy(vs[0:n], f.buf[f.head:f.tail])
 	}
-
-	f.mut.RUnlock()
 
 	values := vs[0:n]
 
