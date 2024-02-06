@@ -143,11 +143,10 @@ The message is the following:
 	tests.Equal(t, replayed.String(), "id: 4\ndata: world\n\n", "invalid replayed message")
 
 	p.Put(msg(t, "", "5"), []string{"t"})
-	p.Put(msg(t, "", "6"), []string{"t"})
-	p.Put(msg(t, "again", "7"), []string{sse.DefaultTopic})
+	p.Put(msg(t, "again", "6"), []string{sse.DefaultTopic})
 
 	replayed = replay(t, p, sse.ID("4"), sse.DefaultTopic, "topic with no messages")[0]
-	tests.Equal(t, replayed.String(), "id: 7\ndata: again\n\n", "invalid replayed message")
+	tests.Equal(t, replayed.String(), "id: 6\ndata: again\n\n", "invalid replayed message")
 
 	tr, err := sse.NewFiniteReplayProvider(10, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")

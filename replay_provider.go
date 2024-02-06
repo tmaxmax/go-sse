@@ -83,50 +83,45 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 		return nil
 	}
 
-	// The assumption here is that most of the lifetime of an application
-	// the circular buffer would be full, so we might as well allocate in
-	// one go.
-	vs := make([]messageWithTopics, 0, f.cap)
-
-	var n int
-
-	// Copy head to end and start to tail when head is after tail.
+	// Replay head to end and start to tail when head is after tail.
 	if f.tail < f.head {
-		n = f.cap - f.tail
-		copy(vs[0:n], f.buf[f.tail:])
-		copy(vs[n:n+f.tail], f.buf[0:f.tail])
-		// If the head is after the tail the buffer is full.
-		n = f.cap
-	} else {
-		n = f.tail - f.head
-		copy(vs[0:n], f.buf[f.head:f.tail])
-	}
-
-	values := vs[0:n]
-
-	for i := range values {
-		// This could be done as part of the the initial copy to vs,
-		// leaving it as a separate op for now.
-		if values[i].message.ID.value == subscription.LastEventID.value {
-			if i == len(values)-1 {
-				values = nil
-			} else {
-				values = values[i+1:]
-			}
-
-			break
+		foundFirst, err := replay(subscription, f.buf[f.tail:], false)
+		if err != nil {
+			return err
 		}
-	}
 
-	for _, e := range values {
-		if topicsIntersect(subscription.Topics, e.topics) {
-			if err := subscription.Client.Send(e.message); err != nil {
-				return err
-			}
+		_, err = replay(subscription, f.buf[0:f.tail], foundFirst)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := replay(subscription, f.buf[0:f.tail], false)
+		if err != nil {
+			return err
 		}
 	}
 
 	return subscription.Client.Flush()
+}
+
+func replay(
+	sub Subscription, events []messageWithTopics, foundFirstEvent bool,
+) (hasFoundFirstEvent bool, err error) {
+	for _, e := range events {
+		if !foundFirstEvent && e.message.ID == sub.LastEventID {
+			foundFirstEvent = true
+
+			continue
+		}
+
+		if foundFirstEvent && topicsIntersect(sub.Topics, e.topics) {
+			if err := sub.Client.Send(e.message); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	return foundFirstEvent, nil
 }
 
 // ValidReplayProvider is a ReplayProvider that replays all the buffered non-expired events.
