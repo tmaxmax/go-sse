@@ -110,6 +110,11 @@ func TestValidReplayProvider(t *testing.T) {
 func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
+	_, err := sse.NewFiniteReplayProvider(1, false)
+	if err == nil {
+		t.Fatal("should not create FiniteReplayProvider with count less than 2")
+	}
+
 	p, err := sse.NewFiniteReplayProvider(3, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 

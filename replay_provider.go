@@ -17,8 +17,8 @@ import (
 func NewFiniteReplayProvider(
 	count int, autoIDs bool,
 ) (*FiniteReplayProvider, error) {
-	if count < 1 {
-		return nil, errors.New("count must be greater than zero")
+	if count < 2 {
+		return nil, errors.New("count must be at least 2")
 	}
 
 	return &FiniteReplayProvider{
