@@ -8,6 +8,9 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 - `FiniteReplayProvider.{Count, AutoIDs}` – use the constructor instead
 
+### Changed
+
+- Due to a change in the internal implementation, the `FiniteReplayProvider` is now able to replay events only if the event with the LastEventID provided by the client is still buffered. Previously if the LastEventID was that of the latest removed event, events would still be replayed. This detail added complexity to the implementation without an apparent significant win, so it was dropped.
 ### Added
 
 - `NewFiniteReplayProvider` constructor
