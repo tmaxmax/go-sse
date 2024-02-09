@@ -1,6 +1,8 @@
 package sse_test
 
 import (
+	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -152,4 +154,63 @@ The message is the following:
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	testReplayError(t, tr, nil)
+}
+
+func TestFiniteReplayProvider_allocations(t *testing.T) {
+	p, err := sse.NewFiniteReplayProvider(3, false)
+	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
+
+	const runs = 100
+
+	topics := []string{sse.DefaultTopic}
+	// Add one to the number of runs to take the warmup run of
+	// AllocsPerRun() into account.
+	queue := make([]*sse.Message, runs+1)
+	lastID := runs
+
+	for i := 0; i < len(queue); i++ {
+		queue[i] = msg(t,
+			fmt.Sprintf("message %d", i),
+			strconv.Itoa(i),
+		)
+	}
+
+	var run int
+
+	avgAllocs := testing.AllocsPerRun(runs, func() {
+		_ = p.Put(queue[run], topics)
+
+		run++
+	})
+
+	tests.Equal(t, avgAllocs, 0, "no allocations should be made on Put()")
+
+	var replayCount int
+
+	cb := mockClient(func(m *sse.Message) error {
+		if m != nil {
+			replayCount++
+		}
+
+		return nil
+	})
+
+	sub := sse.Subscription{
+		Client: cb,
+		Topics: topics,
+	}
+
+	sub.LastEventID = sse.ID(strconv.Itoa(lastID - 3))
+
+	err = p.Replay(sub)
+	tests.Equal(t, err, nil, "replay from fourth last should succeed")
+
+	tests.Equal(t, replayCount, 0, "replay from fourth last should not yield messages")
+
+	sub.LastEventID = sse.ID(strconv.Itoa(lastID - 2))
+
+	err = p.Replay(sub)
+	tests.Equal(t, err, nil, "replay from third last should succeed")
+
+	tests.Equal(t, replayCount, 2, "replay from third last should yield 2 messages")
 }
