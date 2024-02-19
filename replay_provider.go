@@ -31,8 +31,8 @@ func NewFiniteReplayProvider(
 // FiniteReplayProvider is a replay provider that replays at maximum a certain number of events.
 // The events must have an ID unless the AutoIDs flag is toggled.
 type FiniteReplayProvider struct {
-	cap       int
 	buf       []messageWithTopics
+	cap       int
 	head      int
 	tail      int
 	autoIDs   bool

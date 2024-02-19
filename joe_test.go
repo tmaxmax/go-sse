@@ -229,7 +229,7 @@ data: world
 func TestJoe_errors(t *testing.T) {
 	t.Parallel()
 
-	fin, err := sse.NewFiniteReplayProvider(1, false)
+	fin, err := sse.NewFiniteReplayProvider(2, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	j := &sse.Joe{
@@ -277,7 +277,7 @@ func TestJoe_errors(t *testing.T) {
 
 	err = j.Subscribe(ctx, sse.Subscription{Client: client, Topics: []string{sse.DefaultTopic}})
 	tests.Equal(t, err, callErr, "error not received from send")
-	tests.Equal(t, called, 1, "callback was called after subscribe returned")
+	tests.Equal(t, called, 0, "callback was called after subscribe returned")
 
 	<-done
 }
