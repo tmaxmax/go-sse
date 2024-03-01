@@ -1,6 +1,8 @@
 package sse_test
 
 import (
+	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -108,7 +110,13 @@ func TestValidReplayProvider(t *testing.T) {
 func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
-	p := &sse.FiniteReplayProvider{Count: 3}
+	_, err := sse.NewFiniteReplayProvider(1, false)
+	if err == nil {
+		t.Fatal("should not create FiniteReplayProvider with count less than 2")
+	}
+
+	p, err := sse.NewFiniteReplayProvider(3, false)
+	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
 
@@ -142,11 +150,72 @@ The message is the following:
 	tests.Equal(t, replayed.String(), "id: 4\ndata: world\n\n", "invalid replayed message")
 
 	p.Put(msg(t, "", "5"), []string{"t"})
-	p.Put(msg(t, "", "6"), []string{"t"})
-	p.Put(msg(t, "again", "7"), []string{sse.DefaultTopic})
+	p.Put(msg(t, "again", "6"), []string{sse.DefaultTopic})
 
 	replayed = replay(t, p, sse.ID("4"), sse.DefaultTopic, "topic with no messages")[0]
-	tests.Equal(t, replayed.String(), "id: 7\ndata: again\n\n", "invalid replayed message")
+	tests.Equal(t, replayed.String(), "id: 6\ndata: again\n\n", "invalid replayed message")
 
-	testReplayError(t, &sse.FiniteReplayProvider{Count: 10}, nil)
+	tr, err := sse.NewFiniteReplayProvider(10, false)
+	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
+
+	testReplayError(t, tr, nil)
+}
+
+func TestFiniteReplayProvider_allocations(t *testing.T) {
+	p, err := sse.NewFiniteReplayProvider(3, false)
+	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
+
+	const runs = 100
+
+	topics := []string{sse.DefaultTopic}
+	// Add one to the number of runs to take the warmup run of
+	// AllocsPerRun() into account.
+	queue := make([]*sse.Message, runs+1)
+	lastID := runs
+
+	for i := 0; i < len(queue); i++ {
+		queue[i] = msg(t,
+			fmt.Sprintf("message %d", i),
+			strconv.Itoa(i),
+		)
+	}
+
+	var run int
+
+	avgAllocs := testing.AllocsPerRun(runs, func() {
+		_ = p.Put(queue[run], topics)
+
+		run++
+	})
+
+	tests.Equal(t, avgAllocs, 0, "no allocations should be made on Put()")
+
+	var replayCount int
+
+	cb := mockClient(func(m *sse.Message) error {
+		if m != nil {
+			replayCount++
+		}
+
+		return nil
+	})
+
+	sub := sse.Subscription{
+		Client: cb,
+		Topics: topics,
+	}
+
+	sub.LastEventID = sse.ID(strconv.Itoa(lastID - 3))
+
+	err = p.Replay(sub)
+	tests.Equal(t, err, nil, "replay from fourth last should succeed")
+
+	tests.Equal(t, replayCount, 0, "replay from fourth last should not yield messages")
+
+	sub.LastEventID = sse.ID(strconv.Itoa(lastID - 2))
+
+	err = p.Replay(sub)
+	tests.Equal(t, err, nil, "replay from third last should succeed")
+
+	tests.Equal(t, replayCount, 2, "replay from third last should yield 2 messages")
 }

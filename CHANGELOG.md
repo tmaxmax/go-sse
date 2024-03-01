@@ -2,6 +2,23 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Removed
+
+- `FiniteReplayProvider.{Count, AutoIDs}` – use the constructor instead
+
+### Changed
+
+- Due to a change in the internal implementation, the `FiniteReplayProvider` is now able to replay events only if the event with the LastEventID provided by the client is still buffered. Previously if the LastEventID was that of the latest removed event, events would still be replayed. This detail added complexity to the implementation without an apparent significant win, so it was dropped.
+### Added
+
+- `NewFiniteReplayProvider` constructor
+
+### Fixed
+
+- `FiniteReplayProvider` doesn't leak memory anymore and respects the stored messages count it was given. Previously when a new message was put after the messages count was reached and some other messages were removed, the total messages count would grow unexpectedly and `FiniteReplayProvider` would store and replay more events than it was configured to.
+
 ## [0.8.0] - 2024-01-30
 
 This version removes all external dependencies of `go-sse`. All our bugs are belong to us! It also does some API and documentation cleanups.

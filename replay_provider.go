@@ -1,56 +1,127 @@
 package sse
 
 import (
+	"errors"
+	"strconv"
 	"time"
 )
+
+// NewFiniteReplayProvider creates a finite replay provider with the given max
+// count and auto ID behaviour.
+//
+// Count is the maximum number of events FiniteReplayProvider should hold as
+// valid. It must be greater than zero.
+//
+// AutoIDs configures FiniteReplayProvider to automatically set the IDs of
+// events.
+func NewFiniteReplayProvider(
+	count int, autoIDs bool,
+) (*FiniteReplayProvider, error) {
+	if count < 2 {
+		return nil, errors.New("count must be at least 2")
+	}
+
+	return &FiniteReplayProvider{
+		cap:     count,
+		buf:     make([]messageWithTopics, count),
+		autoIDs: autoIDs,
+	}, nil
+}
 
 // FiniteReplayProvider is a replay provider that replays at maximum a certain number of events.
 // The events must have an ID unless the AutoIDs flag is toggled.
 type FiniteReplayProvider struct {
-	b buffer
-
-	// Count is the maximum number of events FiniteReplayProvider should hold as valid.
-	// It must be a positive integer, or the code will panic.
-	Count int
-	// AutoIDs configures FiniteReplayProvider to automatically set the IDs of events.
-	AutoIDs bool
+	buf       []messageWithTopics
+	cap       int
+	head      int
+	tail      int
+	autoIDs   bool
+	currentID int64
 }
 
 // Put puts a message into the provider's buffer. If there are more messages than the maximum
 // number, the oldest message is removed.
 func (f *FiniteReplayProvider) Put(message *Message, topics []string) *Message {
-	if f.b == nil {
-		f.b = getBuffer(f.AutoIDs, f.Count)
+	if len(topics) == 0 {
+		panic(errors.New(
+			"go-sse: no topics provided for Message.\n" +
+				formatMessagePanicString(message)))
 	}
 
-	if f.b.len() == f.b.cap() {
-		f.b.dequeue()
+	if f.autoIDs {
+		f.currentID++
+
+		message.ID = ID(strconv.FormatInt(f.currentID, 10))
+	} else if !message.ID.IsSet() {
+		panicString := "go-sse: a Message without an ID was given to a provider that doesn't set IDs automatically.\n" + formatMessagePanicString(message)
+
+		panic(errors.New(panicString))
 	}
 
-	return f.b.queue(message, topics)
+	f.buf[f.tail] = messageWithTopics{message: message, topics: topics}
+
+	f.tail++
+	if f.tail >= f.cap {
+		f.tail = 0
+	}
+
+	if f.tail == f.head {
+		f.head = f.tail + 1
+
+		if f.head > f.cap {
+			f.head = 0
+		}
+	}
+
+	return message
 }
 
 // Replay replays the messages in the buffer to the listener.
 // It doesn't take into account the messages' expiry times.
 func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
-	if f.b == nil {
+	if f.head == f.tail {
 		return nil
 	}
 
-	events := f.b.slice(subscription.LastEventID)
-	if len(events) == 0 {
-		return nil
-	}
+	// Replay head to end and start to tail when head is after tail.
+	if f.tail < f.head {
+		foundFirst, err := replay(subscription, f.buf[f.tail:], false)
+		if err != nil {
+			return err
+		}
 
-	for _, e := range events {
-		if topicsIntersect(subscription.Topics, e.topics) {
-			if err := subscription.Client.Send(e.message); err != nil {
-				return err
-			}
+		_, err = replay(subscription, f.buf[0:f.tail], foundFirst)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := replay(subscription, f.buf[0:f.tail], false)
+		if err != nil {
+			return err
 		}
 	}
 
 	return subscription.Client.Flush()
+}
+
+func replay(
+	sub Subscription, events []messageWithTopics, foundFirstEvent bool,
+) (hasFoundFirstEvent bool, err error) {
+	for _, e := range events {
+		if !foundFirstEvent && e.message.ID == sub.LastEventID {
+			foundFirstEvent = true
+
+			continue
+		}
+
+		if foundFirstEvent && topicsIntersect(sub.Topics, e.topics) {
+			if err := sub.Client.Send(e.message); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	return foundFirstEvent, nil
 }
 
 // ValidReplayProvider is a ReplayProvider that replays all the buffered non-expired events.

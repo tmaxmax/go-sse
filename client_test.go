@@ -181,7 +181,7 @@ func TestConnection_Connect_resetBody(t *testing.T) {
 		},
 	}
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		time.Sleep(time.Millisecond * 5)
 	}))
 	defer ts.Close()
@@ -250,7 +250,7 @@ func TestConnection_Connect_validator(t *testing.T) {
 		},
 	}
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 	defer ts.Close()
 
 	c := &sse.Client{
@@ -611,7 +611,7 @@ func TestConnection_reconnect(t *testing.T) {
 	retries := 0
 	c := sse.Client{
 		HTTPClient: ts.Client(),
-		OnRetry: func(err error, d time.Duration) {
+		OnRetry: func(_ error, _ time.Duration) {
 			retries++
 			if retries == 3 {
 				cancel()
