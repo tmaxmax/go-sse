@@ -46,6 +46,8 @@ type Connection struct { //nolint:govet // The current order aids readability.
 	callbacksAll map[int]EventCallback
 	lastEventID  string
 	client       Client
+	buf          []byte
+	bufMaxSize   int
 	callbackID   int
 	isRetry      bool
 }
@@ -108,6 +110,16 @@ func (c *Connection) addSubscriber(event string, cb EventCallback) EventCallback
 	}
 }
 
+// Buffer sets the underlying buffer to be used when scanning events.
+// Use this if you need to read very large events (bigger than the default
+// of 65K bytes).
+//
+// Read the documentation of bufio.Scanner.Buffer for more information.
+func (c *Connection) Buffer(buf []byte, maxSize int) {
+	c.buf = buf
+	c.bufMaxSize = maxSize
+}
+
 // ConnectionError is the type that wraps all the connection errors that occur.
 type ConnectionError struct {
 	// The request for which the connection failed.
@@ -167,6 +179,10 @@ func (c *Connection) dispatch(ev Event) {
 
 func (c *Connection) read(r io.Reader, setRetry func(time.Duration)) error {
 	p := parser.New(r)
+	if c.buf != nil || c.bufMaxSize > 0 {
+		p.Buffer(c.buf, c.bufMaxSize)
+	}
+
 	ev, dirty := Event{}, false
 
 	for f := (parser.Field{}); p.Next(&f); {

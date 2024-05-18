@@ -14,6 +14,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 ### Added
 
 - `NewFiniteReplayProvider` constructor
+- `Connection.Buffer`
 
 ### Fixed
 
