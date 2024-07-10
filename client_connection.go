@@ -297,6 +297,11 @@ func (c *Connection) doConnect(ctx context.Context, setRetry func(time.Duration)
 	if errors.Is(err, ctx.Err()) {
 		return false, err
 	}
+	if err == io.EOF {
+		// io.EOF signals successful termination of the stream, so return false (do not retry the
+		// connection) and the 'success' error io.EOF
+		return false, err
+	}
 
 	return true, &ConnectionError{Req: c.request, Reason: "connection to server lost", Err: err}
 }
