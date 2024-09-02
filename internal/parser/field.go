@@ -22,7 +22,7 @@ const (
 	FieldNameID    = FieldName("id")
 	// FieldNameComment is a sentinel value that indicates
 	// comment fields. It is not a valid field name that should
-	// be written to a SSE stream.
+	// be written to an SSE stream.
 	FieldNameComment = FieldName(":")
 
 	maxFieldNameLength = 5

@@ -171,7 +171,7 @@ func (j *Joe) Publish(msg *Message, topics []string) error {
 	}
 }
 
-// Stop signals Joe to close all subscribers and stop receiving messages.
+// Shutdown signals Joe to close all subscribers and stop receiving messages.
 // It returns when all the subscribers are closed.
 //
 // Further calls to Stop will return ErrProviderClosed.

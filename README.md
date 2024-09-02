@@ -141,7 +141,7 @@ and he'll dispatch events all day! By default, he has no memory of what events h
 ```go
 type Replayer interface {
     // Put a new event in the provider's buffer.
-    // If the provider automatically adds IDs aswell,
+    // If the provider automatically adds IDs as well,
     // the returned message will also have the ID set,
     // otherwise the input value is returned.
     Put(msg *Message, topics []string) (*Message, error)
@@ -165,7 +165,7 @@ joe = &sse.Joe{Replayer: r}
 
 will tell Joe to replay all valid events! Replayers can do so much more (for example, add IDs to events automatically): read the [docs][3] on how to use the existing ones and how to implement yours.
 
-You can also implement your own replayers: maybe you need persistent storage for your events? Or event validity is determined based on other criterias than expiry time? And if you think your replayer may be useful to others, you are encouraged to share it!
+You can also implement your own replayers: maybe you need persistent storage for your events? Or event validity is determined based on other criteria than expiry time? And if you think your replayer may be useful to others, you are encouraged to share it!
 
 `go-sse` created the `Replayer` interface mainly for `Joe`, but it encourages you to integrate it with your own `Provider` implementations, where suitable.
 
