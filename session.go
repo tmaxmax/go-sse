@@ -14,7 +14,7 @@ type ResponseWriter interface {
 // MessageWriter is a special kind of response writer used by providers to
 // send Messages to clients.
 type MessageWriter interface {
-	// Sens sends the message to the client.
+	// Send sends the message to the client.
 	// To make sure it is sent, call Flush.
 	Send(m *Message) error
 	// Flush sends any buffered messages to the client.

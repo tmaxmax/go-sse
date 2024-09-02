@@ -187,7 +187,7 @@ func (c *Connection) read(r io.Reader, setRetry func(time.Duration)) error {
 // is blocked until the request's context is done or an error occurs.
 //
 // If the request's context is cancelled, Connect returns its error.
-// Otherwise, if the maximum number or retries is made, the last error
+// Otherwise, if the maximum number of retries is made, the last error
 // that occurred is returned. Connect never returns otherwise – either
 // the context is cancelled, or it's done retrying.
 //

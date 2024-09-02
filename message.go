@@ -110,7 +110,7 @@ func (e *Message) appendText(isComment bool, chunks ...string) {
 // any newline characters (\r or \n) and then append the resulted data.
 //
 // Given that clients treat all newlines the same and replace the original newlines with LF,
-// for internal code simplicity AppendData replaces them aswell.
+// for internal code simplicity AppendData replaces them as well.
 func (e *Message) AppendData(chunks ...string) {
 	e.appendText(false, chunks...)
 }

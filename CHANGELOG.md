@@ -49,7 +49,7 @@ This version removes all external dependencies of `go-sse`. All our bugs are bel
 
 ### Removed
 
-- `Client.DefautReconnectionTime`, `Client.MaxRetries` have been replaced with the new `Client.Backoff` configuration field. See the Added section for more info.
+- `Client.DefaultReconnectionTime`, `Client.MaxRetries` have been replaced with the new `Client.Backoff` configuration field. See the Added section for more info.
 - `ErrReplayFailed` is removed from the public API.
 - `ReplayProviderWithGC` and `Joe.ReplayGCInterval` are no more. The responsibility for garbage collection is assigned to the replay providers.
 
@@ -91,7 +91,7 @@ This version overhauls connection retry and fixes the connection event dispatch 
 - `*url.Error`s that occur on the HTTP request are now unwrapped and their cause is put inside a `ConnectionError`.
 - `Connection.Connect` doesn't suppress any errors anymore: the request context errors are returned as is, all other errors are wrapped inside `ConnectionError`.
 - On reconnection attempt, the response reset error is now wrapped inside `ConnectionError`. With this change, all errors other than the context errors are wrapped inside `ConnectionError`.
-- Subscription callbacks are no longer called in individual goroutines. This caused messages to be received in an indereminate order. Make sure that your callbacks do not block for too long!
+- Subscription callbacks are no longer called in individual goroutines. This caused messages to be received in an indeterminate order. Make sure that your callbacks do not block for too long!
 
 ### Changed
 
@@ -188,7 +188,7 @@ Documentation and examples were also fixed and improved.
 - `sse.Message`: `AppendData` takes `string`s instead of `[]byte`.
 - `sse.Message`: `Comment` is now named `AppendComment`, for consistency with `AppendData`.
 - `sse.Message`: The message's expiration is not reset anymore by `UnmarshalText`.
-- `sse.Message`: `UnmarshalText` now unmarshals comments aswell.
+- `sse.Message`: `UnmarshalText` now unmarshals comments as well.
 - `sse.Message`: `WriteTo` (and `MarshalText` and `String` as a result) replaces all newline sequences in data with LF.
 - `sse.Message`: The `Expiry` getter and `SetExpiresAt`, `SetTTL` setters are replaced by the public field `ExpiresAt`.
 - `sse.Message`: Event ID getter and setter are replaced by the public `ID` field.
