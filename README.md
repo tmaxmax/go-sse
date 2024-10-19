@@ -304,7 +304,7 @@ unsubscribe := conn.SubscribeToAll(func (event sse.Event) {
 })
 ```
 
-All `Susbcribe` methods return a function that when called tells the connection to stop calling the corresponding callback.
+All `Subscribe` methods return a function that when called tells the connection to stop calling the corresponding callback.
 
 In order to work with events, the `sse.Event` type has some fields and methods exposed:
 
