@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -351,5 +350,5 @@ func (e *Message) Clone() *Message {
 }
 
 func writeString(w io.Writer, s string) (int, error) {
-	return w.Write(unsafe.Slice((*byte)(unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)).Data)), len(s)))
+	return w.Write(unsafe.Slice(unsafe.StringData(s), len(s)))
 }

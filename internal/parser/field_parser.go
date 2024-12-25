@@ -16,13 +16,6 @@ type FieldParser struct {
 	removeBOM    bool
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func trimFirstSpace(c string) string {
 	if c != "" && c[0] == ' ' {
 		return c[1:]

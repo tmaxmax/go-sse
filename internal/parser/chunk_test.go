@@ -6,12 +6,6 @@ import (
 	"unsafe"
 )
 
-func getStringDataAddress(tb testing.TB, b string) uintptr {
-	tb.Helper()
-
-	return (*reflect.StringHeader)(unsafe.Pointer(&b)).Data
-}
-
 func TestNextChunk(t *testing.T) {
 	t.Parallel()
 
@@ -22,7 +16,7 @@ func TestNextChunk(t *testing.T) {
 		t.Fatalf("No more data should be remaining")
 	}
 
-	if getStringDataAddress(t, s) != getStringDataAddress(t, chunk) {
+	if unsafe.StringData(s) != unsafe.StringData(chunk) {
 		t.Fatalf("First chunk should always have the same address as the given buffer")
 	}
 
