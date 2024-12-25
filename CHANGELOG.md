@@ -7,18 +7,24 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 ### Removed
 
 - `FiniteReplayProvider.{Count, AutoIDs}` – use the constructor instead
+- `ValidReplayProvider.{TTL, AutoIDs}` – use the constructor instead
 
 ### Changed
 
 - Due to a change in the internal implementation, the `FiniteReplayProvider` is now able to replay events only if the event with the LastEventID provided by the client is still buffered. Previously if the LastEventID was that of the latest removed event, events would still be replayed. This detail added complexity to the implementation without an apparent significant win, so it was dropped.
+- `FiniteReplayProvider.GCInterval` should be set to `0` now in order to disable GC.
+- Automatic ID generation for both providers does not overwrite already existing message IDs and errors instead. Ensure that your events do not have IDs when using providers configured to generate IDs.
+
 ### Added
 
 - `NewFiniteReplayProvider` constructor
+- `NewValidReplayProvider` constructor
 - `Connection.Buffer`
 
 ### Fixed
 
 - `FiniteReplayProvider` doesn't leak memory anymore and respects the stored messages count it was given. Previously when a new message was put after the messages count was reached and some other messages were removed, the total messages count would grow unexpectedly and `FiniteReplayProvider` would store and replay more events than it was configured to.
+- `ValidReplayProvider` was also susceptible to a similar memory leak, which is also fixed now.
 
 ## [0.8.0] - 2024-01-30
 

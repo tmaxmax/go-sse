@@ -21,35 +21,34 @@ const (
 	topicMetrics       = "metrics"
 )
 
-var sseHandler = &sse.Server{
-	Provider: &sse.Joe{
-		ReplayProvider: &sse.ValidReplayProvider{
-			TTL:        time.Minute * 5,
-			GCInterval: time.Minute,
-			AutoIDs:    true,
-		},
-	},
-	Logger: logger{log.New(os.Stderr, "", 0)},
-	OnSession: func(s *sse.Session) (sse.Subscription, bool) {
-		topics := s.Req.URL.Query()["topic"]
-		for _, topic := range topics {
-			if topic != topicRandomNumbers && topic != topicMetrics {
-				fmt.Fprintf(s.Res, "invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics)
-				s.Res.WriteHeader(http.StatusBadRequest)
-				return sse.Subscription{}, false
-			}
-		}
-		if len(topics) == 0 {
-			// Provide default topics, if none are given.
-			topics = []string{topicRandomNumbers, topicMetrics}
-		}
+func newSSE() *sse.Server {
+	rp, _ := sse.NewValidReplayProvider(time.Minute*5, true)
+	rp.GCInterval = time.Minute
 
-		return sse.Subscription{
-			Client:      s,
-			LastEventID: s.LastEventID,
-			Topics:      append(topics, sse.DefaultTopic), // the shutdown message is sent on the default topic
-		}, true
-	},
+	return &sse.Server{
+		Provider: &sse.Joe{ReplayProvider: rp},
+		Logger:   logger{log.New(os.Stderr, "", 0)},
+		OnSession: func(s *sse.Session) (sse.Subscription, bool) {
+			topics := s.Req.URL.Query()["topic"]
+			for _, topic := range topics {
+				if topic != topicRandomNumbers && topic != topicMetrics {
+					fmt.Fprintf(s.Res, "invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics)
+					s.Res.WriteHeader(http.StatusBadRequest)
+					return sse.Subscription{}, false
+				}
+			}
+			if len(topics) == 0 {
+				// Provide default topics, if none are given.
+				topics = []string{topicRandomNumbers, topicMetrics}
+			}
+
+			return sse.Subscription{
+				Client:      s,
+				LastEventID: s.LastEventID,
+				Topics:      append(topics, sse.DefaultTopic), // the shutdown message is sent on the default topic
+			}, true
+		},
+	}
 }
 
 func cors(h http.Handler) http.Handler {
@@ -62,6 +61,8 @@ func cors(h http.Handler) http.Handler {
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	sseHandler := newSSE()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stop", func(w http.ResponseWriter, _ *http.Request) {
@@ -94,8 +95,8 @@ func main() {
 		_ = sseHandler.Shutdown(ctx)
 	})
 
-	go recordMetric(ctx, "ops", time.Second*2)
-	go recordMetric(ctx, "cycles", time.Millisecond*500)
+	go recordMetric(ctx, sseHandler, "ops", time.Second*2)
+	go recordMetric(ctx, sseHandler, "cycles", time.Millisecond*500)
 
 	go func() {
 		duration := func() time.Duration {
@@ -122,7 +123,7 @@ func main() {
 	}
 }
 
-func recordMetric(ctx context.Context, metric string, frequency time.Duration) {
+func recordMetric(ctx context.Context, sseHandler *sse.Server, metric string, frequency time.Duration) {
 	ticker := time.NewTicker(frequency)
 	defer ticker.Stop()
 

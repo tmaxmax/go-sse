@@ -116,9 +116,14 @@ type ReplayProvider interface {
 `go-sse` provides two replay providers by default, which both hold the events in-memory: the `ValidReplayProvider` and `FiniteReplayProvider`. The first replays events that are valid, not expired, the second replays a finite number of the most recent events. For example:
 
 ```go
-joe = &sse.Joe{
-    ReplayProvider: &sse.ValidReplayProvider{TTL: time.Minute * 5}, // let's have events expire after 5 minutes 
+// Let's have events expire after 5 minutes. For this example we don't enable automatic ID generation.
+rp, err := sse.NewValidReplayProvider(time.Minute * 5, false)
+if err != nil {
+    // TTL was 0 or negative.
+    // Useful to have this error if the value comes from a config which happens to be faulty.
 }
+
+joe = &sse.Joe{ReplayProvider: rp}
 ```
 
 will tell Joe to replay all valid events! Replay providers can do so much more (for example, add IDs to events automatically): read the [docs][3] on how to use the existing ones and how to implement yours.

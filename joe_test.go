@@ -259,7 +259,7 @@ func TestJoe_errors(t *testing.T) {
 
 	_ = j.Publish(msg(t, "world", "2"), []string{sse.DefaultTopic})
 
-	tests.Expect(t, called == 1, "callback was called after subscribe returned")
+	tests.Equal(t, called, 1, "callback was called after subscribe returned")
 
 	called = 0
 	ctx, cancel := newMockContext(t)
@@ -277,7 +277,8 @@ func TestJoe_errors(t *testing.T) {
 
 	err = j.Subscribe(ctx, sse.Subscription{Client: client, Topics: []string{sse.DefaultTopic}})
 	tests.Equal(t, err, callErr, "error not received from send")
-	tests.Equal(t, called, 0, "callback was called after subscribe returned")
+	// Only the first event should be attempted as nothing is replayed.
+	tests.Equal(t, called, 1, "callback was called after subscribe returned")
 
 	<-done
 }

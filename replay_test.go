@@ -71,12 +71,11 @@ func TestValidReplayProvider(t *testing.T) {
 	t.Parallel()
 
 	tm := &tests.Time{}
-	p := &sse.ValidReplayProvider{
-		TTL:        time.Millisecond * 5,
-		AutoIDs:    true,
-		Now:        tm.Now,
-		GCInterval: -1,
-	}
+	ttl := time.Millisecond * 5
+
+	p, _ := sse.NewValidReplayProvider(ttl, true)
+	p.GCInterval = 0
+	p.Now = tm.Now
 
 	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
 
@@ -86,25 +85,28 @@ func TestValidReplayProvider(t *testing.T) {
 
 	p.Put(msg(t, "hi", ""), []string{sse.DefaultTopic})
 	p.Put(msg(t, "there", ""), []string{"t"})
-	tm.Add(p.TTL)
+	tm.Add(ttl)
 	p.Put(msg(t, "world", ""), []string{sse.DefaultTopic})
 	p.Put(msg(t, "again", ""), []string{"t"})
-	tm.Add(p.TTL * 3)
+	tm.Add(ttl * 3)
 	p.Put(msg(t, "world", ""), []string{sse.DefaultTopic})
 	p.Put(msg(t, "x", ""), []string{"t"})
-	tm.Add(p.TTL * 5)
+	tm.Add(ttl * 5)
 	p.Put(msg(t, "again", ""), []string{"t"})
 
-	tm.Set(initialNow.Add(p.TTL))
+	tm.Set(initialNow.Add(ttl))
 
 	p.GC()
 
-	tm.Set(now.Add(p.TTL))
+	tm.Set(now.Add(ttl))
 
 	replayed := replay(t, p, sse.ID("3"), sse.DefaultTopic, "topic with no messages")[0]
 	tests.Equal(t, replayed.String(), "id: 4\ndata: world\n\n", "invalid message received")
 
-	testReplayError(t, &sse.ValidReplayProvider{Now: tm.Now}, tm)
+	tr, err := sse.NewValidReplayProvider(time.Second, false)
+	tests.Equal(t, err, nil, "replay provider should be created")
+
+	testReplayError(t, tr, tm)
 }
 
 func TestFiniteReplayProvider(t *testing.T) {
@@ -125,21 +127,14 @@ func TestFiniteReplayProvider(t *testing.T) {
 	}, "messages without IDs cannot be put in a replay provider")
 	rerr, isErr := r.(error)
 	tests.Expect(t, isErr, "should panic with error")
-	tests.Equal(t, rerr.Error(), `go-sse: a Message without an ID was given to a provider that doesn't set IDs automatically.
-The message is the following:
-│ event: panic
-└─■`, "invalid panic error message")
+	tests.Equal(t, rerr.Error(), `message has no ID`, "invalid error message")
 
 	r = tests.Panics(t, func() {
 		p.Put(&sse.Message{ID: sse.ID("5"), Type: sse.Type("panic")}, nil)
 	}, "messages cannot be put without a topic")
 	rerr, isErr = r.(error)
 	tests.Expect(t, isErr, "should panic with error")
-	tests.Equal(t, rerr.Error(), `go-sse: no topics provided for Message.
-The message is the following:
-│ id: 5
-│ event: panic
-└─■`, "invalid panic error message")
+	tests.Equal(t, rerr.Error(), `go-sse: no topics provided for Message`, "invalid panic error message")
 
 	p.Put(msg(t, "", "1"), []string{sse.DefaultTopic})
 	p.Put(msg(t, "hello", "2"), []string{sse.DefaultTopic})
