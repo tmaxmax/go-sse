@@ -17,13 +17,13 @@ type mockReplayProvider struct {
 	shouldPanic string
 }
 
-func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) *sse.Message {
+func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) (*sse.Message, error) {
 	m.putc <- struct{}{}
 	if strings.Contains(m.shouldPanic, "put") {
 		panic("panicked")
 	}
 
-	return msg
+	return msg, nil
 }
 
 func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
@@ -299,7 +299,7 @@ func (m *mockMessageWriter) Flush() error {
 func TestJoe_ReplayPanic(t *testing.T) {
 	t.Parallel()
 
-	rp := newMockReplayProvider("replay", 1)
+	rp := newMockReplayProvider("replay put", 1)
 	j := &sse.Joe{ReplayProvider: rp}
 	wr := &mockMessageWriter{msg: make(chan *sse.Message, 1)}
 
@@ -311,12 +311,25 @@ func TestJoe_ReplayPanic(t *testing.T) {
 	tests.Expect(t, ok, "replay wasn't called")
 
 	msg := &sse.Message{ID: sse.ID("hello")}
-	tests.Equal(t, j.Publish(msg, topics), nil, "unexpected Publish error")
+	tests.Equal(t, j.Publish(msg, topics), nil, "replay put should not be triggered by publishing anymore")
 	tests.Equal(t, (<-wr.msg).ID, msg.ID, "message was not sent to client")
 
 	go func() { _ = j.Subscribe(context.Background(), sse.Subscription{}) }()
 	time.Sleep(time.Millisecond)
 	tests.Equal(t, rp.replays(), 0, "replay was called")
+
+	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
+	tests.Equal(t, <-suberr, nil, "unexpected subscribe error")
+
+	rp = newMockReplayProvider("put", 1)
+	j = &sse.Joe{ReplayProvider: rp}
+	go func() { suberr <- j.Subscribe(context.Background(), sse.Subscription{Client: wr, Topics: topics}) }()
+
+	_, ok = <-rp.replayc
+	tests.Expect(t, ok, "replay was called")
+
+	tests.Equal(t, j.Publish(msg, topics), nil, "replay put error should not be propagated")
+	tests.Equal(t, (<-wr.msg).ID, msg.ID, "message was not sent to client")
 
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
 	tests.Equal(t, <-suberr, nil, "unexpected subscribe error")

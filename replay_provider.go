@@ -39,19 +39,19 @@ type FiniteReplayProvider struct {
 
 // Put puts a message into the provider's buffer. If there are more messages than the maximum
 // number, the oldest message is removed.
-func (f *FiniteReplayProvider) Put(message *Message, topics []string) *Message {
+func (f *FiniteReplayProvider) Put(message *Message, topics []string) (*Message, error) {
 	if len(topics) == 0 {
-		panic(errors.New("go-sse: no topics provided for Message"))
+		return nil, ErrNoTopic
 	}
 
 	message, err := ensureID(message, f.currentID)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	f.buf.enqueue(messageWithTopics{message: message, topics: topics})
 
-	return message
+	return message, nil
 }
 
 // Replay replays the messages in the buffer to the listener.
@@ -130,9 +130,9 @@ func NewValidReplayProvider(ttl time.Duration, autoIDs bool) (*ValidReplayProvid
 }
 
 // Put puts the message into the provider's buffer.
-func (v *ValidReplayProvider) Put(message *Message, topics []string) *Message {
+func (v *ValidReplayProvider) Put(message *Message, topics []string) (*Message, error) {
 	if len(topics) == 0 {
-		panic(errors.New("go-sse: no topics provided for Message"))
+		return nil, ErrNoTopic
 	}
 
 	now := v.Now()
@@ -147,7 +147,7 @@ func (v *ValidReplayProvider) Put(message *Message, topics []string) *Message {
 
 	message, err := ensureID(message, v.currentID)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if v.messages.count == len(v.messages.buf) {
@@ -160,7 +160,7 @@ func (v *ValidReplayProvider) Put(message *Message, topics []string) *Message {
 
 	v.messages.enqueue(messageWithTopicsAndExpiry{messageWithTopics: messageWithTopics{message: message, topics: topics}, exp: now.Add(v.ttl)})
 
-	return message
+	return message, nil
 }
 
 func (v *ValidReplayProvider) shouldGC(now time.Time) bool {
@@ -385,5 +385,5 @@ type messageWithTopicsAndExpiry struct {
 // It is used to avoid nil checks for the provider each time it is used.
 type noopReplayProvider struct{}
 
-func (n noopReplayProvider) Put(m *Message, _ []string) *Message { return m }
-func (n noopReplayProvider) Replay(_ Subscription) error         { return nil }
+func (n noopReplayProvider) Put(m *Message, _ []string) (*Message, error) { return m, nil }
+func (n noopReplayProvider) Replay(_ Subscription) error                  { return nil }

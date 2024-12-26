@@ -70,9 +70,9 @@ type Provider interface {
 // ErrProviderClosed is a sentinel error returned by providers when any operation is attempted after the provider is closed.
 var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 
-// ErrNoTopic is a sentinel error returned by Providers when a Message is published without any topics.
+// ErrNoTopic is a sentinel error returned when a Message is published without any topics.
 // It is not an issue to call Server.Publish without topics, because the Server will add the DefaultTopic;
-// it is an error to call Provider.Publish without any topics, though.
+// it is an error to call Provider.Publish or ReplayProvider.Put without any topics, though.
 var ErrNoTopic = errors.New("go-sse.server: no topics specified")
 
 // DefaultTopic is the identifier for the topic that is implied when no topics are specified for a Subscription

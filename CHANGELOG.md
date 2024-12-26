@@ -14,6 +14,9 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 - Due to a change in the internal implementation, the `FiniteReplayProvider` is now able to replay events only if the event with the LastEventID provided by the client is still buffered. Previously if the LastEventID was that of the latest removed event, events would still be replayed. This detail added complexity to the implementation without an apparent significant win, so it was dropped.
 - `FiniteReplayProvider.GCInterval` should be set to `0` now in order to disable GC.
 - Automatic ID generation for both providers does not overwrite already existing message IDs and errors instead. Ensure that your events do not have IDs when using providers configured to generate IDs.
+- `ReplayProvider.Put` now returns an error instead of being required to panic. Read the method documentation for more info. `Joe` also propagates this error through `Joe.Publish`.
+- Replay providers are now required to not overwrite message IDs and return errors instead. Sending unsupported messages to replay providers is a bug which should not go unnoticed. Both providers in this library now implement this behavior.
+- `Joe` does not log replay provider panics to the console anymore. Handle these panics inside the replay provider itself.
 
 ### Added
 

@@ -45,14 +45,27 @@ func replay(tb testing.TB, p sse.ReplayProvider, lastEventID sse.EventID, topics
 	return replayed
 }
 
+func put(tb testing.TB, p sse.ReplayProvider, msg *sse.Message, topics ...string) *sse.Message {
+	tb.Helper()
+
+	if len(topics) == 0 {
+		topics = []string{sse.DefaultTopic}
+	}
+
+	msg, err := p.Put(msg, topics)
+	tests.Equal(tb, err, nil, "invalid message")
+
+	return msg
+}
+
 func testReplayError(tb testing.TB, p sse.ReplayProvider, tm *tests.Time) {
 	tb.Helper()
 
 	tm.Reset()
 	tm.Add(time.Hour)
 
-	p.Put(msg(tb, "a", "1"), []string{sse.DefaultTopic})
-	p.Put(msg(tb, "b", "2"), []string{sse.DefaultTopic})
+	put(tb, p, msg(tb, "a", "1"))
+	put(tb, p, msg(tb, "b", "2"))
 
 	cb := mockClient(func(_ *sse.Message) error { return nil })
 
@@ -73,6 +86,9 @@ func TestValidReplayProvider(t *testing.T) {
 	tm := &tests.Time{}
 	ttl := time.Millisecond * 5
 
+	_, err := sse.NewValidReplayProvider(0, false)
+	tests.Expect(t, err != nil, "replay provider cannot be created with zero or negative TTL")
+
 	p, _ := sse.NewValidReplayProvider(ttl, true)
 	p.GCInterval = 0
 	p.Now = tm.Now
@@ -82,16 +98,16 @@ func TestValidReplayProvider(t *testing.T) {
 	now := time.Now()
 	tm.Set(now)
 
-	p.Put(msg(t, "hi", ""), []string{sse.DefaultTopic})
-	p.Put(msg(t, "there", ""), []string{"t"})
+	put(t, p, msg(t, "hi", ""))
+	put(t, p, msg(t, "there", ""), "t")
 	tm.Add(ttl)
-	p.Put(msg(t, "world", ""), []string{sse.DefaultTopic})
-	p.Put(msg(t, "again", ""), []string{"t"})
+	put(t, p, msg(t, "world", ""))
+	put(t, p, msg(t, "again", ""), "t")
 	tm.Add(ttl * 3)
-	p.Put(msg(t, "world", ""), []string{sse.DefaultTopic})
-	p.Put(msg(t, "x", ""), []string{"t"})
+	put(t, p, msg(t, "world", ""))
+	put(t, p, msg(t, "x", ""), "t")
 	tm.Add(ttl * 5)
-	p.Put(msg(t, "again", ""), []string{"t"})
+	put(t, p, msg(t, "again", ""), "t")
 
 	tm.Set(now.Add(ttl))
 
@@ -103,7 +119,7 @@ func TestValidReplayProvider(t *testing.T) {
 	p.GCInterval = ttl / 5
 	// Should trigger automatic GC which should clean up most of the messages.
 	tm.Set(now.Add(ttl * 5))
-	p.Put(msg(t, "not again", ""), []string{"t"})
+	put(t, p, msg(t, "not again", ""), "t")
 
 	allReplayed := replay(t, p, sse.ID("3"), "t", "topic with no messages")
 	tests.Equal(t, len(allReplayed), 2, "there should be two messages in topic 't'")
@@ -119,42 +135,38 @@ func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
 	_, err := sse.NewFiniteReplayProvider(1, false)
-	if err == nil {
-		t.Fatal("should not create FiniteReplayProvider with count less than 2")
-	}
+	tests.Expect(t, err != nil, "should not create FiniteReplayProvider with count less than 2")
 
 	p, err := sse.NewFiniteReplayProvider(3, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
 
-	r := tests.Panics(t, func() {
-		p.Put(&sse.Message{Type: sse.Type("panic")}, []string{sse.DefaultTopic})
-	}, "messages without IDs cannot be put in a replay provider")
-	rerr, isErr := r.(error)
-	tests.Expect(t, isErr, "should panic with error")
-	tests.Equal(t, rerr.Error(), `message has no ID`, "invalid error message")
+	_, err = p.Put(msg(t, "panic", ""), []string{sse.DefaultTopic})
+	tests.Expect(t, err != nil, "message without IDs cannot be put in a replay provider")
 
-	r = tests.Panics(t, func() {
-		p.Put(&sse.Message{ID: sse.ID("5"), Type: sse.Type("panic")}, nil)
-	}, "messages cannot be put without a topic")
-	rerr, isErr = r.(error)
-	tests.Expect(t, isErr, "should panic with error")
-	tests.Equal(t, rerr.Error(), `go-sse: no topics provided for Message`, "invalid panic error message")
+	_, err = p.Put(msg(t, "panic", "5"), nil)
+	tests.ErrorIs(t, err, sse.ErrNoTopic, "incorrect error returned when no topic is provided")
 
-	p.Put(msg(t, "", "1"), []string{sse.DefaultTopic})
-	p.Put(msg(t, "hello", "2"), []string{sse.DefaultTopic})
-	p.Put(msg(t, "there", "3"), []string{"t"})
-	p.Put(msg(t, "world", "4"), []string{sse.DefaultTopic})
+	put(t, p, msg(t, "", "1"))
+	put(t, p, msg(t, "hello", "2"))
+	put(t, p, msg(t, "there", "3"), "t")
+	put(t, p, msg(t, "world", "4"))
 
 	replayed := replay(t, p, sse.ID("2"))[0]
 	tests.Equal(t, replayed.String(), "id: 4\ndata: world\n\n", "invalid replayed message")
 
-	p.Put(msg(t, "", "5"), []string{"t"})
-	p.Put(msg(t, "again", "6"), []string{sse.DefaultTopic})
+	put(t, p, msg(t, "", "5"), "t")
+	put(t, p, msg(t, "again", "6"))
 
 	replayed = replay(t, p, sse.ID("4"), sse.DefaultTopic, "topic with no messages")[0]
 	tests.Equal(t, replayed.String(), "id: 6\ndata: again\n\n", "invalid replayed message")
+
+	idp, err := sse.NewFiniteReplayProvider(10, true)
+	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
+
+	_, err = idp.Put(msg(t, "should error", "should not have ID"), []string{sse.DefaultTopic})
+	tests.Expect(t, err != nil, "messages with IDs cannot be put in an autoID replay provider")
 
 	tr, err := sse.NewFiniteReplayProvider(10, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
@@ -184,7 +196,7 @@ func TestFiniteReplayProvider_allocations(t *testing.T) {
 	var run int
 
 	avgAllocs := testing.AllocsPerRun(runs, func() {
-		_ = p.Put(queue[run], topics)
+		put(t, p, queue[run], topics...)
 
 		run++
 	})

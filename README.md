@@ -107,9 +107,9 @@ type ReplayProvider interface {
     // If the provider automatically adds IDs aswell,
     // the returned message will also have the ID set,
     // otherwise the input value is returned.
-    Put(msg *Message, topics []string) *Message
+    Put(msg *Message, topics []string) (*Message, error)
     // Replay valid events to a subscriber.
-    Replay(sub Subscription)
+    Replay(sub Subscription) error
 }
 ```
 
@@ -161,7 +161,7 @@ data: to see you.
 
 You can also see that `go-sse` takes care of splitting input by lines into new fields, as required by the specification.
 
-Keep in mind that providers, such as the `ValidReplayProvider` used above, will panic if they receive events without IDs. To have our event expire, as configured, we must set an ID for the event:
+Keep in mind that providers, such as the `ValidReplayProvider` used above, will give an error for and won't replay the events without an ID (unless, of course, they give the IDs themselves). To have our event expire, as configured, we must set an ID for the event:
 
 ```go
 m.ID = sse.ID("unique")
@@ -176,7 +176,7 @@ data: Nice
 data: to see you.
 ```
 
-Now that it has an ID, the event will be considered expired 5 minutes after it's been published – it won't be replayed to clients after the expiry!
+Now that it has an ID, the event will be considered expired 5 minutes after it's been published – it won't be replayed to clients after it expires!
 
 `sse.ID` is a function that returns an `EventID` – a special type that denotes an event's ID. An ID must not have newlines, so we must use special functions which validate the value beforehand. The `ID` constructor function we've used above panics (it is useful when creating IDs from static strings), but there's also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
 

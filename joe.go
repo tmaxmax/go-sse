@@ -2,9 +2,6 @@ package sse
 
 import (
 	"context"
-	"errors"
-	"log"
-	"runtime/debug"
 	"sync"
 )
 
@@ -13,8 +10,8 @@ import (
 // the events' expiration times or any other criteria to determine which are valid for replay.
 //
 // While providers can require events to have IDs beforehand, they can also set the IDs themselves,
-// automatically - it's up to the implementation. Providers should ignore events without IDs,
-// if they require IDs to be set.
+// automatically - it's up to the implementation. Providers should not overwrite or remove any existing
+// IDs and return an error instead.
 //
 // Replay providers are not required to be thread-safe - server providers are required to ensure only
 // one operation is executed on the replay provider at any given time. Server providers may not execute
@@ -32,31 +29,38 @@ type ReplayProvider interface {
 	// Put adds a new event to the replay buffer. The Message that is returned may not have the
 	// same address, if the replay provider automatically sets IDs.
 	//
-	// Put panics if the message couldn't be queued – if no topics are provided, or
+	// Put errors if the message couldn't be queued – if no topics are provided,
 	// a message without an ID is put into a ReplayProvider which does not
-	// automatically set IDs.
+	// automatically set IDs, or a message with an ID is put into a ReplayProvider which
+	// does automatically set IDs. An error should be returned for other failures
+	// related to the given message. When no topics are provided, ErrNoTopic should be
+	// returned.
 	//
 	// The Put operation may be executed by the replay provider in another goroutine only if
 	// it can ensure that any Replay operation called after the Put goroutine is started
 	// can replay the new received message. This also requires the replay provider implementation
 	// to be thread-safe.
 	//
-	// Replay providers are not required to guarantee that after Put returns the new events
-	// can be replayed. If an error occurs internally when putting the new message
+	// Replay providers are not required to guarantee that immediately after Put returns
+	// the new messages can be replayed. If an error occurs internally when putting the new message
 	// and retrying the operation would block for too long, it can be aborted.
-	// The errors aren't returned as the server providers won't be able to handle them in a useful manner.
-	Put(message *Message, topics []string) *Message
+	//
+	// To indicate a complete replay provider failure (i.e. the replay provider won't work after this point)
+	// a panic should be used instead of an error.
+	Put(message *Message, topics []string) (*Message, error)
 	// Replay sends to a new subscriber all the valid events received by the provider
 	// since the event with the listener's ID. If the ID the listener provides
 	// is invalid, the provider should not replay any events.
 	//
-	// Replay operations must be executed in the same goroutine as the one it is called in.
-	// Other goroutines may be launched from inside the Replay method, but the events must
-	// be sent to the listener in the same goroutine that Replay is called in.
+	// Replay calls must return only after replaying is done.
+	// Implementations should not keep references to the subscription client
+	// after Replay returns.
 	//
 	// If an error is returned, then at least some messages weren't successfully replayed.
 	// The error is nil if there were no messages to replay for the particular subscription
 	// or if all messages were replayed successfully.
+	//
+	// If any messages are replayed, Client.Flush must be called by implementations.
 	Replay(subscription Subscription) error
 }
 
@@ -70,6 +74,11 @@ type (
 	messageWithTopics struct {
 		message *Message
 		topics  []string
+	}
+
+	publishedMessage struct {
+		replayerErr chan<- error
+		messageWithTopics
 	}
 )
 
@@ -88,7 +97,7 @@ type (
 // He serves simple use-cases well, as he's light on resources, and does not require any external
 // services. Also, he is the default provider for Servers.
 type Joe struct {
-	message        chan messageWithTopics
+	message        chan publishedMessage
 	subscription   chan subscription
 	unsubscription chan subscriber
 	done           chan struct{}
@@ -102,7 +111,7 @@ type Joe struct {
 }
 
 // Subscribe tells Joe to send new messages to this subscriber. The subscription
-// is automatically removed when the context is done, a callback error occurs
+// is automatically removed when the context is done, a client error occurs
 // or Joe is stopped.
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	j.init()
@@ -135,6 +144,11 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 // to more than one topic that receive the given Message. Every client
 // receives each unique message once, regardless of how many topics it
 // is subscribed to or to how many topics the message is published.
+//
+// It returns ErrNoTopic if no topics are provided, eventual ReplayProvider.Put
+// errors or ErrProviderClosed. If the replay provider returns an error the
+// message will still be sent but most probably it won't be replayed to
+// new subscribers, depending on how the error is handled by the replay provider.
 func (j *Joe) Publish(msg *Message, topics []string) error {
 	if len(topics) == 0 {
 		return ErrNoTopic
@@ -142,11 +156,16 @@ func (j *Joe) Publish(msg *Message, topics []string) error {
 
 	j.init()
 
+	errs := make(chan error, 1)
+	pub := publishedMessage{replayerErr: errs}
+	pub.message = msg
+	pub.topics = topics
+
 	// Waiting on done ensures Publish doesn't block the caller goroutine
 	// when Joe is stopped and implements the required Provider behavior.
 	select {
-	case j.message <- messageWithTopics{message: msg, topics: topics}:
-		return nil
+	case j.message <- pub:
+		return <-errs
 	case <-j.done:
 		return ErrProviderClosed
 	}
@@ -187,19 +206,25 @@ func (j *Joe) start(replay ReplayProvider) {
 	// so in case of a panic subscribers won't block the request goroutines forever.
 	defer j.closeSubscribers()
 
-	canReplay := true
-
 	for {
 		select {
 		case msg := <-j.message:
-			toDispatch := msg.message
-			if canReplay {
-				toDispatch = j.tryPut(msg, replay, &canReplay)
+			if replay != nil {
+				m, err := tryPut(msg.messageWithTopics, &replay)
+				if _, isPanic := err.(replayPanic); err != nil && !isPanic { //nolint:errorlint // it's our error
+					// NOTE(tmaxmax): We could return panic errors here but we'd have to expose
+					// the error type in order for this error to be handled. Let's not change
+					// the public errors for now. See also the other note below.
+					msg.replayerErr <- err
+				} else if m != nil {
+					msg.message = m
+				}
 			}
+			close(msg.replayerErr)
 
 			for done, sub := range j.subscribers {
 				if topicsIntersect(sub.Topics, msg.topics) {
-					err := sub.Client.Send(toDispatch)
+					err := sub.Client.Send(msg.message)
 					if err == nil {
 						err = sub.Client.Flush()
 					}
@@ -212,11 +237,17 @@ func (j *Joe) start(replay ReplayProvider) {
 			}
 		case sub := <-j.subscription:
 			var err error
-			if canReplay {
-				err = j.tryReplay(sub.Subscription, replay, &canReplay)
+			if replay != nil {
+				err = tryReplay(sub.Subscription, &replay)
 			}
 
-			if err != nil && err != errReplayPanicked { //nolint:errorlint // This is our error.
+			// NOTE(tmaxmax): Right now panics are not handled in any way
+			// other than disabling replay altogether. We can't return these
+			// errors from the corresponding Subscribe call because that call
+			// should block for the entire duration of the subscription.
+			//
+			// If there is demand to handle replayer panics a feature could be added.
+			if _, isPanic := err.(replayPanic); err != nil && !isPanic { //nolint:errorlint // it's our error
 				sub.done <- err
 				close(sub.done)
 			} else {
@@ -236,36 +267,32 @@ func (j *Joe) closeSubscribers() {
 	}
 }
 
-var errReplayPanicked = errors.New("replay failed unexpectedly")
+func tryReplay(sub Subscription, replay *ReplayProvider) (err error) { //nolint:gocritic // intended
+	defer handleReplayerPanic(replay, &err)
 
-func (*Joe) tryReplay(sub Subscription, replay ReplayProvider, canReplay *bool) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			*canReplay = false
-			err = errReplayPanicked
-			log.Printf("panic: %v\n%s", r, debug.Stack())
-		}
-	}()
-
-	err = replay.Replay(sub)
-
-	return
+	return (*replay).Replay(sub)
 }
 
-func (*Joe) tryPut(msg messageWithTopics, replay ReplayProvider, canReplay *bool) *Message {
-	defer func() {
-		if r := recover(); r != nil {
-			*canReplay = false
-			log.Printf("panic: %v\n%s", r, debug.Stack())
-		}
-	}()
+func tryPut(msg messageWithTopics, replay *ReplayProvider) (m *Message, err error) { //nolint:gocritic // intended
+	defer handleReplayerPanic(replay, &err)
 
-	return replay.Put(msg.message, msg.topics)
+	return (*replay).Put(msg.message, msg.topics)
+}
+
+type replayPanic struct{}
+
+func (replayPanic) Error() string { return "replay provider panicked" }
+
+func handleReplayerPanic(replay *ReplayProvider, errp *error) { //nolint:gocritic // intended
+	if r := recover(); r != nil {
+		*replay = nil
+		*errp = replayPanic{}
+	}
 }
 
 func (j *Joe) init() {
 	j.initDone.Do(func() {
-		j.message = make(chan messageWithTopics)
+		j.message = make(chan publishedMessage)
 		j.subscription = make(chan subscription)
 		j.unsubscription = make(chan subscriber)
 		j.done = make(chan struct{})
