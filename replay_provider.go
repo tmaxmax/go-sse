@@ -62,22 +62,17 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 		return nil
 	}
 
-	first, second := f.buf.after(i)
-
-	for _, e := range first {
-		if topicsIntersect(subscription.Topics, e.topics) {
-			if err := subscription.Client.Send(e.message); err != nil {
-				return err
+	var err error
+	f.buf.each(i)(func(_ int, m messageWithTopics) bool {
+		if topicsIntersect(subscription.Topics, m.topics) {
+			if err = subscription.Client.Send(m.message); err != nil {
+				return false
 			}
 		}
-	}
-
-	for _, e := range second {
-		if topicsIntersect(subscription.Topics, e.topics) {
-			if err := subscription.Client.Send(e.message); err != nil {
-				return err
-			}
-		}
+		return true
+	})
+	if err != nil {
+		return err
 	}
 
 	return subscription.Client.Flush()
@@ -203,23 +198,19 @@ func (v *ValidReplayProvider) Replay(subscription Subscription) error {
 		return nil
 	}
 
-	first, second := v.messages.after(i)
 	now := v.Now()
 
-	for _, e := range first {
-		if e.exp.After(now) && topicsIntersect(subscription.Topics, e.topics) {
-			if err := subscription.Client.Send(e.message); err != nil {
-				return err
+	var err error
+	v.messages.each(i)(func(_ int, m messageWithTopicsAndExpiry) bool {
+		if m.exp.After(now) && topicsIntersect(subscription.Topics, m.topics) {
+			if err = subscription.Client.Send(m.message); err != nil {
+				return false
 			}
 		}
-	}
-
-	for _, e := range second {
-		if e.exp.After(now) && topicsIntersect(subscription.Topics, e.topics) {
-			if err := subscription.Client.Send(e.message); err != nil {
-				return err
-			}
-		}
+		return true
+	})
+	if err != nil {
+		return err
 	}
 
 	return subscription.Client.Flush()
@@ -264,12 +255,27 @@ type queue[T any] struct {
 	head, tail, count int
 }
 
-func (q *queue[T]) after(i int) (first, second []T) {
-	if i < q.tail {
-		return q.buf[i:q.tail], nil
+func (q *queue[T]) each(startAt int) func(func(int, T) bool) {
+	return func(yield func(int, T) bool) {
+		if startAt < q.tail {
+			for i := startAt; i < q.tail; i++ {
+				if !yield(i, q.buf[i]) {
+					return
+				}
+			}
+		} else {
+			for i := startAt; i < len(q.buf); i++ {
+				if !yield(i, q.buf[i]) {
+					return
+				}
+			}
+			for i := 0; i < q.tail; i++ {
+				if !yield(i, q.buf[i]) {
+					return
+				}
+			}
+		}
 	}
-
-	return q.buf[i:], q.buf[:q.tail]
 }
 
 func (q *queue[T]) enqueue(v T) {
@@ -348,25 +354,13 @@ func findIDInQueue[M interface{ ID() EventID }](q *queue[M], id EventID, autoID 
 	}
 
 	i := -1
-	if q.head < q.tail {
-		for j := q.head; i == -1 && j < q.tail; j++ {
-			if q.buf[j].ID() == id {
-				i = j
-			}
+	q.each(q.head)(func(j int, m M) bool {
+		if m.ID() == id {
+			i = j
+			return false
 		}
-	} else {
-		for j := q.head; i == -1 && j < len(q.buf); j++ {
-			if q.buf[j].ID() == id {
-				i = j
-			}
-		}
-
-		for j := 0; i == -1 && j < q.tail; j++ {
-			if q.buf[j].ID() == id {
-				i = j
-			}
-		}
-	}
+		return true
+	})
 
 	if i != -1 {
 		i++
