@@ -10,7 +10,7 @@ import (
 	"github.com/tmaxmax/go-sse/internal/tests"
 )
 
-func replay(tb testing.TB, p sse.ReplayProvider, lastEventID sse.EventID, topics ...string) []*sse.Message {
+func replay(tb testing.TB, p sse.Replayer, lastEventID sse.EventID, topics ...string) []*sse.Message {
 	tb.Helper()
 
 	if len(topics) == 0 {
@@ -45,7 +45,7 @@ func replay(tb testing.TB, p sse.ReplayProvider, lastEventID sse.EventID, topics
 	return replayed
 }
 
-func put(tb testing.TB, p sse.ReplayProvider, msg *sse.Message, topics ...string) *sse.Message {
+func put(tb testing.TB, p sse.Replayer, msg *sse.Message, topics ...string) *sse.Message {
 	tb.Helper()
 
 	if len(topics) == 0 {
@@ -58,7 +58,7 @@ func put(tb testing.TB, p sse.ReplayProvider, msg *sse.Message, topics ...string
 	return msg
 }
 
-func testReplayError(tb testing.TB, p sse.ReplayProvider, tm *tests.Time) {
+func testReplayError(tb testing.TB, p sse.Replayer, tm *tests.Time) {
 	tb.Helper()
 
 	tm.Reset()
@@ -86,10 +86,10 @@ func TestValidReplayProvider(t *testing.T) {
 	tm := &tests.Time{}
 	ttl := time.Millisecond * 5
 
-	_, err := sse.NewValidReplayProvider(0, false)
+	_, err := sse.NewValidReplayer(0, false)
 	tests.Expect(t, err != nil, "replay provider cannot be created with zero or negative TTL")
 
-	p, _ := sse.NewValidReplayProvider(ttl, true)
+	p, _ := sse.NewValidReplayer(ttl, true)
 	p.GCInterval = 0
 	p.Now = tm.Now
 
@@ -125,7 +125,7 @@ func TestValidReplayProvider(t *testing.T) {
 	tests.Equal(t, len(allReplayed), 2, "there should be two messages in topic 't'")
 	tests.Equal(t, allReplayed[0].String(), "id: 6\ndata: again\n\n", "invalid message received")
 
-	tr, err := sse.NewValidReplayProvider(time.Second, false)
+	tr, err := sse.NewValidReplayer(time.Second, false)
 	tests.Equal(t, err, nil, "replay provider should be created")
 
 	testReplayError(t, tr, tm)
@@ -134,10 +134,10 @@ func TestValidReplayProvider(t *testing.T) {
 func TestFiniteReplayProvider(t *testing.T) {
 	t.Parallel()
 
-	_, err := sse.NewFiniteReplayProvider(1, false)
+	_, err := sse.NewFiniteReplayer(1, false)
 	tests.Expect(t, err != nil, "should not create FiniteReplayProvider with count less than 2")
 
-	p, err := sse.NewFiniteReplayProvider(3, false)
+	p, err := sse.NewFiniteReplayer(3, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
@@ -162,20 +162,20 @@ func TestFiniteReplayProvider(t *testing.T) {
 	replayed = replay(t, p, sse.ID("4"), sse.DefaultTopic, "topic with no messages")[0]
 	tests.Equal(t, replayed.String(), "id: 6\ndata: again\n\n", "invalid replayed message")
 
-	idp, err := sse.NewFiniteReplayProvider(10, true)
+	idp, err := sse.NewFiniteReplayer(10, true)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	_, err = idp.Put(msg(t, "should error", "should not have ID"), []string{sse.DefaultTopic})
 	tests.Expect(t, err != nil, "messages with IDs cannot be put in an autoID replay provider")
 
-	tr, err := sse.NewFiniteReplayProvider(10, false)
+	tr, err := sse.NewFiniteReplayer(10, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	testReplayError(t, tr, nil)
 }
 
 func TestFiniteReplayProvider_allocations(t *testing.T) {
-	p, err := sse.NewFiniteReplayProvider(3, false)
+	p, err := sse.NewFiniteReplayer(3, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	const runs = 100

@@ -2,32 +2,37 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.9.0] - 2024-12-26
+
+This is the replayer update. Oh, what is a "replayer"? It's how we call replay providers starting with this version! Anyway, besides renaming, this update removes many replaying bugs, improves performance, robustness and error handling and better defines expected behavior for `ReplayProviders`... err, `Replayers`.
+
+More such overhauls are planned. I'm leaving it up to you to guess which comes next – the server or the client? ;)
 
 ### Removed
 
-- `FiniteReplayProvider.{Count, AutoIDs}` – use the constructor instead
-- `ValidReplayProvider.{TTL, AutoIDs}` – use the constructor instead
+- `FiniteReplayer.{Count, AutoIDs}` – use the constructor instead.
+- `ValidReplayer.{TTL, AutoIDs}` – use the constructor instead.
 
 ### Changed
 
-- Due to a change in the internal implementation, the `FiniteReplayProvider` is now able to replay events only if the event with the LastEventID provided by the client is still buffered. Previously if the LastEventID was that of the latest removed event, events would still be replayed. This detail added complexity to the implementation without an apparent significant win, so it was dropped.
-- `FiniteReplayProvider.GCInterval` should be set to `0` now in order to disable GC.
-- Automatic ID generation for both providers does not overwrite already existing message IDs and errors instead. Ensure that your events do not have IDs when using providers configured to generate IDs.
-- `ReplayProvider.Put` now returns an error instead of being required to panic. Read the method documentation for more info. `Joe` also propagates this error through `Joe.Publish`.
-- Replay providers are now required to not overwrite message IDs and return errors instead. Sending unsupported messages to replay providers is a bug which should not go unnoticed. Both providers in this library now implement this behavior.
-- `Joe` does not log replay provider panics to the console anymore. Handle these panics inside the replay provider itself.
+- The `ReplayProvider` and related entities are renamed to just `Replayer`. `go-sse` strives to have a minimal and expressive API, and minimal and expressive names are an important step in that direction. The changelog will use the new names onwards.
+- Due to a change in the internal implementation, the `FiniteReplayer` is now able to replay events only if the event with the LastEventID provided by the client is still buffered. Previously if the LastEventID was that of the latest removed event, events would still be replayed. This detail added complexity to the implementation without an apparent significant win, so it was dropped.
+- `FiniteReplayer.GCInterval` should be set to `0` now in order to disable GC.
+- Automatic ID generation for both replayers does not overwrite already existing message IDs and errors instead. Ensure that your events do not have IDs when using replayers configured to generate IDs.
+- `Replayer.Put` now returns an error instead of being required to panic. Read the method documentation for more info. `Joe` also propagates this error through `Joe.Publish`.
+- Replayers are now required to not overwrite message IDs and return errors instead. Sending unsupported messages to replayers is a bug which should not go unnoticed. Both replayers in this library now implement this behavior.
+- `Joe` does not log replayer panics to the console anymore. Handle these panics inside the replay provider itself.
 
 ### Added
 
-- `NewFiniteReplayProvider` constructor
-- `NewValidReplayProvider` constructor
+- `NewFiniteReplayer` constructor
+- `NewValidReplayer` constructor
 - `Connection.Buffer`
 
 ### Fixed
 
-- `FiniteReplayProvider` doesn't leak memory anymore and respects the stored messages count it was given. Previously when a new message was put after the messages count was reached and some other messages were removed, the total messages count would grow unexpectedly and `FiniteReplayProvider` would store and replay more events than it was configured to.
-- `ValidReplayProvider` was also susceptible to a similar memory leak, which is also fixed now.
+- `FiniteReplayer` doesn't leak memory anymore and respects the stored messages count it was given. Previously when a new message was put after the messages count was reached and some other messages were removed, the total messages count would grow unexpectedly and `FiniteReplayer` would store and replay more events than it was configured to.
+- `ValidReplayer` was also susceptible to a similar memory leak, which is also fixed now.
 - #41 – `sse.Session` now writes the header explicitly when upgrading.
 
 ## [0.8.0] - 2024-01-30

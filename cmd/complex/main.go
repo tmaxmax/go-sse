@@ -22,11 +22,11 @@ const (
 )
 
 func newSSE() *sse.Server {
-	rp, _ := sse.NewValidReplayProvider(time.Minute*5, true)
+	rp, _ := sse.NewValidReplayer(time.Minute*5, true)
 	rp.GCInterval = time.Minute
 
 	return &sse.Server{
-		Provider: &sse.Joe{ReplayProvider: rp},
+		Provider: &sse.Joe{Replayer: rp},
 		Logger:   logger{log.New(os.Stderr, "", 0)},
 		OnSession: func(s *sse.Session) (sse.Subscription, bool) {
 			topics := s.Req.URL.Query()["topic"]

@@ -73,7 +73,7 @@ var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 
 // ErrNoTopic is a sentinel error returned when a Message is published without any topics.
 // It is not an issue to call Server.Publish without topics, because the Server will add the DefaultTopic;
-// it is an error to call Provider.Publish or ReplayProvider.Put without any topics, though.
+// it is an error to call Provider.Publish or Replayer.Put without any topics, though.
 var ErrNoTopic = errors.New("go-sse.server: no topics specified")
 
 // DefaultTopic is the identifier for the topic that is implied when no topics are specified for a Subscription
@@ -109,7 +109,7 @@ type Logger interface {
 	Log(ctx context.Context, level LogLevel, msg string, data map[string]any)
 }
 
-// A Server is mostly a convenience wrapper around a provider.
+// A Server is mostly a convenience wrapper around a Provider.
 // It implements the http.Handler interface and has some methods
 // for calling the underlying provider's methods.
 //

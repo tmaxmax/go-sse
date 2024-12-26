@@ -11,13 +11,13 @@ import (
 	"github.com/tmaxmax/go-sse/internal/tests"
 )
 
-type mockReplayProvider struct {
+type mockReplayer struct {
 	putc        chan struct{}
 	replayc     chan struct{}
 	shouldPanic string
 }
 
-func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) (*sse.Message, error) {
+func (m *mockReplayer) Put(msg *sse.Message, _ []string) (*sse.Message, error) {
 	m.putc <- struct{}{}
 	if strings.Contains(m.shouldPanic, "put") {
 		panic("panicked")
@@ -26,7 +26,7 @@ func (m *mockReplayProvider) Put(msg *sse.Message, _ []string) (*sse.Message, er
 	return msg, nil
 }
 
-func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
+func (m *mockReplayer) Replay(_ sse.Subscription) error {
 	m.replayc <- struct{}{}
 	if strings.Contains(m.shouldPanic, "replay") {
 		panic("panicked")
@@ -35,18 +35,18 @@ func (m *mockReplayProvider) Replay(_ sse.Subscription) error {
 	return nil
 }
 
-func (m *mockReplayProvider) replays() int {
+func (m *mockReplayer) replays() int {
 	return len(m.replayc)
 }
 
-func (m *mockReplayProvider) puts() int {
+func (m *mockReplayer) puts() int {
 	return len(m.putc)
 }
 
-var _ sse.ReplayProvider = (*mockReplayProvider)(nil)
+var _ sse.Replayer = (*mockReplayer)(nil)
 
-func newMockReplayProvider(shouldPanic string, numExpectedCalls int) *mockReplayProvider {
-	return &mockReplayProvider{
+func newMockReplayer(shouldPanic string, numExpectedCalls int) *mockReplayer {
+	return &mockReplayer{
 		shouldPanic: shouldPanic,
 		putc:        make(chan struct{}, numExpectedCalls),
 		replayc:     make(chan struct{}, numExpectedCalls),
@@ -73,9 +73,9 @@ func (c mockClient) Flush() error              { return c(nil) }
 func TestJoe_Shutdown(t *testing.T) {
 	t.Parallel()
 
-	rp := newMockReplayProvider("", 0)
+	rp := newMockReplayer("", 0)
 	j := &sse.Joe{
-		ReplayProvider: rp,
+		Replayer: rp,
 	}
 
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "joe should close successfully")
@@ -169,9 +169,9 @@ func newMockContext(tb testing.TB) (*mockContext, context.CancelFunc) {
 func TestJoe_SubscribePublish(t *testing.T) {
 	t.Parallel()
 
-	rp := newMockReplayProvider("", 2)
+	rp := newMockReplayer("", 2)
 	j := &sse.Joe{
-		ReplayProvider: rp,
+		Replayer: rp,
 	}
 	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
 
@@ -229,11 +229,11 @@ data: world
 func TestJoe_errors(t *testing.T) {
 	t.Parallel()
 
-	fin, err := sse.NewFiniteReplayProvider(2, false)
+	fin, err := sse.NewFiniteReplayer(2, false)
 	tests.Equal(t, err, nil, "should create new FiniteReplayProvider")
 
 	j := &sse.Joe{
-		ReplayProvider: fin,
+		Replayer: fin,
 	}
 	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
 
@@ -299,8 +299,8 @@ func (m *mockMessageWriter) Flush() error {
 func TestJoe_ReplayPanic(t *testing.T) {
 	t.Parallel()
 
-	rp := newMockReplayProvider("replay put", 1)
-	j := &sse.Joe{ReplayProvider: rp}
+	rp := newMockReplayer("replay put", 1)
+	j := &sse.Joe{Replayer: rp}
 	wr := &mockMessageWriter{msg: make(chan *sse.Message, 1)}
 
 	topics := []string{sse.DefaultTopic}
@@ -321,8 +321,8 @@ func TestJoe_ReplayPanic(t *testing.T) {
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
 	tests.Equal(t, <-suberr, nil, "unexpected subscribe error")
 
-	rp = newMockReplayProvider("put", 1)
-	j = &sse.Joe{ReplayProvider: rp}
+	rp = newMockReplayer("put", 1)
+	j = &sse.Joe{Replayer: rp}
 	go func() { suberr <- j.Subscribe(context.Background(), sse.Subscription{Client: wr, Topics: topics}) }()
 
 	_, ok = <-rp.replayc

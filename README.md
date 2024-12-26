@@ -55,7 +55,7 @@ import "github.com/tmaxmax/go-sse"
 s := &sse.Server{} // zero value ready to use!
 ```
 
-The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L136) to learn how to implement your own custom logic. It also has some additional configuration options:
+The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L156) to learn how to implement your own custom logic. It also has some additional configuration options:
 
 ```go
 s := &sse.Server{
@@ -99,10 +99,10 @@ import "github.com/tmaxmax/go-sse"
 joe := &sse.Joe{} // the zero value is ready to use!
 ```
 
-and he'll dispatch events all day! By default, he has no memory of what events he has received, but you can help him remember and replay older messages to new clients using a `ReplayProvider`:
+and he'll dispatch events all day! By default, he has no memory of what events he has received, but you can help him remember and replay older messages to new clients using a `Replayer`:
 
 ```go
-type ReplayProvider interface {
+type Replayer interface {
     // Put a new event in the provider's buffer.
     // If the provider automatically adds IDs aswell,
     // the returned message will also have the ID set,
@@ -113,24 +113,24 @@ type ReplayProvider interface {
 }
 ```
 
-`go-sse` provides two replay providers by default, which both hold the events in-memory: the `ValidReplayProvider` and `FiniteReplayProvider`. The first replays events that are valid, not expired, the second replays a finite number of the most recent events. For example:
+`go-sse` provides two replayers by default, which both hold the events in-memory: the `ValidReplayer` and `FiniteReplayer`. The first replays events that are valid, not expired, the second replays a finite number of the most recent events. For example:
 
 ```go
 // Let's have events expire after 5 minutes. For this example we don't enable automatic ID generation.
-rp, err := sse.NewValidReplayProvider(time.Minute * 5, false)
+r, err := sse.NewValidReplayer(time.Minute * 5, false)
 if err != nil {
     // TTL was 0 or negative.
     // Useful to have this error if the value comes from a config which happens to be faulty.
 }
 
-joe = &sse.Joe{ReplayProvider: rp}
+joe = &sse.Joe{Replayer: r}
 ```
 
-will tell Joe to replay all valid events! Replay providers can do so much more (for example, add IDs to events automatically): read the [docs][3] on how to use the existing ones and how to implement yours.
+will tell Joe to replay all valid events! Replayers can do so much more (for example, add IDs to events automatically): read the [docs][3] on how to use the existing ones and how to implement yours.
 
-You can also implement your own replay providers: maybe you need persistent storage for your events? Or event validity is determined based on other criterias than expiry time? And if you think your replay provider may be useful to others, you are encouraged to share it!
+You can also implement your own replayers: maybe you need persistent storage for your events? Or event validity is determined based on other criterias than expiry time? And if you think your replayer may be useful to others, you are encouraged to share it!
 
-`go-sse` created the `ReplayProvider` interface mainly for `Joe`, but it encourages you to integrate it with your own `Provider` implementations, where suitable.
+`go-sse` created the `Replayer` interface mainly for `Joe`, but it encourages you to integrate it with your own `Provider` implementations, where suitable.
 
 ### Publish your first event
 
@@ -161,7 +161,7 @@ data: to see you.
 
 You can also see that `go-sse` takes care of splitting input by lines into new fields, as required by the specification.
 
-Keep in mind that providers, such as the `ValidReplayProvider` used above, will give an error for and won't replay the events without an ID (unless, of course, they give the IDs themselves). To have our event expire, as configured, we must set an ID for the event:
+Keep in mind that replayers, such as the `ValidReplayer` used above, will give an error for and won't replay the events without an ID (unless, of course, they give the IDs themselves). To have our event expire, as configured, we must set an ID for the event:
 
 ```go
 m.ID = sse.ID("unique")
@@ -309,7 +309,7 @@ unsubscribe := conn.SubscribeToAll(func (event sse.Event) {
 })
 ```
 
-All `Susbcribe` methods return a function that when called tells the connection to stop calling the corresponding callback.
+All `Subscribe` methods return a function that when called tells the connection to stop calling the corresponding callback.
 
 In order to work with events, the `sse.Event` type has some fields and methods exposed:
 
@@ -442,7 +442,7 @@ Thank you for contributing!
 
 [1]: https://github.com/cenkalti/backoff
 [2]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Provider
-[3]: https://pkg.go.dev/github.com/tmaxmax/go-sse#ReplayProvider
+[3]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Replayer
 [4]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Message
 [5]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Client
 [6]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Event

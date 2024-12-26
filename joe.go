@@ -5,18 +5,18 @@ import (
 	"sync"
 )
 
-// A ReplayProvider is a type that can replay older published events to new subscribers.
-// Replay providers use event IDs, the topics the events were published to and optionally
-// the events' expiration times or any other criteria to determine which are valid for replay.
+// A Replayer is a type that can replay older published events to new subscribers.
+// Replayers use event IDs, the topics the events were published and optionally
+// any other criteria to determine which are valid for replay.
 //
-// While providers can require events to have IDs beforehand, they can also set the IDs themselves,
-// automatically - it's up to the implementation. Providers should not overwrite or remove any existing
+// While replayers can require events to have IDs beforehand, they can also set the IDs themselves,
+// automatically - it's up to the implementation. Replayers should not overwrite or remove any existing
 // IDs and return an error instead.
 //
-// Replay providers are not required to be thread-safe - server providers are required to ensure only
-// one operation is executed on the replay provider at any given time. Server providers may not execute
-// replay operation concurrently with other operations, so make sure any action on the replay provider
-// blocks for as little as possible. If a replay provider is thread-safe, some operations may be
+// Replayers are not required to be thread-safe - server providers are required to ensure only
+// one operation is executed on the replayer at any given time. Server providers may not execute
+// replay operation concurrently with other operations, so make sure any action on the replayer
+// blocks for as little as possible. If a replayer is thread-safe, some operations may be
 // run in a separate goroutine - see the interface's method documentation.
 //
 // Executing actions that require waiting for a long time on I/O, such as HTTP requests or database
@@ -25,30 +25,30 @@ import (
 // recommended, as long as the implementation fulfills the requirements.
 //
 // If not specified otherwise, the errors returned are implementation-specific.
-type ReplayProvider interface {
+type Replayer interface {
 	// Put adds a new event to the replay buffer. The Message that is returned may not have the
-	// same address, if the replay provider automatically sets IDs.
+	// same address, if the replayer automatically sets IDs.
 	//
 	// Put errors if the message couldn't be queued – if no topics are provided,
-	// a message without an ID is put into a ReplayProvider which does not
-	// automatically set IDs, or a message with an ID is put into a ReplayProvider which
+	// a message without an ID is put into a Replayer which does not
+	// automatically set IDs, or a message with an ID is put into a Replayer which
 	// does automatically set IDs. An error should be returned for other failures
 	// related to the given message. When no topics are provided, ErrNoTopic should be
 	// returned.
 	//
-	// The Put operation may be executed by the replay provider in another goroutine only if
+	// The Put operation may be executed by the replayer in another goroutine only if
 	// it can ensure that any Replay operation called after the Put goroutine is started
-	// can replay the new received message. This also requires the replay provider implementation
+	// can replay the new received message. This also requires the replayer implementation
 	// to be thread-safe.
 	//
-	// Replay providers are not required to guarantee that immediately after Put returns
+	// Replayers are not required to guarantee that immediately after Put returns
 	// the new messages can be replayed. If an error occurs internally when putting the new message
 	// and retrying the operation would block for too long, it can be aborted.
 	//
-	// To indicate a complete replay provider failure (i.e. the replay provider won't work after this point)
+	// To indicate a complete replayer failure (i.e. the replayer won't work after this point)
 	// a panic should be used instead of an error.
 	Put(message *Message, topics []string) (*Message, error)
-	// Replay sends to a new subscriber all the valid events received by the provider
+	// Replay sends to a new subscriber all the valid events received by the replayer
 	// since the event with the listener's ID. If the ID the listener provides
 	// is invalid, the provider should not replay any events.
 	//
@@ -86,10 +86,10 @@ type (
 // Events are also sent synchronously to subscribers, so if a subscriber's callback blocks, the others
 // have to wait.
 //
-// Joe optionally supports event replaying with the help of a replay provider.
+// Joe optionally supports event replaying with the help of a Replayer.
 //
-// If the replay provider panics, the subscription for which it panicked is considered failed
-// and an error is returned, and thereafter the replay provider is not used anymore – no replays
+// If the replayer panics, the subscription for which it panicked is considered failed
+// and an error is returned, and thereafter the replayer is not used anymore – no replays
 // will be attempted for future subscriptions.
 // If due to some other unexpected scenario something panics internally, Joe will remove all subscribers
 // and close itself, so subscribers don't end up blocked.
@@ -104,8 +104,8 @@ type Joe struct {
 	closed         chan struct{}
 	subscribers    map[subscriber]Subscription
 
-	// An optional replay provider that Joe uses to resend older messages to new subscribers.
-	ReplayProvider ReplayProvider
+	// An optional replayer that Joe uses to resend older messages to new subscribers.
+	Replayer Replayer
 
 	initDone sync.Once
 }
@@ -145,8 +145,8 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 // receives each unique message once, regardless of how many topics it
 // is subscribed to or to how many topics the message is published.
 //
-// It returns ErrNoTopic if no topics are provided, eventual ReplayProvider.Put
-// errors or ErrProviderClosed. If the replay provider returns an error the
+// It returns ErrNoTopic if no topics are provided, eventual Replayer.Put
+// errors or ErrProviderClosed. If the replayer returns an error the
 // message will still be sent but most probably it won't be replayed to
 // new subscribers, depending on how the error is handled by the replay provider.
 func (j *Joe) Publish(msg *Message, topics []string) error {
@@ -200,7 +200,7 @@ func (j *Joe) removeSubscriber(sub subscriber) {
 	close(sub)
 }
 
-func (j *Joe) start(replay ReplayProvider) {
+func (j *Joe) start(replay Replayer) {
 	defer close(j.closed)
 	// defer closing all subscribers instead of closing them when done is closed
 	// so in case of a panic subscribers won't block the request goroutines forever.
@@ -267,13 +267,13 @@ func (j *Joe) closeSubscribers() {
 	}
 }
 
-func tryReplay(sub Subscription, replay *ReplayProvider) (err error) { //nolint:gocritic // intended
+func tryReplay(sub Subscription, replay *Replayer) (err error) { //nolint:gocritic // intended
 	defer handleReplayerPanic(replay, &err)
 
 	return (*replay).Replay(sub)
 }
 
-func tryPut(msg messageWithTopics, replay *ReplayProvider) (m *Message, err error) { //nolint:gocritic // intended
+func tryPut(msg messageWithTopics, replay *Replayer) (m *Message, err error) { //nolint:gocritic // intended
 	defer handleReplayerPanic(replay, &err)
 
 	return (*replay).Put(msg.message, msg.topics)
@@ -283,7 +283,7 @@ type replayPanic struct{}
 
 func (replayPanic) Error() string { return "replay provider panicked" }
 
-func handleReplayerPanic(replay *ReplayProvider, errp *error) { //nolint:gocritic // intended
+func handleReplayerPanic(replay *Replayer, errp *error) { //nolint:gocritic // intended
 	if r := recover(); r != nil {
 		*replay = nil
 		*errp = replayPanic{}
@@ -299,9 +299,9 @@ func (j *Joe) init() {
 		j.closed = make(chan struct{})
 		j.subscribers = map[subscriber]Subscription{}
 
-		replay := j.ReplayProvider
+		replay := j.Replayer
 		if replay == nil {
-			replay = noopReplayProvider{}
+			replay = noopReplayer{}
 		}
 		go j.start(replay)
 	})

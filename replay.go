@@ -6,22 +6,22 @@ import (
 	"time"
 )
 
-// NewFiniteReplayProvider creates a finite replay provider with the given max
+// NewFiniteReplayer creates a finite replay provider with the given max
 // count and auto ID behaviour.
 //
-// Count is the maximum number of events FiniteReplayProvider should hold as
+// Count is the maximum number of events FiniteReplayer should hold as
 // valid. It must be greater than zero.
 //
-// AutoIDs configures FiniteReplayProvider to automatically set the IDs of
+// AutoIDs configures FiniteReplayer to automatically set the IDs of
 // events.
-func NewFiniteReplayProvider(
+func NewFiniteReplayer(
 	count int, autoIDs bool,
-) (*FiniteReplayProvider, error) {
+) (*FiniteReplayer, error) {
 	if count < 2 {
 		return nil, errors.New("count must be at least 2")
 	}
 
-	r := &FiniteReplayProvider{}
+	r := &FiniteReplayer{}
 	r.buf.buf = make([]messageWithTopics, count)
 	if autoIDs {
 		r.currentID = new(uint64)
@@ -30,16 +30,16 @@ func NewFiniteReplayProvider(
 	return r, nil
 }
 
-// FiniteReplayProvider is a replay provider that replays at maximum a certain number of events.
-// The events must have an ID unless the replay provider is configured to set IDs automatically.
-type FiniteReplayProvider struct {
+// FiniteReplayer is a replayer that replays at maximum a certain number of events.
+// The events must have an ID unless the replayer is configured to set IDs automatically.
+type FiniteReplayer struct {
 	currentID *uint64
 	buf       queue[messageWithTopics]
 }
 
-// Put puts a message into the provider's buffer. If there are more messages than the maximum
+// Put puts a message into the replayer's buffer. If there are more messages than the maximum
 // number, the oldest message is removed.
-func (f *FiniteReplayProvider) Put(message *Message, topics []string) (*Message, error) {
+func (f *FiniteReplayer) Put(message *Message, topics []string) (*Message, error) {
 	if len(topics) == 0 {
 		return nil, ErrNoTopic
 	}
@@ -54,9 +54,8 @@ func (f *FiniteReplayProvider) Put(message *Message, topics []string) (*Message,
 	return message, nil
 }
 
-// Replay replays the messages in the buffer to the listener.
-// It doesn't take into account the messages' expiry times.
-func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
+// Replay replays the stored messages to the listener.
+func (f *FiniteReplayer) Replay(subscription Subscription) error {
 	i := findIDInQueue(&f.buf, subscription.LastEventID, f.currentID != nil)
 	if i < 0 {
 		return nil
@@ -78,13 +77,13 @@ func (f *FiniteReplayProvider) Replay(subscription Subscription) error {
 	return subscription.Client.Flush()
 }
 
-// ValidReplayProvider is a ReplayProvider that replays all the buffered non-expired events.
+// ValidReplayer is a Replayer that replays all the buffered non-expired events.
 //
-// The provider removes any expired events when a new event is put and after at least
+// The replayer removes any expired events when a new event is put and after at least
 // a GCInterval period passed.
 //
-// The events must have an ID unless the replay provider is configured to set IDs automatically.
-type ValidReplayProvider struct {
+// The events must have an ID unless the replayer is configured to set IDs automatically.
+type ValidReplayer struct {
 	lastGC time.Time
 
 	// The function used to retrieve the current time. Defaults to time.Now.
@@ -95,7 +94,7 @@ type ValidReplayProvider struct {
 	messages  queue[messageWithTopicsAndExpiry]
 
 	ttl time.Duration
-	// After how long the ReplayProvider should attempt to clean up expired events.
+	// After how long the replayer should attempt to clean up expired events.
 	// By default cleanup is done after a fourth of the TTL has passed; this means
 	// that messages may be stored for a duration equal to 5/4*TTL. If this is not
 	// desired, set the GC interval to a value sensible for your use case or set
@@ -104,19 +103,19 @@ type ValidReplayProvider struct {
 	GCInterval time.Duration
 }
 
-// NewValidReplayProvider creates a valid replay provider with the given message
+// NewValidReplayer creates a ValidReplayer with the given message
 // lifetime duration (time-to-live) and auto ID behavior.
 //
 // The TTL must be a positive duration. It is technically possible to use a very
 // big duration in order to store and replay every message put for the lifetime
 // of the program; this is not recommended, as memory usage becomes effectively
 // unbounded which might lead to a crash.
-func NewValidReplayProvider(ttl time.Duration, autoIDs bool) (*ValidReplayProvider, error) {
+func NewValidReplayer(ttl time.Duration, autoIDs bool) (*ValidReplayer, error) {
 	if ttl <= 0 {
 		return nil, errors.New("event TTL must be greater than zero")
 	}
 
-	r := &ValidReplayProvider{
+	r := &ValidReplayer{
 		Now:        time.Now,
 		GCInterval: ttl / 4,
 		ttl:        ttl,
@@ -129,8 +128,8 @@ func NewValidReplayProvider(ttl time.Duration, autoIDs bool) (*ValidReplayProvid
 	return r, nil
 }
 
-// Put puts the message into the provider's buffer.
-func (v *ValidReplayProvider) Put(message *Message, topics []string) (*Message, error) {
+// Put puts the message into the replayer's buffer.
+func (v *ValidReplayer) Put(message *Message, topics []string) (*Message, error) {
 	if len(topics) == 0 {
 		return nil, ErrNoTopic
 	}
@@ -163,16 +162,16 @@ func (v *ValidReplayProvider) Put(message *Message, topics []string) (*Message, 
 	return message, nil
 }
 
-func (v *ValidReplayProvider) shouldGC(now time.Time) bool {
+func (v *ValidReplayer) shouldGC(now time.Time) bool {
 	return v.GCInterval > 0 && now.Sub(v.lastGC) >= v.GCInterval
 }
 
-// GC removes all the expired messages from the provider's buffer.
-func (v *ValidReplayProvider) GC() {
+// GC removes all the expired messages from the replayer's buffer.
+func (v *ValidReplayer) GC() {
 	v.doGC(v.Now())
 }
 
-func (v *ValidReplayProvider) doGC(now time.Time) {
+func (v *ValidReplayer) doGC(now time.Time) {
 	for v.messages.count > 0 {
 		e := v.messages.buf[v.messages.head]
 		if e.exp.After(now) {
@@ -192,7 +191,7 @@ func (v *ValidReplayProvider) doGC(now time.Time) {
 }
 
 // Replay replays all the valid messages to the listener.
-func (v *ValidReplayProvider) Replay(subscription Subscription) error {
+func (v *ValidReplayer) Replay(subscription Subscription) error {
 	i := findIDInQueue(&v.messages, subscription.LastEventID, v.currentID != nil)
 	if i < 0 {
 		return nil
@@ -381,9 +380,9 @@ type messageWithTopicsAndExpiry struct {
 	messageWithTopics
 }
 
-// noopReplayProvider is the default replay provider used if none is given. It does nothing.
+// noopReplayer is the default replay provider used if none is given. It does nothing.
 // It is used to avoid nil checks for the provider each time it is used.
-type noopReplayProvider struct{}
+type noopReplayer struct{}
 
-func (n noopReplayProvider) Put(m *Message, _ []string) (*Message, error) { return m, nil }
-func (n noopReplayProvider) Replay(_ Subscription) error                  { return nil }
+func (n noopReplayer) Put(m *Message, _ []string) (*Message, error) { return m, nil }
+func (n noopReplayer) Replay(_ Subscription) error                  { return nil }
