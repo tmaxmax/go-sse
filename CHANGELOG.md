@@ -28,6 +28,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 - `FiniteReplayProvider` doesn't leak memory anymore and respects the stored messages count it was given. Previously when a new message was put after the messages count was reached and some other messages were removed, the total messages count would grow unexpectedly and `FiniteReplayProvider` would store and replay more events than it was configured to.
 - `ValidReplayProvider` was also susceptible to a similar memory leak, which is also fixed now.
+- #41 – `sse.Session` now writes the header explicitly when upgrading.
 
 ## [0.8.0] - 2024-01-30
 
