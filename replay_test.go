@@ -80,7 +80,6 @@ func TestValidReplayProvider(t *testing.T) {
 	tests.Equal(t, p.Replay(sse.Subscription{}), nil, "replay failed on provider without messages")
 
 	now := time.Now()
-	initialNow := now
 	tm.Set(now)
 
 	p.Put(msg(t, "hi", ""), []string{sse.DefaultTopic})
@@ -94,14 +93,21 @@ func TestValidReplayProvider(t *testing.T) {
 	tm.Add(ttl * 5)
 	p.Put(msg(t, "again", ""), []string{"t"})
 
-	tm.Set(initialNow.Add(ttl))
+	tm.Set(now.Add(ttl))
 
 	p.GC()
 
-	tm.Set(now.Add(ttl))
-
 	replayed := replay(t, p, sse.ID("3"), sse.DefaultTopic, "topic with no messages")[0]
 	tests.Equal(t, replayed.String(), "id: 4\ndata: world\n\n", "invalid message received")
+
+	p.GCInterval = ttl / 5
+	// Should trigger automatic GC which should clean up most of the messages.
+	tm.Set(now.Add(ttl * 5))
+	p.Put(msg(t, "not again", ""), []string{"t"})
+
+	allReplayed := replay(t, p, sse.ID("3"), "t", "topic with no messages")
+	tests.Equal(t, len(allReplayed), 2, "there should be two messages in topic 't'")
+	tests.Equal(t, allReplayed[0].String(), "id: 6\ndata: again\n\n", "invalid message received")
 
 	tr, err := sse.NewValidReplayProvider(time.Second, false)
 	tests.Equal(t, err, nil, "replay provider should be created")

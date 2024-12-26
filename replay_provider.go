@@ -158,7 +158,7 @@ func (v *ValidReplayProvider) Put(message *Message, topics []string) *Message {
 		v.messages.resize(newCap)
 	}
 
-	v.messages.enqueue(messageWithTopicsAndExpiry{messageWithTopics: messageWithTopics{message: message, topics: topics}, exp: now})
+	v.messages.enqueue(messageWithTopicsAndExpiry{messageWithTopics: messageWithTopics{message: message, topics: topics}, exp: now.Add(v.ttl)})
 
 	return message
 }
