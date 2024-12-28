@@ -141,6 +141,32 @@ data: still, here's some data: you deserve it
 			t.Fatalf("expected error %v, received %v", bufio.ErrTooLong, p.Err())
 		}
 	})
+
+	t.Run("Separate CRLF", func(t *testing.T) {
+		r, w := io.Pipe()
+		t.Cleanup(func() { r.Close() })
+
+		p := parser.New(r)
+
+		go func() {
+			defer w.Close()
+			_, _ = io.WriteString(w, "data: hello\n\r")
+			// This LF should be ignored and yield no results.
+			_, _ = io.WriteString(w, "\n")
+			_, _ = io.WriteString(w, "data: world\n")
+		}()
+
+		var fields []parser.Field
+		for f := (parser.Field{}); p.Next(&f); {
+			fields = append(fields, f)
+		}
+
+		expected := []parser.Field{newDataField(t, "hello"), {}, newDataField(t, "world")}
+
+		if !reflect.DeepEqual(fields, expected) {
+			t.Fatalf("unexpected result:\nreceived %v\nexpected %v", fields, expected)
+		}
+	})
 }
 
 func BenchmarkParser(b *testing.B) {
