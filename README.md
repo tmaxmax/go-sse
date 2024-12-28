@@ -12,6 +12,7 @@ Lightweight, fully spec-compliant HTML5 server-sent events library.
 - [go-sse](#go-sse)
   - [Table of contents](#table-of-contents)
   - [Installation and usage](#installation-and-usage)
+  - [Cut to the chase – how do I read my LLM's response?](#cut-to-the-chase--how-do-i-read-my-llms-response)
   - [Implementing a server](#implementing-a-server)
     - [Providers and why they are vital](#providers-and-why-they-are-vital)
     - [Meet Joe, the default provider](#meet-joe-the-default-provider)
@@ -42,6 +43,43 @@ The library provides both server-side and client-side implementations of the pro
 If you are not familiar with the protocol or not sure how it works, read [MDN's guide for using server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events). [The spec](https://html.spec.whatwg.org/multipage/server-sent-events.html) is also useful read!
 
 `go-sse` promises to support the [Go versions supported by the Go team](https://go.dev/doc/devel/release#policy) – that is, the 2 most recent major releases.
+
+## Cut to the chase – how do I read my LLM's response?
+
+If you're here just to read ChatGPT's, Claude's or whichever LLM's response stream, you're in the right place! Let's take a look at [`sse.Read`](https://pkg.go.dev/github.com/tmaxmax/go-sse#Read): you just make your HTTP request the same way you'd do for any other API and call it on the request body. Here's some code:
+
+```go
+req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.yourllm.com/v1/chat/completions", payload)
+req.Header.Set("Authorization", "Bearer "+yourKey)
+
+res, err := http.DefaultClient.Do(req)
+if err != nil {
+    // handle error
+}
+defer res.Body.Close() // don't forget!!
+
+events, errf := sse.Read(res, nil)
+for ev := range events {
+    // Do something with the events, parse the JSON or whatever.
+    // Only valid events will be here, if there's an error iteration stops.
+}
+if err := errf(); err != nil {
+    // Handle any reading errors. This function must be called
+    // after iterating over the events!
+}
+```
+
+See the [LLM example](cmd/llm/main.go) for a fully working Go program.
+
+Go 1.23 iterators (officially ["range-over-func"](https://go.dev/blog/range-functions)) are used for this feature. If you are still on Go 1.22 use the `GOEXPERIMENT=rangefunc` environment variable (e.g. `GOEXPERIMENT=rangefunc go run main.go`) or use the iterator without the syntactic sugar:
+```go
+events(func(ev Event) bool {
+    // do something with event
+    return true // or false to stop iteration
+})
+```
+
+`sse.Read` is also useful if you're implementing an LLM SDK: call it in your code and spare yourself time and maintenance burden by not reimplementing event stream parsing.
 
 ## Implementing a server
 

@@ -2,6 +2,14 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2024-12-29
+
+If you're working with LLMs in Go this update will make you happy! `sse.Read` is now a thing – it just parses all events from an `io.Reader`. Use it with your response bodies and forget about any `sse.Client` configuration. It also makes use of the new Go 1.23 iterators to keep your code neat and tidy.
+
+### Added
+
+- `Read` and `ReadConfig`
+
 ## [0.9.0] - 2024-12-26
 
 This is the replayer update. Oh, what is a "replayer"? It's how we call replay providers starting with this version! Anyway, besides renaming, this update removes many replaying bugs, improves performance, robustness and error handling and better defines expected behavior for `ReplayProviders`... err, `Replayers`.
