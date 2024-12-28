@@ -168,14 +168,18 @@ func (c *Connection) read(r io.Reader, setRetry func(time.Duration)) error {
 		return p
 	}
 
-	events, errf := read(pf, c.lastEventID, func(r int64) { setRetry(time.Duration(r) * time.Millisecond) }, false)
-	events(func(e Event) bool {
+	var readErr error
+	read(pf, c.lastEventID, func(r int64) { setRetry(time.Duration(r) * time.Millisecond) }, false)(func(e Event, err error) bool {
+		if err != nil {
+			readErr = err
+			return false
+		}
 		c.lastEventID = e.LastEventID
 		c.dispatch(e)
 		return true
 	})
 
-	return errf()
+	return readErr
 }
 
 // Connect sends the request the connection was created with to the server

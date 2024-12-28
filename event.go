@@ -31,10 +31,11 @@ type ReadConfig struct {
 	MaxEventSize int
 }
 
-// Read parses an SSE stream and yields all incoming events.
-// On any encountered errors Read stops execution. The error can be retrieved
-// using the returned error function. If EOF is reached, the Read operation
-// is considered successful and the error function will return a nil value.
+// Read parses an SSE stream and yields all incoming events,
+// On any encountered errors iteration stops and no further events are parsed –
+// the loop can safely be ended on error. If EOF is reached, the Read operation
+// is considered successful and no error is returned. An Event will never
+// be yielded together with an error.
 //
 // Read is especially useful for parsing responses from services which
 // communicate using SSE but not over long-lived connections – for example,
@@ -48,7 +49,7 @@ type ReadConfig struct {
 //
 // Read provides no way to handle the "retry" field and doesn't handle retrying.
 // Use a Client and a Connection if you need to retry requests.
-func Read(r io.Reader, cfg *ReadConfig) (func(func(Event) bool), func() error) {
+func Read(r io.Reader, cfg *ReadConfig) func(func(Event, error) bool) {
 	pf := func() *parser.Parser {
 		p := parser.New(r)
 		if cfg != nil && cfg.MaxEventSize > 0 {
@@ -65,16 +66,8 @@ func Read(r io.Reader, cfg *ReadConfig) (func(func(Event) bool), func() error) {
 	return read(pf, "", nil, true)
 }
 
-func read(pf func() *parser.Parser, lastEventID string, onRetry func(int64), ignoreEOF bool) (func(func(Event) bool), func() error) {
-	var err error
-	errf := func() error {
-		if ignoreEOF && err == io.EOF { //nolint:errorlint // this is our error
-			err = nil
-		}
-		return err
-	}
-
-	return func(yield func(Event) bool) {
+func read(pf func() *parser.Parser, lastEventID string, onRetry func(int64), ignoreEOF bool) func(func(Event, error) bool) {
+	return func(yield func(Event, error) bool) {
 		p := pf()
 
 		typ, sb, dirty := "", strings.Builder{}, false
@@ -82,7 +75,7 @@ func read(pf func() *parser.Parser, lastEventID string, onRetry func(int64), ign
 			if data != "" {
 				data = data[:len(data)-1]
 			}
-			return yield(Event{LastEventID: lastEventID, Data: data, Type: typ})
+			return yield(Event{LastEventID: lastEventID, Data: data, Type: typ}, nil)
 		}
 
 		for f := (parser.Field{}); p.Next(&f); {
@@ -124,9 +117,17 @@ func read(pf func() *parser.Parser, lastEventID string, onRetry func(int64), ign
 			}
 		}
 
-		err = p.Err()
-		if dirty && err == io.EOF { //nolint:errorlint // Our scanner returns io.EOF unwrapped
-			doYield(sb.String())
+		err := p.Err()
+		isEOF := err == io.EOF //nolint:errorlint // Our scanner returns io.EOF unwrapped
+
+		if dirty && isEOF {
+			if !doYield(sb.String()) {
+				return
+			}
 		}
-	}, errf
+
+		if err != nil && !(ignoreEOF && isEOF) {
+			yield(Event{}, err)
+		}
+	}
 }

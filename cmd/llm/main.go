@@ -59,8 +59,13 @@ func main() {
 		return
 	}
 
-	events, errf := sse.Read(res.Body, nil)
-	for ev := range events {
+	for ev, err := range sse.Read(res.Body, nil) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "while reading response body: %v\n", err)
+			// Can return – Read stops after first error and no subsequent events are parsed.
+			return
+		}
+
 		var data struct {
 			Choices []struct {
 				Delta struct {
@@ -74,9 +79,5 @@ func main() {
 		}
 
 		fmt.Printf("%s ", data.Choices[0].Delta.Content)
-	}
-	if err := errf(); err != nil {
-		fmt.Fprintf(os.Stderr, "while reading response body: %v\n", err)
-		return
 	}
 }

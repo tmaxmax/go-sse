@@ -50,6 +50,7 @@ If you're here just to read ChatGPT's, Claude's or whichever LLM's response stre
 
 ```go
 req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.yourllm.com/v1/chat/completions", payload)
+req.Header.Set("Content-Type", "application/json")
 req.Header.Set("Authorization", "Bearer "+yourKey)
 
 res, err := http.DefaultClient.Do(req)
@@ -58,14 +59,12 @@ if err != nil {
 }
 defer res.Body.Close() // don't forget!!
 
-events, errf := sse.Read(res, nil)
-for ev := range events {
+for ev, err := range sse.Read(res, nil) {
+    if err != nil {
+        // handle read error
+        break // can end the loop as Read stops on first error anyway
+    }
     // Do something with the events, parse the JSON or whatever.
-    // Only valid events will be here, if there's an error iteration stops.
-}
-if err := errf(); err != nil {
-    // Handle any reading errors. This function must be called
-    // after iterating over the events!
 }
 ```
 

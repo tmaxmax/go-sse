@@ -18,35 +18,43 @@ func TestRead(t *testing.T) {
 
 	var recv []sse.Event
 
-	events, errf := sse.Read(response, nil)
-	events(func(e sse.Event) bool {
+	events := sse.Read(response, nil)
+	events(func(e sse.Event, err error) bool {
+		tests.Equal(t, err, nil, "unexpected error")
 		recv = append(recv, e)
 		return true
 	})
 
-	tests.Equal(t, errf(), nil, "unexpected error")
 	tests.DeepEqual(t, recv, []sse.Event{{Data: "Hello World!"}}, "incorrect result")
 
 	t.Run("Buffer", func(t *testing.T) {
 		_, _ = response.Seek(0, io.SeekStart)
 
-		events, errf := sse.Read(response, &sse.ReadConfig{MaxEventSize: 3})
-		events(func(sse.Event) bool { return true })
-		tests.Expect(t, errf() != nil, "should fail because of too small buffer")
+		events := sse.Read(response, &sse.ReadConfig{MaxEventSize: 3})
+		var err error
+		events(func(_ sse.Event, e error) bool { err = e; return err == nil })
+		tests.Expect(t, err != nil, "should fail because of too small buffer")
 	})
 
 	t.Run("Break", func(t *testing.T) {
-		events, errf := sse.Read(strings.NewReader("id: a\n\nid: b\n\nid: c\n"), nil) // also test EOF edge case
+		events := sse.Read(strings.NewReader("id: a\n\nid: b\n\nid: c\n"), nil) // also test EOF edge case
 
 		var recv []sse.Event
-		events(func(e sse.Event) bool {
+		events(func(e sse.Event, err error) bool {
+			tests.Equal(t, err, nil, "unexpected error")
 			recv = append(recv, e)
 			return len(recv) < 2
 		})
 
-		tests.Equal(t, errf(), nil, "unexpected error")
-
 		expected := []sse.Event{{LastEventID: "a"}, {LastEventID: "b"}}
 		tests.DeepEqual(t, recv, expected, "iterator didn't stop")
+
+		// Cover break check on EOF edge case
+		// NOTE(tmaxmax): Should also test this with EOF return when possible.
+		sse.Read(strings.NewReader("data: x\n"), nil)(func(e sse.Event, err error) bool {
+			tests.Equal(t, err, nil, "unexpected error")
+			tests.Equal(t, e, sse.Event{Data: "x"}, "unexpected event")
+			return false
+		})
 	})
 }
