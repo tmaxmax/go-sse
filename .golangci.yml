@@ -44,6 +44,7 @@ linters-settings:
   gocritic:
     disabled-checks:
       - ifElseChain
+      - unnamedResult
     enabled-tags:
       - performance
       - diagnostic
