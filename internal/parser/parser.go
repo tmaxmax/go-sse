@@ -16,7 +16,7 @@ func splitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
 
 	var start int
 	for {
-		index, endlineLen := NewlineIndex((*(*string)(unsafe.Pointer(&data)))[advance:])
+		index, endlineLen := NewlineIndex(unsafe.String(unsafe.SliceData(data), len(data))[advance:])
 		advance += index + endlineLen
 		if index == 0 {
 			// If it was a blank line, skip it.
