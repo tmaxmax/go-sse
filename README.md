@@ -59,7 +59,7 @@ if err != nil {
 }
 defer res.Body.Close() // don't forget!!
 
-for ev, err := range sse.Read(res, nil) {
+for ev, err := range sse.Read(res.Body, nil) {
     if err != nil {
         // handle read error
         break // can end the loop as Read stops on first error anyway
