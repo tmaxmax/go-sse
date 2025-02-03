@@ -2,6 +2,23 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2025-02-02
+
+The `sse.Server` logging and session handling were revamped to have more familiar, more flexible and less error prone interfaces for users.
+
+### Removed
+
+- `Logger` and `LogLevel` enum have been removed. `Server.Logger` has transitioned to the standard `slog` library for better compatibility with the ecosystem
+
+### Changed
+
+- `Server.Logger` is now of type `func(r *http.Request) *slog.Logger` instead of `sse.Logger` – it is possible to customize the logger on a per-request basis, by for example retrieving it from the context. 
+- `Server.OnSession` signature changed from `func(s *Session) (Subscription, bool)` to `func(w http.ResponseWriter, r *http.Request) (topics []string, accepted bool)` – its initial role was to essentially just provide the topics, so the need to fiddle with `Session` and `Subscription` was redundant anyway
+
+### Fixed
+
+- `sse.Session` doesn't write the header explicitly anymore. This would cause a `http: superfluous response.WriteHeader call` warning being logged when `sse.Server.OnSession` writes a response code itself when accepting a session. The change was initially introduced to remove the warning for users of certain external libraries (see #41) but this is the issue of the external library, not of `go-sse`. If you encounter this warning when using an external library, write the response code yourself in the HTTP handler before subscribing the `sse.Session`, as described in the linked discussion.
+
 ## [0.10.0] - 2024-12-29
 
 If you're working with LLMs in Go this update will make you happy! `sse.Read` is now a thing – it just parses all events from an `io.Reader`. Use it with your response bodies and forget about any `sse.Client` configuration. It also makes use of the new Go 1.23 iterators to keep your code neat and tidy.
@@ -57,6 +74,7 @@ This version removes all external dependencies of `go-sse`. All our bugs are bel
 
 - `Server.Logger` is now of a new type: the `Logger` interface. The dependency on x/exp/slog is removed. This opens up the possibility to adapt any existing logger to be usable with `Server`.
 - The default backoff behavior has changed. The _previous_ defaults map to the new `Backoff` configuration as follows:
+
 ```go
 sse.Backoff{
     InitialInterval:    5 * time.Second,  // currently 500ms
@@ -67,6 +85,7 @@ sse.Backoff{
     MaxRetries:         -1,               // previously no retries by default, currently unbounded
 }
 ```
+
 - `Joe` now accepts new subscriptions even if replay providers panic (previously `ErrReplayFailed` would be returned).
 - `Server.ServeHTTP` panics if a custom `OnSession` handler returns a `Subscription` with 0 topics
 
@@ -144,7 +163,6 @@ This version brings a number of refactors to the server-side tooling the library
 - `Subscription` now has a `Client` field of type `MessageWriter` instead of a `Callback`.
 - Given the `Subscription` change, `Provider.Subscribe` and `ReplayProvider.Replay` now report message sending errors.
 
-
 ## [0.5.2] - 2023-07-12
 
 ### Added
@@ -193,7 +211,7 @@ Documentation and examples were also fixed and improved.
 - `sse.Message`: The `Expiry` getter and `SetExpiresAt`, `SetTTL` setters are replaced by the public field `ExpiresAt`.
 - `sse.Message`: Event ID getter and setter are replaced by the public `ID` field.
 - `sse.Message`: Event type (previously named `Name`) getter and setter are replaced by the public `Type` field.
-- `sse.Message`: The `retry` field value is now a public field on the struct. As a byproduct, `WriteTo` will now make 1 allocation when writing events with the `retry` field set. 
+- `sse.Message`: The `retry` field value is now a public field on the struct. As a byproduct, `WriteTo` will now make 1 allocation when writing events with the `retry` field set.
 - `sse.NewEventID` is now `sse.NewID`, and `sse.MustEventID` is `sse.ID`.
 - `sse.Event`: The `Data` field is now of type `string`, not `[]byte`.
 - `sse.Event`: The `Name` field is now named `Type`.
@@ -286,10 +304,8 @@ Documentation and examples were also fixed and improved.
 ## [0.1.0] - 2021-09-11 First release
 
 [@aldld]: https://github.com/aldld
-
 [#5]: https://github.com/tmaxmax/go-sse/pull/5
 [#2]: https://github.com/tmaxmax/go-sse/pull/2
-
 [0.6.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.6.0
 [0.5.2]: https://github.com/tmaxmax/go-sse/releases/tag/v0.5.2
 [0.5.1]: https://github.com/tmaxmax/go-sse/releases/tag/v0.5.1

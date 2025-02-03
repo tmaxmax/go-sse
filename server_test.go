@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tmaxmax/go-sse"
 	"github.com/tmaxmax/go-sse/internal/tests"
@@ -73,48 +74,22 @@ func newMockProvider(tb testing.TB, subErr error) *mockProvider {
 	return &mockProvider{Closed: make(chan struct{}), SubError: subErr}
 }
 
-type logger struct {
-	l *log.Logger
+type mockHandler struct {
+	slog.Handler
 }
 
-func quoteString(s string) string {
-	if strings.ContainsAny(s, " \n\t") || s == "" {
-		return strconv.Quote(s)
-	}
-	return s
+func (h mockHandler) Handle(ctx context.Context, r slog.Record) error {
+	var zero time.Time
+	r.Time = zero
+	return h.Handler.Handle(ctx, r)
 }
 
-func (l logger) Log(_ context.Context, level sse.LogLevel, msg string, data map[string]any) {
-	levelStr := ""
-	switch level {
-	case sse.LogLevelInfo:
-		levelStr = "INFO"
-	case sse.LogLevelWarn:
-		levelStr = "WARN"
-	case sse.LogLevelError:
-		levelStr = "ERROR"
+func mockLogFunc(w io.Writer) func(r *http.Request) *slog.Logger {
+	h := slog.NewTextHandler(w, nil)
+	mockH := mockHandler{h}
+	return func(r *http.Request) *slog.Logger {
+		return slog.New(mockH)
 	}
-
-	output := fmt.Sprintf("level=%s msg=%q", levelStr, msg)
-	if e, ok := data["err"]; ok {
-		output += fmt.Sprintf(" err=%s", quoteString(e.(error).Error()))
-	}
-	if ts, ok := data["topics"]; ok {
-		topics := ts.([]string)
-		for i, t := range topics {
-			topics[i] = quoteString(t)
-		}
-		output += fmt.Sprintf(" topics=%s", strings.Join(topics, ","))
-	}
-	if id, ok := data["lastEventID"]; ok {
-		output += fmt.Sprintf(" lastEventID=%s", quoteString(id.(sse.EventID).String()))
-	}
-
-	l.l.Println(output)
-}
-
-func newMockLogger(w io.Writer) sse.Logger {
-	return logger{l: log.New(w, "", 0)}
 }
 
 func TestServer_ShutdownPublish(t *testing.T) {
@@ -146,7 +121,6 @@ func request(tb testing.TB, method, address string, body io.Reader) (*http.Reque
 
 func TestServer_ServeHTTP(t *testing.T) {
 	t.Parallel()
-
 	rec := httptest.NewRecorder()
 	req, cancel := request(t, "", "http://localhost", nil)
 	defer cancel()
@@ -155,13 +129,13 @@ func TestServer_ServeHTTP(t *testing.T) {
 
 	go cancel()
 	sb := &strings.Builder{}
-	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(rec, req)
+	(&sse.Server{Provider: p, Logger: mockLogFunc(sb)}).ServeHTTP(rec, req)
 
 	tests.Expect(t, p.Subscribed, "Subscribe wasn't called")
 	tests.Equal(t, p.Sub.LastEventID, sse.ID("5"), "Invalid last event ID received")
 	tests.Equal(t, rec.Body.String(), "data: hello\n\n", "Invalid response body")
 	tests.Equal(t, rec.Code, http.StatusOK, "invalid response code")
-	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=\"\" lastEventID=5\nlevel=INFO msg=\"sse: session ended\"\n", "invalid log output")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=[] lastEventID=5\nlevel=INFO msg=\"sse: session ended\"\n", "invalid log output")
 }
 
 type noFlusher struct {
@@ -177,11 +151,11 @@ func TestServer_ServeHTTP_unsupportedRespWriter(t *testing.T) {
 	p := newMockProvider(t, nil)
 	sb := &strings.Builder{}
 
-	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(noFlusher{rec}, req)
+	(&sse.Server{Provider: p, Logger: mockLogFunc(sb)}).ServeHTTP(noFlusher{rec}, req)
 
 	tests.Equal(t, rec.Code, http.StatusInternalServerError, "invalid response code")
 	tests.Equal(t, rec.Body.String(), "Server-sent events unsupported\n", "invalid response body")
-	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=ERROR msg=\"sse: unsupported\" err=\"go-sse.server: upgrade unsupported\"\n", "invalid log output")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=ERROR msg=\"sse: unsupported\" error=\"go-sse.server: upgrade unsupported\"\n", "invalid log output")
 }
 
 func TestServer_ServeHTTP_subscribeError(t *testing.T) {
@@ -192,11 +166,11 @@ func TestServer_ServeHTTP_subscribeError(t *testing.T) {
 	p := newMockProvider(t, errors.New("can't subscribe"))
 	sb := &strings.Builder{}
 
-	(&sse.Server{Provider: p, Logger: newMockLogger(sb)}).ServeHTTP(rec, req)
+	(&sse.Server{Provider: p, Logger: mockLogFunc(sb)}).ServeHTTP(rec, req)
 
 	tests.Equal(t, rec.Body.String(), p.SubError.Error()+"\n", "invalid response body")
 	tests.Equal(t, rec.Code, http.StatusInternalServerError, "invalid response code")
-	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=\"\" lastEventID=\"\"\nlevel=ERROR msg=\"sse: subscribe error\" err=\"can't subscribe\"\n", "invalid log output")
+	tests.Equal(t, sb.String(), "level=INFO msg=\"sse: starting new session\"\nlevel=INFO msg=\"sse: subscribing session\" topics=[] lastEventID=\"\"\nlevel=ERROR msg=\"sse: subscribe error\" error=\"can't subscribe\"\n", "invalid log output")
 }
 
 func TestServer_OnSession(t *testing.T) {
@@ -210,10 +184,10 @@ func TestServer_OnSession(t *testing.T) {
 
 		(&sse.Server{
 			Provider: p,
-			Logger:   newMockLogger(sb),
-			OnSession: func(s *sse.Session) (sse.Subscription, bool) {
-				http.Error(s.Res, "this is invalid", http.StatusBadRequest)
-				return sse.Subscription{}, false
+			Logger:   mockLogFunc(sb),
+			OnSession: func(w http.ResponseWriter, r *http.Request) ([]string, bool) {
+				http.Error(w, "this is invalid", http.StatusBadRequest)
+				return nil, false
 			},
 		}).ServeHTTP(rec, req)
 
