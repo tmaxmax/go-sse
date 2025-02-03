@@ -76,7 +76,9 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	setupLogger()
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(handler)
+	logMiddleware := withLogger(logger)
 
 	sseHandler := newSSE()
 
@@ -88,10 +90,10 @@ func main() {
 	mux.Handle("/", SnapshotHTTPEndpoint)
 	mux.Handle("/events", sseHandler)
 
-	httpLogger := slog.NewLogLogger(slog.Default().Handler(), slog.LevelWarn)
+	httpLogger := slog.NewLogLogger(handler, slog.LevelWarn)
 	s := &http.Server{
 		Addr:              "0.0.0.0:8080",
-		Handler:           cors(withLogger(mux)),
+		Handler:           cors(logMiddleware(mux)),
 		ReadHeaderTimeout: time.Second * 10,
 		ErrorLog:          httpLogger,
 	}
@@ -190,4 +192,36 @@ func generateRandomNumbers() *sse.Message {
 	}
 
 	return e
+}
+
+type loggerCtxKey struct{}
+
+// withLogger is an http middleware that generates a logger with request-specific fields
+// added to it and attaches it to the request context for later retrieval with getLogger().
+// This is simmilar to how existing per-request http logging libraries work, just very simplified.
+func withLogger(logger *slog.Logger) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			l := logger.With(
+
+				"UserAgent", r.UserAgent(),
+				"RemoteAddr", r.RemoteAddr,
+				"Host", r.Host,
+				"Origin", r.Header.Get("origin"),
+			)
+			r = r.WithContext(context.WithValue(r.Context(), loggerCtxKey{}, l))
+			h.ServeHTTP(w, r)
+		})
+	}
+}
+
+// getLogger retrieves the request-specific logger from a request's context. This is
+// similar to how existing per-request http logging libraries work, just very simplified.
+func getLogger(r *http.Request) (*slog.Logger, error) {
+	logger, ok := r.Context().Value(loggerCtxKey{}).(*slog.Logger)
+	if !ok {
+		return nil, errors.New("logger not available on request")
+	}
+
+	return logger, nil
 }
