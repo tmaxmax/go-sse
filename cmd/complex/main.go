@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"os"
@@ -25,16 +26,33 @@ func newSSE() *sse.Server {
 	rp, _ := sse.NewValidReplayer(time.Minute*5, true)
 	rp.GCInterval = time.Minute
 
+	logFunc := func(r *http.Request) *slog.Logger {
+		l, err := getLogger(r)
+		if err != nil {
+			return nil
+		}
+		return l
+	}
+
 	return &sse.Server{
 		Provider: &sse.Joe{Replayer: rp},
-		Logger:   logger{log.New(os.Stderr, "", 0)},
-		OnSession: func(s *sse.Session) (sse.Subscription, bool) {
-			topics := s.Req.URL.Query()["topic"]
+		Logger:   logFunc,
+		OnSession: func(w http.ResponseWriter, r *http.Request) (topics []string, permitted bool) {
+			topics = r.URL.Query()["topic"]
 			for _, topic := range topics {
 				if topic != topicRandomNumbers && topic != topicMetrics {
-					fmt.Fprintf(s.Res, "invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics)
-					s.Res.WriteHeader(http.StatusBadRequest)
-					return sse.Subscription{}, false
+					fmt.Fprintf(
+						w,
+						"invalid topic %q; supported are %q, %q",
+						topic,
+						topicRandomNumbers,
+						topicMetrics,
+					)
+
+					// NOTE: if you are returning false to reject the subscription you must also return
+					// your own error code!
+					w.WriteHeader(http.StatusBadRequest)
+					return nil, false
 				}
 			}
 			if len(topics) == 0 {
@@ -42,11 +60,7 @@ func newSSE() *sse.Server {
 				topics = []string{topicRandomNumbers, topicMetrics}
 			}
 
-			return sse.Subscription{
-				Client:      s,
-				LastEventID: s.LastEventID,
-				Topics:      append(topics, sse.DefaultTopic), // the shutdown message is sent on the default topic
-			}, true
+			return append(topics, sse.DefaultTopic), true
 		},
 	}
 }
@@ -62,6 +76,8 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	setupLogger()
+
 	sseHandler := newSSE()
 
 	mux := http.NewServeMux()
@@ -72,10 +88,12 @@ func main() {
 	mux.Handle("/", SnapshotHTTPEndpoint)
 	mux.Handle("/events", sseHandler)
 
+	httpLogger := slog.NewLogLogger(slog.Default().Handler(), slog.LevelWarn)
 	s := &http.Server{
 		Addr:              "0.0.0.0:8080",
 		Handler:           cors(withLogger(mux)),
 		ReadHeaderTimeout: time.Second * 10,
+		ErrorLog:          httpLogger,
 	}
 	s.RegisterOnShutdown(func() {
 		e := &sse.Message{Type: sse.Type("close")}
