@@ -66,7 +66,6 @@ func (s *Session) Flush() error {
 func (s *Session) doUpgrade() error {
 	if !s.didUpgrade {
 		s.Res.Header()[headerContentType] = headerContentTypeValue
-		s.Res.WriteHeader(http.StatusOK)
 		if err := s.Res.Flush(); err != nil {
 			return err
 		}

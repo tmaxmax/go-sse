@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"os"
@@ -27,14 +28,21 @@ func newSSE() *sse.Server {
 
 	return &sse.Server{
 		Provider: &sse.Joe{Replayer: rp},
-		Logger:   logger{log.New(os.Stderr, "", 0)},
-		OnSession: func(s *sse.Session) (sse.Subscription, bool) {
-			topics := s.Req.URL.Query()["topic"]
+		// If you are using a 3rd party library to generate a per-request logger, this
+		// can just be a simple wrapper over it.
+		Logger: func(r *http.Request) *slog.Logger {
+			return getLogger(r.Context())
+		},
+		OnSession: func(w http.ResponseWriter, r *http.Request) (topics []string, permitted bool) {
+			topics = r.URL.Query()["topic"]
 			for _, topic := range topics {
 				if topic != topicRandomNumbers && topic != topicMetrics {
-					fmt.Fprintf(s.Res, "invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics)
-					s.Res.WriteHeader(http.StatusBadRequest)
-					return sse.Subscription{}, false
+					fmt.Fprintf(w, "invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics)
+
+					// NOTE: if you are returning false to reject the subscription, we strongly recommend writing
+					// your own response code. Clients will receive a 200 code otherwise, which may be confusing.
+					w.WriteHeader(http.StatusBadRequest)
+					return nil, false
 				}
 			}
 			if len(topics) == 0 {
@@ -42,11 +50,8 @@ func newSSE() *sse.Server {
 				topics = []string{topicRandomNumbers, topicMetrics}
 			}
 
-			return sse.Subscription{
-				Client:      s,
-				LastEventID: s.LastEventID,
-				Topics:      append(topics, sse.DefaultTopic), // the shutdown message is sent on the default topic
-			}, true
+			// the shutdown message is sent on the default topic
+			return append(topics, sse.DefaultTopic), true
 		},
 	}
 }
@@ -62,6 +67,10 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(handler)
+	logMiddleware := withLogger(logger)
+
 	sseHandler := newSSE()
 
 	mux := http.NewServeMux()
@@ -72,10 +81,12 @@ func main() {
 	mux.Handle("/", SnapshotHTTPEndpoint)
 	mux.Handle("/events", sseHandler)
 
+	httpLogger := slog.NewLogLogger(handler, slog.LevelWarn)
 	s := &http.Server{
 		Addr:              "0.0.0.0:8080",
-		Handler:           cors(withLogger(mux)),
+		Handler:           cors(logMiddleware(mux)),
 		ReadHeaderTimeout: time.Second * 10,
+		ErrorLog:          httpLogger,
 	}
 	s.RegisterOnShutdown(func() {
 		e := &sse.Message{Type: sse.Type("close")}
@@ -172,4 +183,39 @@ func generateRandomNumbers() *sse.Message {
 	}
 
 	return e
+}
+
+type loggerCtxKey struct{}
+
+// withLogger is a net/http compatable  middleware that generates a logger with request-specific fields
+// added to it and attaches it to the request context for later retrieval with getLogger().
+// Third party logging packages may offer similar middlewares to add a logger to the request or maybe
+// just a helper to add a logger to context; in the second case you can build your own middleware
+// function around it, similar to this one.
+func withLogger(logger *slog.Logger) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			l := logger.With(
+
+				"UserAgent", r.UserAgent(),
+				"RemoteAddr", r.RemoteAddr,
+				"Host", r.Host,
+				"Origin", r.Header.Get("origin"),
+			)
+			r = r.WithContext(context.WithValue(r.Context(), loggerCtxKey{}, l))
+			h.ServeHTTP(w, r)
+		})
+	}
+}
+
+// getLogger retrieves the request-specific logger from a request's context. This is
+// similar to how existing per-request http logging libraries work, just very simplified.
+func getLogger(ctx context.Context) *slog.Logger {
+	logger, ok := ctx.Value(loggerCtxKey{}).(*slog.Logger)
+	if !ok {
+		// We are accepting an arbitrary context object, so it's better to explicitly return
+		// nil here since the exact behavior of getting the value of an undefined key is undefined
+		return nil
+	}
+	return logger
 }
