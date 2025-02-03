@@ -32,6 +32,7 @@ jobs:
         run: go test -v -timeout=1s -race ./...
       - name: Coverage
         uses: codecov/codecov-action@v3
+        if: github.ref == 'refs/head/master'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.txt
