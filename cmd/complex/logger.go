@@ -12,7 +12,7 @@ type loggerCtxKey struct{}
 
 // withLogger is an http middleware that generates a logger with request-specific fields
 // added to it and attaches it to the request context for later retrieval with getLogger().
-// This is simmilar to how existing packages like https://github.com/go-chi/httplog works.
+// This is simmilar to how existing per-request http logging libraries work, just very simplified.
 func withLogger(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		l := slog.Default().With(
@@ -28,7 +28,7 @@ func withLogger(h http.Handler) http.Handler {
 }
 
 // getLogger retrieves the request-specific logger from a request's context. This is
-// similar to how existing packages like https://github.com/go-chi/httplog work.
+// similar to how existing per-request http logging libraries work, just very simplified.
 func getLogger(r *http.Request) (*slog.Logger, error) {
 	logger, ok := r.Context().Value(loggerCtxKey{}).(*slog.Logger)
 	if !ok {

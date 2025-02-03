@@ -26,17 +26,17 @@ func newSSE() *sse.Server {
 	rp, _ := sse.NewValidReplayer(time.Minute*5, true)
 	rp.GCInterval = time.Minute
 
-	logFunc := func(r *http.Request) *slog.Logger {
-		l, err := getLogger(r)
-		if err != nil {
-			return nil
-		}
-		return l
-	}
-
 	return &sse.Server{
 		Provider: &sse.Joe{Replayer: rp},
-		Logger:   logFunc,
+		// If you are using a 3rd party library to generate a per-request logger, this
+		// can just be a simple wrapper over it.
+		Logger: func(r *http.Request) *slog.Logger {
+			l, err := getLogger(r)
+			if err != nil {
+				return nil
+			}
+			return l
+		},
 		OnSession: func(w http.ResponseWriter, r *http.Request) (topics []string, permitted bool) {
 			topics = r.URL.Query()["topic"]
 			for _, topic := range topics {
@@ -49,8 +49,8 @@ func newSSE() *sse.Server {
 						topicMetrics,
 					)
 
-					// NOTE: if you are returning false to reject the subscription you must also return
-					// your own error code!
+					// NOTE: if you are returning false to reject the subscription, we strongly recommend writing
+					// your own response code. Clients will receive a 200 code otherwise, which may be confusing.
 					w.WriteHeader(http.StatusBadRequest)
 					return nil, false
 				}

@@ -101,8 +101,10 @@ type Server struct {
 	// a new subscription for the connection and events will be sent
 	// to this client, otherwise the request will be ended.
 	//
-	// Note that you must return any error codes to the client using
-	// the http.ResponseWriter yourself based on the reason for rejection.
+	//
+	// Note that OnSession can write the HTTP response code itself, if something other
+	// than the implicit 200 OK is desired. This is especially helpful when refusing sessions –
+	// if OnSession does not write a response code, clients will receive a confusing 200 OK.
 	//
 	// If this is not set, the client will be subscribed to the provider
 	// using the DefaultTopic.
@@ -156,7 +158,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			l.Warn("sse: invalid subscription")
 		}
 
-		// NOTE: the user is expected to return an appropriate error code in OnSession.
 		return
 	}
 
