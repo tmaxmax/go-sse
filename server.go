@@ -97,15 +97,17 @@ type Server struct {
 	// to the client.
 	//
 	// The boolean returned indicates whether the given request
-	// should be permitted or not. If it is true, the Provider will receive
+	// should be accepted or not. If it is true, the Provider will receive
 	// a new subscription for the connection and events will be sent
-	// to this client, otherwise the request will be ended with a 403 Forbidden
-	// response code.
+	// to this client, otherwise the request will be ended.
+	//
+	// Note that you must return any error codes to the client using
+	// the http.ResponseWriter yourself based on the reason for rejection.
 	//
 	// If this is not set, the client will be subscribed to the provider
 	// using the DefaultTopic.
 	OnSession func(w http.ResponseWriter, r *http.Request) (topics []string, allowed bool)
-	// If the Logger function is not nil and returns a non-nil Logger instance,
+	// If the Logger function is set and returns a non-nil Logger instance,
 	// the Server will log various information about the request lifecycle.
 	Logger func(r *http.Request) *slog.Logger
 
