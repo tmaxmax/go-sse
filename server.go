@@ -101,7 +101,6 @@ type Server struct {
 	// a new subscription for the connection and events will be sent
 	// to this client, otherwise the request will be ended.
 	//
-	//
 	// Note that OnSession can write the HTTP response code itself, if something other
 	// than the implicit 200 OK is desired. This is especially helpful when refusing sessions –
 	// if OnSession does not write a response code, clients will receive a confusing 200 OK.

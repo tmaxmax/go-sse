@@ -4,18 +4,16 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ## [Unreleased] - 2025-02-02
 
-Logging and Server request handling revamped to hopefully be more familiar interfaces for users.
+The `sse.Server` logging and session handling were revamped to have more familiar, more flexible and less error prone interfaces for users.
 
 ### Removed
 
-- Logger and LogLevel enum have been removed.
+- `Logger` and `LogLevel` enum have been removed. `Server.Logger` has transitioned to the standard `slog` library for better compatibility with the ecosystem
 
 ### Changed
 
-- Server.Logger is now of type `func(r *http.Request) *slog.Logger` instead of `sse.Logger`
-- Server.OnSession signature changed from `func(s *sse.Session) (Subscription, bool)` to `func(w http.ResponseWriter, r
-*http.Request) (topics []string, accepted bool)`
-- complex example updated to demonstrate new behavior
+- `Server.Logger` is now of type `func(r *http.Request) *slog.Logger` instead of `sse.Logger` – it is possible to customize the logger on a per-request basis, by for example retrieving it from the context. 
+- `Server.OnSession` signature changed from `func(s *Session) (Subscription, bool)` to `func(w http.ResponseWriter, r *http.Request) (topics []string, accepted bool)` – its initial role was to essentially just provide the topics, so the need to fiddle with `Session` and `Subscription` was redundant anyway
 
 ### Fixed
 

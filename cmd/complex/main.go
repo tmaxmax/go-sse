@@ -41,13 +41,7 @@ func newSSE() *sse.Server {
 			topics = r.URL.Query()["topic"]
 			for _, topic := range topics {
 				if topic != topicRandomNumbers && topic != topicMetrics {
-					fmt.Fprintf(
-						w,
-						"invalid topic %q; supported are %q, %q",
-						topic,
-						topicRandomNumbers,
-						topicMetrics,
-					)
+					fmt.Fprintf(w, "invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics)
 
 					// NOTE: if you are returning false to reject the subscription, we strongly recommend writing
 					// your own response code. Clients will receive a 200 code otherwise, which may be confusing.
