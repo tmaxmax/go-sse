@@ -87,7 +87,7 @@ func (h mockHandler) Handle(ctx context.Context, r slog.Record) error {
 func mockLogFunc(w io.Writer) func(*http.Request) *slog.Logger {
 	h := slog.NewTextHandler(w, nil)
 	mockH := mockHandler{h}
-	return func(r *http.Request) *slog.Logger {
+	return func(*http.Request) *slog.Logger {
 		return slog.New(mockH)
 	}
 }
