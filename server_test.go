@@ -84,7 +84,7 @@ func (h mockHandler) Handle(ctx context.Context, r slog.Record) error {
 	return h.Handler.Handle(ctx, r)
 }
 
-func mockLogFunc(w io.Writer) func(r *http.Request) *slog.Logger {
+func mockLogFunc(w io.Writer) func(*http.Request) *slog.Logger {
 	h := slog.NewTextHandler(w, nil)
 	mockH := mockHandler{h}
 	return func(r *http.Request) *slog.Logger {
@@ -185,7 +185,7 @@ func TestServer_OnSession(t *testing.T) {
 		(&sse.Server{
 			Provider: p,
 			Logger:   mockLogFunc(sb),
-			OnSession: func(w http.ResponseWriter, r *http.Request) ([]string, bool) {
+			OnSession: func(w http.ResponseWriter, _ *http.Request) ([]string, bool) {
 				http.Error(w, "this is invalid", http.StatusBadRequest)
 				return nil, false
 			},
