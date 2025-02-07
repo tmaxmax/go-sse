@@ -45,6 +45,7 @@ linters-settings:
     disabled-checks:
       - ifElseChain
       - unnamedResult
+      - hugeParam
     enabled-tags:
       - performance
       - diagnostic

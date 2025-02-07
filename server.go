@@ -19,8 +19,8 @@ package sse
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
-	"slices"
 	"sync"
 )
 
@@ -80,35 +80,6 @@ var ErrNoTopic = errors.New("go-sse.server: no topics specified")
 // or a Message.
 const DefaultTopic = ""
 
-// LogLevel are the supported log levels of the Server's Logger.
-type LogLevel int
-
-// All the available log levels.
-const (
-	LogLevelInfo LogLevel = iota
-	LogLevelWarn
-	LogLevelError
-)
-
-// The Logger interface which the Server expects.
-// Adapt your loggers to this interface in order to use it with the Server.
-type Logger interface {
-	// Log is called by the Server to log an event. The http.Request context
-	// is passed. The message string is useful for display and the data contains
-	// additional information about the event.
-	//
-	// When the log level is Error, the data map will contain an "err" key
-	// with a value of type error. This is the error that triggered the log
-	// event.
-	//
-	// If the data map contains the "lastEventID" key, then it means that
-	// a client is being subscribed. The value corresponding to "lastEventID"
-	// is of type sse.EventID; there will also be a "topics" key, with a value of
-	// type []string, which contains all the topics the client is being
-	// subscribed to.
-	Log(ctx context.Context, level LogLevel, msg string, data map[string]any)
-}
-
 // A Server is mostly a convenience wrapper around a Provider.
 // It implements the http.Handler interface and has some methods
 // for calling the underlying provider's methods.
@@ -125,17 +96,21 @@ type Server struct {
 	// Res field of the Session you can write an error response
 	// to the client.
 	//
-	// The boolean returned indicates whether the returned subscription
-	// is valid or not. If it is valid, the Provider will receive it
-	// and events will be sent to this client, otherwise the request
-	// will be ended.
+	// The boolean returned indicates whether the given request
+	// should be accepted or not. If it is true, the Provider will receive
+	// a new subscription for the connection and events will be sent
+	// to this client, otherwise the request will be ended.
+	//
+	// Note that OnSession can write the HTTP response code itself, if something other
+	// than the implicit 200 OK is desired. This is especially helpful when refusing sessions –
+	// if OnSession does not write a response code, clients will receive a confusing 200 OK.
 	//
 	// If this is not set, the client will be subscribed to the provider
 	// using the DefaultTopic.
-	OnSession func(*Session) (Subscription, bool)
-	// If Logger is not nil, the Server will log various information about
-	// the request lifecycle. See the documentation of Logger for more info.
-	Logger Logger
+	OnSession func(w http.ResponseWriter, r *http.Request) (topics []string, allowed bool)
+	// If the Logger function is set and returns a non-nil Logger instance,
+	// the Server will log various information about the request lifecycle.
+	Logger func(r *http.Request) *slog.Logger
 
 	provider Provider
 	initDone sync.Once
@@ -157,16 +132,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.init()
 	// Make sure to keep the ServeHTTP implementation line number in sync with the number in the README!
 
-	l := s.Logger
+	var l *slog.Logger
+	if s.Logger != nil {
+		l = s.Logger(r)
+	}
 
 	if l != nil {
-		l.Log(r.Context(), LogLevelInfo, "sse: starting new session", nil)
+		l.Info("sse: starting new session")
 	}
 
 	sess, err := Upgrade(w, r)
 	if err != nil {
 		if l != nil {
-			l.Log(r.Context(), LogLevelError, "sse: unsupported", map[string]any{"err": err})
+			l.Error("sse: unsupported", "error", err)
 		}
 
 		http.Error(w, "Server-sent events unsupported", http.StatusInternalServerError)
@@ -176,18 +154,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sub, ok := s.getSubscription(sess)
 	if !ok {
 		if l != nil {
-			l.Log(r.Context(), LogLevelWarn, "sse: invalid subscription", nil)
+			l.Warn("sse: invalid subscription")
 		}
+
 		return
 	}
 
 	if l != nil {
-		l.Log(r.Context(), LogLevelInfo, "sse: subscribing session", map[string]any{"topics": slices.Clone(sub.Topics), "lastEventID": sub.LastEventID})
+		l.Info("sse: subscribing session", "topics", sub.Topics, "lastEventID", sub.LastEventID)
 	}
 
 	if err = s.provider.Subscribe(r.Context(), sub); err != nil {
 		if l != nil {
-			l.Log(r.Context(), LogLevelError, "sse: subscribe error", map[string]any{"err": err})
+			l.Error("sse: subscribe error", "error", err)
 		}
 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -195,7 +174,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if l != nil {
-		l.Log(r.Context(), LogLevelInfo, "sse: session ended", nil)
+		l.Info("sse: session ended")
 	}
 }
 
@@ -229,20 +208,17 @@ func (s *Server) init() {
 }
 
 func (s *Server) getSubscription(sess *Session) (Subscription, bool) {
+	sub := Subscription{Client: sess, LastEventID: sess.LastEventID, Topics: defaultTopicSlice}
 	if s.OnSession != nil {
-		sub, ok := s.OnSession(sess)
-		if ok && len(sub.Topics) == 0 {
-			panic("go-sse: session handlers should return a Subscription to at least 1 topic")
+		topics, ok := s.OnSession(sess.Res, sess.Req)
+		if ok && len(topics) > 0 {
+			sub.Topics = topics
 		}
 
 		return sub, ok
 	}
 
-	return Subscription{
-		Client:      sess,
-		LastEventID: sess.LastEventID,
-		Topics:      defaultTopicSlice,
-	}, true
+	return sub, true
 }
 
 var defaultTopicSlice = []string{DefaultTopic}
