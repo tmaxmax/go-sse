@@ -70,6 +70,13 @@ type mockClient func(m *sse.Message) error
 func (c mockClient) Send(m *sse.Message) error { return c(m) }
 func (c mockClient) Flush() error              { return c(nil) }
 
+func cleanupJoe(tb testing.TB, j *sse.Joe) {
+	tb.Helper()
+	tb.Cleanup(func() {
+		_ = j.Shutdown(context.Background())
+	})
+}
+
 func TestJoe_Shutdown(t *testing.T) {
 	t.Parallel()
 
@@ -162,6 +169,7 @@ func newMockContext(tb testing.TB) (*mockContext, context.CancelFunc) {
 	tb.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	tb.Cleanup(cancel)
 
 	return &mockContext{Context: ctx, waitingOnDone: make(chan struct{})}, cancel
 }
@@ -173,10 +181,9 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	j := &sse.Joe{
 		Replayer: rp,
 	}
-	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
+	cleanupJoe(t, j)
 
 	ctx, cancel := newMockContext(t)
-	defer cancel()
 
 	sub := subscribe(t, j, ctx)
 	<-ctx.waitingOnDone
@@ -186,8 +193,7 @@ func TestJoe_SubscribePublish(t *testing.T) {
 	msgs := <-sub
 	tests.Equal(t, "data: hello\n\n", msgs[0].String(), "invalid data received")
 
-	ctx2, cancel2 := newMockContext(t)
-	defer cancel2()
+	ctx2, _ := newMockContext(t)
 
 	sub2 := subscribe(t, j, ctx2)
 	<-ctx2.waitingOnDone
@@ -203,10 +209,9 @@ func TestJoe_Subscribe_multipleTopics(t *testing.T) {
 	t.Parallel()
 
 	j := &sse.Joe{}
-	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
+	cleanupJoe(t, j)
 
-	ctx, cancel := newMockContext(t)
-	defer cancel()
+	ctx, _ := newMockContext(t)
 
 	sub := subscribe(t, j, ctx, sse.DefaultTopic, "another topic")
 	<-ctx.waitingOnDone
@@ -235,7 +240,7 @@ func TestJoe_errors(t *testing.T) {
 	j := &sse.Joe{
 		Replayer: fin,
 	}
-	defer j.Shutdown(context.Background()) //nolint:errcheck // irrelevant
+	cleanupJoe(t, j)
 
 	_ = j.Publish(msg(t, "hello", "0"), []string{sse.DefaultTopic})
 	_ = j.Publish(msg(t, "hello", "1"), []string{sse.DefaultTopic})
@@ -262,8 +267,7 @@ func TestJoe_errors(t *testing.T) {
 	tests.Equal(t, called, 1, "callback was called after subscribe returned")
 
 	called = 0
-	ctx, cancel := newMockContext(t)
-	defer cancel()
+	ctx, _ := newMockContext(t)
 	done := make(chan struct{})
 
 	go func() {
