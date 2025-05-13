@@ -69,6 +69,7 @@ type Provider interface {
 }
 
 // ErrProviderClosed is a sentinel error returned by providers when any operation is attempted after the provider is closed.
+// A closed provider might also be a result of an unexpected panic inside the provider.
 var ErrProviderClosed = errors.New("go-sse.server: provider is closed")
 
 // ErrNoTopic is a sentinel error returned when a Message is published without any topics.

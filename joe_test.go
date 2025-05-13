@@ -323,7 +323,7 @@ func TestJoe_ReplayPanic(t *testing.T) {
 	tests.Equal(t, rp.replays(), 0, "replay was called")
 
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
-	tests.Equal(t, <-suberr, nil, "unexpected subscribe error")
+	tests.Equal(t, <-suberr, sse.ErrProviderClosed, "expected subscribe error due to forceful shutdown")
 
 	rp = newMockReplayer("put", 1)
 	j = &sse.Joe{Replayer: rp}
@@ -336,5 +336,5 @@ func TestJoe_ReplayPanic(t *testing.T) {
 	tests.Equal(t, (<-wr.msg).ID, msg.ID, "message was not sent to client")
 
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
-	tests.Equal(t, <-suberr, nil, "unexpected subscribe error")
+	tests.Equal(t, <-suberr, sse.ErrProviderClosed, "expected subscribe error due to forceful shutdown")
 }

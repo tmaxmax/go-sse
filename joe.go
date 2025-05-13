@@ -127,12 +127,14 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	select {
 	case err := <-done:
 		return err
+	case <-j.closed:
+		return ErrProviderClosed
 	case <-ctx.Done():
 	}
 
 	select {
-	case err := <-done:
-		return err
+	case <-j.done:
+		return ErrProviderClosed
 	case j.unsubscription <- done:
 		return nil
 	}
@@ -202,9 +204,6 @@ func (j *Joe) removeSubscriber(sub subscriber) {
 
 func (j *Joe) start(replay Replayer) {
 	defer close(j.closed)
-	// defer closing all subscribers instead of closing them when done is closed
-	// so in case of a panic subscribers won't block the request goroutines forever.
-	defer j.closeSubscribers()
 
 	for {
 		select {
@@ -258,12 +257,6 @@ func (j *Joe) start(replay Replayer) {
 		case <-j.done:
 			return
 		}
-	}
-}
-
-func (j *Joe) closeSubscribers() {
-	for done := range j.subscribers {
-		j.removeSubscriber(done)
 	}
 }
 
