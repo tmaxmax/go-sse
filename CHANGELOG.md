@@ -19,6 +19,7 @@ The `sse.Server` logging and session handling were revamped to have more familia
 ### Fixed
 
 - `sse.Session` doesn't write the header explicitly anymore. This would cause a `http: superfluous response.WriteHeader call` warning being logged when `sse.Server.OnSession` writes a response code itself when accepting a session. The change was initially introduced to remove the warning for users of certain external libraries (see #41) but this is the issue of the external library, not of `go-sse`. If you encounter this warning when using an external library, write the response code yourself in the HTTP handler before subscribing the `sse.Session`, as described in the linked discussion.
+- An insidious synchronization issue in `Joe` causing a channel double close in an edge case scenario (see #50, see code for details)
 
 ## [0.10.0] - 2024-12-29
 

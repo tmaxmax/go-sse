@@ -338,3 +338,37 @@ func TestJoe_ReplayPanic(t *testing.T) {
 	tests.Equal(t, j.Shutdown(context.Background()), nil, "shutdown should succeed")
 	tests.Equal(t, <-suberr, sse.ErrProviderClosed, "expected subscribe error due to forceful shutdown")
 }
+
+func TestJoe_ClientContextCloseOnError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := newMockContext(t)
+
+	mw := mockClient(func(m *sse.Message) error {
+		if m == nil {
+			cancel()
+			time.Sleep(time.Millisecond)
+			return errors.New("flush error")
+		}
+
+		return nil
+	})
+
+	j := &sse.Joe{}
+	t.Cleanup(func() { _ = j.Shutdown(context.Background()) })
+
+	errch := make(chan error)
+	topics := []string{sse.DefaultTopic}
+
+	go func() {
+		errch <- j.Subscribe(ctx, sse.Subscription{Client: mw, Topics: topics})
+	}()
+
+	<-ctx.waitingOnDone
+
+	tests.Equal(t, j.Publish(&sse.Message{ID: sse.ID("trigger")}, topics), nil, "unexpected publish error")
+	// The error above shouldn't be propagated, as the subscriber's context is done before the replay is done.
+	// Subscription should end instantly and not wait for anything else other than the unsubscription signal
+	// to be sent successfully.
+	tests.Equal(t, <-errch, nil, "unexpected subscribe error")
+}

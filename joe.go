@@ -113,9 +113,15 @@ type Joe struct {
 // Subscribe tells Joe to send new messages to this subscriber. The subscription
 // is automatically removed when the context is done, a client error occurs
 // or Joe is stopped.
+//
+// Subscribe returns without error only when the unsubscription is caused
+// by the given context being canceled.
 func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	j.init()
 
+	// Without a buffered channel we risk a deadlock when Subscribe
+	// stops receiving from this channel on done context and Joe
+	// encounters an error when sending messages or replaying.
 	done := make(chan error, 1)
 
 	select {
@@ -136,6 +142,7 @@ func (j *Joe) Subscribe(ctx context.Context, sub Subscription) error {
 	case <-j.done:
 		return ErrProviderClosed
 	case j.unsubscription <- done:
+		// NOTE(tmaxmax): should we return ctx.Err() instead?
 		return nil
 	}
 }
@@ -158,7 +165,11 @@ func (j *Joe) Publish(msg *Message, topics []string) error {
 
 	j.init()
 
+	// Buffered to prevent a deadlock when Publish doesn't
+	// receive from errs due to Joe being shut down and the
+	// message published causes an error after the shutdown.
 	errs := make(chan error, 1)
+
 	pub := publishedMessage{replayerErr: errs}
 	pub.message = msg
 	pub.topics = topics
@@ -198,8 +209,14 @@ func (j *Joe) Shutdown(ctx context.Context) (err error) {
 }
 
 func (j *Joe) removeSubscriber(sub subscriber) {
+	l := len(j.subscribers)
 	delete(j.subscribers, sub)
-	close(sub)
+	// We check that an element was deleted as removeSubscriber is called twice
+	// in the following edge case: the subscriber context is done before a
+	// published message is sent/flushed, and the send/flush returns an error.
+	if l != len(j.subscribers) {
+		close(sub)
+	}
 }
 
 func (j *Joe) start(replay Replayer) {
@@ -230,6 +247,13 @@ func (j *Joe) start(replay Replayer) {
 
 					if err != nil {
 						done <- err
+						// Technically it would be possible to just send the error,
+						// as Subscribe would send an unsubscription signal. The problem
+						// is that if the j.message channel is ready together with j.unsubscription
+						// and j.message is picked we might send again to this now unsubscribed
+						// subscriber, which will cause issues (e.g. deadlock on done).
+						// This line here is the reason why we need to verify we actually
+						// have this subscriber in removeSubscriber above.
 						j.removeSubscriber(done)
 					}
 				}
