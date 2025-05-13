@@ -2,6 +2,7 @@ package sse
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 )
 
@@ -264,12 +265,10 @@ func (j *Joe) start(replay Replayer) {
 				err = tryReplay(sub.Subscription, &replay)
 			}
 
-			// NOTE(tmaxmax): Right now panics are not handled in any way
-			// other than disabling replay altogether. We can't return these
-			// errors from the corresponding Subscribe call because that call
-			// should block for the entire duration of the subscription.
-			//
-			// If there is demand to handle replayer panics a feature could be added.
+			// NOTE(tmaxmax): We can't meaningfully handle replay panics in any way
+			// other than disabling replay altogether. This ensures uptime
+			// in the face of unexpected – returning the panic as an error
+			// to the subscriber doesn't make sense, as it's probably not the subscriber's fault.
 			if _, isPanic := err.(replayPanic); err != nil && !isPanic { //nolint:errorlint // it's our error
 				sub.done <- err
 				close(sub.done)
@@ -304,6 +303,9 @@ func handleReplayerPanic(replay *Replayer, errp *error) { //nolint:gocritic // i
 	if r := recover(); r != nil {
 		*replay = nil
 		*errp = replayPanic{}
+		// NOTE(tmaxmax): At least print a stacktrace. It's annoying when libraries recover from panics
+		// and make them untraceable. Should we provide a way to handle these in a custom manner?
+		debug.PrintStack()
 	}
 }
 

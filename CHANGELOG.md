@@ -15,6 +15,7 @@ The `sse.Server` logging and session handling were revamped to have more familia
 - `Server.Logger` is now of type `func(r *http.Request) *slog.Logger` instead of `sse.Logger` – it is possible to customize the logger on a per-request basis, by for example retrieving it from the context. 
 - `Server.OnSession` signature changed from `func(s *Session) (Subscription, bool)` to `func(w http.ResponseWriter, r *http.Request) (topics []string, accepted bool)` – its initial role was to essentially just provide the topics, so the need to fiddle with `Session` and `Subscription` was redundant anyway
 - `Joe.Subscribe` now always returns `ErrProviderClosed` when a `Joe` instance is closed while subscriptions are active. Previously it would return it only if `Joe` was already shut down before subscribing.
+- `Joe` will print a stack trace for `Replayer` panics.
 
 ### Fixed
 
