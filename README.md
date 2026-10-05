@@ -278,15 +278,16 @@ We will use the `sse.Client` type for connecting to event streams:
 
 ```go
 type Client struct {
-    HTTPClient              *http.Client
-    OnRetry                 backoff.Notify
-    ResponseValidator       ResponseValidator
-    MaxRetries              int
-    DefaultReconnectionTime time.Duration
+    HTTPClient        *http.Client
+    OnRetry           func(error, time.Duration)
+    ResponseValidator ResponseValidator
+    Backoff           Backoff
 }
 ```
 
-As you can see, it uses a `net/http` client. It also uses the [cenkalti/backoff][1] library for implementing auto-reconnect when a connection to a server is lost. Read the [client docs][5] and the Backoff library's docs to find out how to configure the client. We'll use the default client the package provides for further examples.
+The client uses `net/http` and a configurable `Backoff` strategy to reconnect after losing a connection. See the [Client documentation](https://pkg.go.dev/github.com/tmaxmax/go-sse#Client) for configuration details. The following examples use the package's default client.
+
+`Client.NewConnection` copies the client configuration and applies defaults to that copy. It leaves the original client fields unchanged. Configure the client before creating connections, and avoid changing its fields while other goroutines create connections.
 
 ### Initiating a connection
 
@@ -477,7 +478,6 @@ The library's in its early stages, so contributions are vital - I'm so glad you 
 
 Thank you for contributing!
 
-[1]: https://github.com/cenkalti/backoff
 [2]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Provider
 [3]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Replayer
 [4]: https://pkg.go.dev/github.com/tmaxmax/go-sse#Message
