@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -75,7 +76,81 @@ func TestClient_NewConnection(t *testing.T) {
 	r := req(t, "", "", nil)
 	_ = c.NewConnection(r)
 
-	tests.Equal(t, c.HTTPClient, http.DefaultClient, "incorrect default HTTP client")
+	tests.Equal(t, c.HTTPClient, nil, "connection creation changed the HTTP client")
+	tests.Equal(t, c.Backoff, sse.Backoff{}, "connection creation changed the backoff")
+	tests.Expect(t, c.ResponseValidator == nil, "connection creation changed the response validator")
+}
+
+func TestClient_NewConnection_defaults(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: hello\n\n")
+	}))
+	t.Cleanup(ts.Close)
+
+	c := sse.Client{}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	conn := c.NewConnection(reqCtx(t, ctx, http.MethodGet, ts.URL, nil))
+	var received string
+	conn.SubscribeMessages(func(ev sse.Event) {
+		received = ev.Data
+		cancel()
+	})
+
+	tests.ErrorIs(t, conn.Connect(), context.Canceled, "connection did not use the default HTTP client and validator")
+	tests.Equal(t, received, "hello", "connection did not receive the event")
+	tests.DeepEqual(t, c, sse.Client{}, "connection changed the caller configuration")
+}
+
+func TestClient_NewConnection_backoffDefaults(t *testing.T) {
+	for _, initialInterval := range []time.Duration{0, -time.Second} {
+		t.Run(initialInterval.String(), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			testErr := errors.New("connection failed")
+			var retryDelay time.Duration
+			c := sse.Client{
+				HTTPClient: &http.Client{
+					Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+						return nil, testErr
+					}),
+				},
+				OnRetry: func(err error, delay time.Duration) {
+					tests.ErrorIs(t, err, testErr, "retry callback received the wrong error")
+					retryDelay = delay
+					cancel()
+				},
+				Backoff: sse.Backoff{InitialInterval: initialInterval},
+			}
+			originalBackoff := c.Backoff
+			conn := c.NewConnection(reqCtx(t, ctx, http.MethodGet, "http://localhost", nil))
+			tests.ErrorIs(t, conn.Connect(), context.Canceled, "connection did not stop after retry callback")
+			defaults := sse.DefaultClient.Backoff
+			variation := time.Duration(float64(defaults.InitialInterval) * defaults.Jitter)
+			tests.Expect(t, retryDelay >= defaults.InitialInterval-variation && retryDelay <= defaults.InitialInterval+variation, "connection did not use default backoff")
+			tests.Equal(t, c.Backoff, originalBackoff, "connection changed the configured backoff")
+			tests.Expect(t, c.ResponseValidator == nil, "connection changed the response validator")
+		})
+	}
+}
+
+func TestClient_NewConnection_concurrent(t *testing.T) {
+	c := sse.Client{}
+	r := req(t, http.MethodGet, "http://localhost", nil)
+	start := make(chan struct{})
+	var done sync.WaitGroup
+	for range 32 {
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			<-start
+			_ = c.NewConnection(r)
+		}()
+	}
+	close(start)
+	done.Wait()
+	tests.DeepEqual(t, c, sse.Client{}, "concurrent connections changed the caller configuration")
 }
 
 func TestConnection_Connect_retry(t *testing.T) {

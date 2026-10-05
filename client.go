@@ -81,10 +81,11 @@ func (c *Client) NewConnection(r *http.Request) *Connection {
 		panic("go-sse.client.NewConnection: request cannot be nil")
 	}
 
-	mergeDefaults(c)
+	client := *c
+	mergeDefaults(&client)
 
 	conn := &Connection{
-		client:       *c,                   // we clone the client so the config cannot be modified from outside
+		client:       client,               // we clone the client so the config cannot be modified from outside
 		request:      r.Clone(r.Context()), // we clone the request so its fields cannot be modified from outside
 		callbacks:    map[string]map[int]EventCallback{},
 		callbacksAll: map[int]EventCallback{},
