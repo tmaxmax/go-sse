@@ -2,6 +2,7 @@ package sse
 
 import (
 	"errors"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -157,7 +158,7 @@ func (v *ValidReplayer) Put(message *Message, topics []string) (*Message, error)
 		v.messages.resize(newCap)
 	}
 
-	v.messages.enqueue(messageWithTopicsAndExpiry{messageWithTopics: messageWithTopics{message: message, topics: topics}, exp: now.Add(v.ttl)})
+	v.messages.enqueue(messageWithTopicsAndExpiry{message: message, topics: topics, exp: now.Add(v.ttl)})
 
 	return message, nil
 }
@@ -218,10 +219,8 @@ func (v *ValidReplayer) Replay(subscription Subscription) error {
 // topicsIntersect returns true if the given topic slices have at least one topic in common.
 func topicsIntersect(a, b []string) bool {
 	for _, at := range a {
-		for _, bt := range b {
-			if at == bt {
-				return true
-			}
+		if slices.Contains(b, at) {
+			return true
 		}
 	}
 

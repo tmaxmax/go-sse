@@ -126,7 +126,7 @@ func read(pf func() *parser.Parser, lastEventID string, onRetry func(int64), ign
 			}
 		}
 
-		if err != nil && !(ignoreEOF && isEOF) {
+		if err != nil && (!ignoreEOF || !isEOF) {
 			yield(Event{}, err)
 		}
 	}

@@ -171,9 +171,11 @@ func (j *Joe) Publish(msg *Message, topics []string) error {
 	// message published causes an error after the shutdown.
 	errs := make(chan error, 1)
 
-	pub := publishedMessage{replayerErr: errs}
-	pub.message = msg
-	pub.topics = topics
+	pub := publishedMessage{
+		replayerErr: errs,
+		message:     msg,
+		topics:      topics,
+	}
 
 	// Waiting on done ensures Publish doesn't block the caller goroutine
 	// when Joe is stopped and implements the required Provider behavior.
