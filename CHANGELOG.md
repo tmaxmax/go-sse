@@ -2,6 +2,12 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Removed
+
+- `Session.Req`, `Session.Res`, and `MessageWriter`; `Server.OnSession` gives the request and response directly, and in custom `sse.Upgrade` usage one has the request and response instances available already.
+
 ## [0.11.0] - 2025-05-14
 
 The `sse.Server` logging and session handling were revamped to have more familiar, more flexible and less error prone interfaces for users.
@@ -12,7 +18,7 @@ The `sse.Server` logging and session handling were revamped to have more familia
 
 ### Changed
 
-- `Server.Logger` is now of type `func(r *http.Request) *slog.Logger` instead of `sse.Logger` – it is possible to customize the logger on a per-request basis, by for example retrieving it from the context. 
+- `Server.Logger` is now of type `func(r *http.Request) *slog.Logger` instead of `sse.Logger` – it is possible to customize the logger on a per-request basis, by for example retrieving it from the context.
 - `Server.OnSession` signature changed from `func(s *Session) (Subscription, bool)` to `func(w http.ResponseWriter, r *http.Request) (topics []string, accepted bool)` – its initial role was to essentially just provide the topics, so the need to fiddle with `Session` and `Subscription` was redundant anyway
 - `Joe.Subscribe` now always returns `ErrProviderClosed` when a `Joe` instance is closed while subscriptions are active. Previously it would return it only if `Joe` was already shut down before subscribing.
 - `Joe` will print a stack trace for `Replayer` panics.
@@ -77,6 +83,7 @@ This version removes all external dependencies of `go-sse`. All our bugs are bel
 
 - `Server.Logger` is now of a new type: the `Logger` interface. The dependency on x/exp/slog is removed. This opens up the possibility to adapt any existing logger to be usable with `Server`.
 - The default backoff behavior has changed. The _previous_ defaults map to the new `Backoff` configuration as follows:
+
 ```go
 sse.Backoff{
     InitialInterval:    5 * time.Second,  // currently 500ms
@@ -87,6 +94,7 @@ sse.Backoff{
     MaxRetries:         -1,               // previously no retries by default, currently unbounded
 }
 ```
+
 - `Joe` now accepts new subscriptions even if replay providers panic (previously `ErrReplayFailed` would be returned).
 - `Server.ServeHTTP` panics if a custom `OnSession` handler returns a `Subscription` with 0 topics
 
@@ -164,7 +172,6 @@ This version brings a number of refactors to the server-side tooling the library
 - `Subscription` now has a `Client` field of type `MessageWriter` instead of a `Callback`.
 - Given the `Subscription` change, `Provider.Subscribe` and `ReplayProvider.Replay` now report message sending errors.
 
-
 ## [0.5.2] - 2023-07-12
 
 ### Added
@@ -213,7 +220,7 @@ Documentation and examples were also fixed and improved.
 - `sse.Message`: The `Expiry` getter and `SetExpiresAt`, `SetTTL` setters are replaced by the public field `ExpiresAt`.
 - `sse.Message`: Event ID getter and setter are replaced by the public `ID` field.
 - `sse.Message`: Event type (previously named `Name`) getter and setter are replaced by the public `Type` field.
-- `sse.Message`: The `retry` field value is now a public field on the struct. As a byproduct, `WriteTo` will now make 1 allocation when writing events with the `retry` field set. 
+- `sse.Message`: The `retry` field value is now a public field on the struct. As a byproduct, `WriteTo` will now make 1 allocation when writing events with the `retry` field set.
 - `sse.NewEventID` is now `sse.NewID`, and `sse.MustEventID` is `sse.ID`.
 - `sse.Event`: The `Data` field is now of type `string`, not `[]byte`.
 - `sse.Event`: The `Name` field is now named `Type`.
@@ -306,10 +313,8 @@ Documentation and examples were also fixed and improved.
 ## [0.1.0] - 2021-09-11 First release
 
 [@aldld]: https://github.com/aldld
-
 [#5]: https://github.com/tmaxmax/go-sse/pull/5
 [#2]: https://github.com/tmaxmax/go-sse/pull/2
-
 [0.6.0]: https://github.com/tmaxmax/go-sse/releases/tag/v0.6.0
 [0.5.2]: https://github.com/tmaxmax/go-sse/releases/tag/v0.5.2
 [0.5.1]: https://github.com/tmaxmax/go-sse/releases/tag/v0.5.1
