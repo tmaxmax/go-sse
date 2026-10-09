@@ -2,6 +2,16 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `Client.NewConnection` now applies defaults to each connection's copy of the client. The original `HTTPClient`, `ResponseValidator` and `Backoff` fields stay unchanged. This breaks code that reads default values from those fields after creating a connection.
+
+### Fixed
+
+- Concurrent calls to `Client.NewConnection` no longer write to the shared client configuration.
+
 ## [0.11.0] - 2025-05-14
 
 The `sse.Server` logging and session handling were revamped to have more familiar, more flexible and less error prone interfaces for users.
