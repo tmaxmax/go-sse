@@ -48,8 +48,6 @@ func TestMessageField_UnmarshalJSON(t *testing.T) {
 	}
 
 	for _, test := range tt {
-		test := test
-
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 

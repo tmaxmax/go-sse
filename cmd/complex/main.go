@@ -37,11 +37,9 @@ func newSSE() *sse.Server {
 			topics = r.URL.Query()["topic"]
 			for _, topic := range topics {
 				if topic != topicRandomNumbers && topic != topicMetrics {
-					fmt.Fprintf(w, "invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics)
-
 					// NOTE: if you are returning false to reject the subscription, we strongly recommend writing
 					// your own response code. Clients will receive a 200 code otherwise, which may be confusing.
-					w.WriteHeader(http.StatusBadRequest)
+					http.Error(w, fmt.Sprintf("invalid topic %q; supported are %q, %q", topic, topicRandomNumbers, topicMetrics), http.StatusBadRequest)
 					return nil, false
 				}
 			}
@@ -161,7 +159,7 @@ func runServer(ctx context.Context, s *http.Server) error {
 	go func() {
 		<-ctx.Done()
 
-		sctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second*10)
 		defer cancel()
 
 		shutdownError <- s.Shutdown(sctx)
@@ -178,7 +176,7 @@ func generateRandomNumbers() *sse.Message {
 	e := &sse.Message{}
 	count := 1 + rand.Intn(5)
 
-	for i := 0; i < count; i++ {
+	for range count {
 		e.AppendData(strconv.FormatUint(rand.Uint64(), 10))
 	}
 
