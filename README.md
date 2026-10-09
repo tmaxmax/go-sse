@@ -285,9 +285,7 @@ type Client struct {
 }
 ```
 
-The client uses `net/http` and a configurable `Backoff` strategy to reconnect after losing a connection. See the [Client documentation](https://pkg.go.dev/github.com/tmaxmax/go-sse#Client) for configuration details. The following examples use the package's default client.
-
-`Client.NewConnection` copies the client configuration and applies defaults to that copy. It leaves the original client fields unchanged. Configure the client before creating connections, and avoid changing its fields while other goroutines create connections.
+As you can see, it uses a `net/http` client. Read the [client docs][5] to find out how to configure the client. We'll use the default client the package provides for further examples.
 
 ### Initiating a connection
 

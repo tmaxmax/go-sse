@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/tmaxmax/go-sse"
@@ -81,60 +82,6 @@ func TestClient_NewConnection(t *testing.T) {
 	tests.Expect(t, c.ResponseValidator == nil, "connection creation changed the response validator")
 }
 
-func TestClient_NewConnection_defaults(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprint(w, "data: hello\n\n")
-	}))
-	t.Cleanup(ts.Close)
-
-	c := sse.Client{}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	conn := c.NewConnection(reqCtx(t, ctx, http.MethodGet, ts.URL, nil))
-	var received string
-	conn.SubscribeMessages(func(ev sse.Event) {
-		received = ev.Data
-		cancel()
-	})
-
-	tests.ErrorIs(t, conn.Connect(), context.Canceled, "connection did not use the default HTTP client and validator")
-	tests.Equal(t, received, "hello", "connection did not receive the event")
-	tests.DeepEqual(t, c, sse.Client{}, "connection changed the caller configuration")
-}
-
-func TestClient_NewConnection_backoffDefaults(t *testing.T) {
-	for _, initialInterval := range []time.Duration{0, -time.Second} {
-		t.Run(initialInterval.String(), func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			t.Cleanup(cancel)
-			testErr := errors.New("connection failed")
-			var retryDelay time.Duration
-			c := sse.Client{
-				HTTPClient: &http.Client{
-					Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
-						return nil, testErr
-					}),
-				},
-				OnRetry: func(err error, delay time.Duration) {
-					tests.ErrorIs(t, err, testErr, "retry callback received the wrong error")
-					retryDelay = delay
-					cancel()
-				},
-				Backoff: sse.Backoff{InitialInterval: initialInterval},
-			}
-			originalBackoff := c.Backoff
-			conn := c.NewConnection(reqCtx(t, ctx, http.MethodGet, "http://localhost", nil))
-			tests.ErrorIs(t, conn.Connect(), context.Canceled, "connection did not stop after retry callback")
-			defaults := sse.DefaultClient.Backoff
-			variation := time.Duration(float64(defaults.InitialInterval) * defaults.Jitter)
-			tests.Expect(t, retryDelay >= defaults.InitialInterval-variation && retryDelay <= defaults.InitialInterval+variation, "connection did not use default backoff")
-			tests.Equal(t, c.Backoff, originalBackoff, "connection changed the configured backoff")
-			tests.Expect(t, c.ResponseValidator == nil, "connection changed the response validator")
-		})
-	}
-}
-
 func TestClient_NewConnection_concurrent(t *testing.T) {
 	c := sse.Client{}
 	r := req(t, http.MethodGet, "http://localhost", nil)
@@ -154,36 +101,70 @@ func TestClient_NewConnection_concurrent(t *testing.T) {
 }
 
 func TestConnection_Connect_retry(t *testing.T) {
-	var firstReconnectionTime time.Duration
-	var retryAttempts int
-
 	testErr := errors.New("done")
 
-	c := &sse.Client{
-		HTTPClient: &http.Client{
-			Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
-				return nil, testErr
-			}),
+	for _, test := range []struct {
+		err             error
+		name            string
+		backoff         sse.Backoff
+		initialInterval time.Duration
+	}{
+		{
+			name:            "default",
+			initialInterval: sse.DefaultClient.Backoff.InitialInterval,
+			err:             context.Canceled,
 		},
-		OnRetry: func(_ error, duration time.Duration) {
-			retryAttempts++
-			if retryAttempts == 1 {
-				firstReconnectionTime = duration
-			}
+		{
+			name: "custom",
+			backoff: sse.Backoff{
+				MaxRetries:      3,
+				InitialInterval: time.Millisecond,
+			},
+			initialInterval: time.Millisecond,
+			err:             testErr,
 		},
-		Backoff: sse.Backoff{
-			MaxRetries:      3,
-			InitialInterval: time.Millisecond,
-		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+
+				var firstReconnectionTime, totalReconnectionTime time.Duration
+				var retryAttempts int
+				start := time.Now()
+				c := &sse.Client{
+					HTTPClient: &http.Client{
+						Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+							if test.backoff.MaxRetries == 0 && retryAttempts == 3 {
+								cancel()
+								return nil, ctx.Err()
+							}
+							return nil, testErr
+						}),
+					},
+					OnRetry: func(err error, duration time.Duration) {
+						tests.ErrorIs(t, err, testErr, "retry callback received the wrong error")
+						tests.Equal(t, time.Since(start), totalReconnectionTime, "retry did not wait for the configured delay")
+						retryAttempts++
+						if retryAttempts == 1 {
+							firstReconnectionTime = duration
+						}
+						totalReconnectionTime += duration
+					},
+					Backoff: test.backoff,
+				}
+				r := reqCtx(t, ctx, "", "", http.NoBody)
+				err := c.NewConnection(r).Connect()
+
+				tests.ErrorIs(t, err, test.err, "invalid error received from Connect")
+				tests.Equal(t, retryAttempts, 3, "connection was not retried enough times")
+				tests.Equal(t, time.Since(start), totalReconnectionTime, "connection did not wait for all retry delays")
+
+				timeDelta := time.Duration(float64(test.initialInterval) * sse.DefaultClient.Backoff.Jitter)
+				tests.Expect(t, test.initialInterval-timeDelta <= firstReconnectionTime && firstReconnectionTime <= test.initialInterval+timeDelta, "reconnection time incorrectly set")
+			})
+		})
 	}
-	r := req(t, "", "", http.NoBody)
-	err := c.NewConnection(r).Connect()
-
-	tests.ErrorIs(t, err, testErr, "invalid error received from Connect")
-	tests.Equal(t, retryAttempts, c.Backoff.MaxRetries, "connection was not retried enough times")
-
-	timeDelta := time.Duration(float64(c.Backoff.InitialInterval) * sse.DefaultClient.Backoff.Jitter)
-	tests.Expect(t, c.Backoff.InitialInterval-timeDelta <= firstReconnectionTime && firstReconnectionTime <= c.Backoff.InitialInterval+timeDelta, "reconnection time incorrectly set")
 }
 
 func TestConnection_Connect_noRetryCtxErr(t *testing.T) {

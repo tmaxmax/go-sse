@@ -18,7 +18,8 @@ import (
 type ResponseValidator func(*http.Response) error
 
 // The Client struct is used to initialize new connections to different servers.
-// It is safe for concurrent use.
+// Concurrent reads and writes on the Client itself are not safe.
+// One may open and use multiple Connections concurrently.
 //
 // After connections are created, the Connect method must be called to start
 // receiving events.
