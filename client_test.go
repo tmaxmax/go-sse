@@ -441,7 +441,7 @@ func TestConnection_Subscriptions(t *testing.T) {
 	tests.DeepEqual(t, <-messages, expectedMessages, "unexpected events for messages")
 }
 
-func TestConnection_dispatchDirty(t *testing.T) {
+func TestConnection_discardsIncompleteFinalEvent(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "data: hello\ndata: world\n")
 	}))
@@ -455,15 +455,14 @@ func TestConnection_dispatchDirty(t *testing.T) {
 		},
 	}
 	conn := c.NewConnection(req(t, "", ts.URL, nil))
-	expected := sse.Event{Data: "hello\nworld"}
-	var got sse.Event
+	var got []sse.Event
 
 	conn.SubscribeMessages(func(e sse.Event) {
-		got = e
+		got = append(got, e)
 	})
 
 	tests.ErrorIs(t, conn.Connect(), io.EOF, "unexpected Connect error")
-	tests.Equal(t, got, expected, "unexpected event received")
+	tests.Equal(t, len(got), 0, "incomplete event dispatched")
 }
 
 func TestConnection_Unsubscriptions(t *testing.T) {
