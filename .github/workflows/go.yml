@@ -24,7 +24,7 @@ jobs:
         with:
           version: latest
   test:
-    name: Test (minimum supported major)
+    name: Test (minimum supported minor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

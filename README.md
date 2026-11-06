@@ -11,19 +11,19 @@ Lightweight, fully spec-compliant HTML5 server-sent events library.
 - [go-sse](#go-sse)
   - [Table of contents](#table-of-contents)
   - [Installation and usage](#installation-and-usage)
-  - [Cut to the chase – how do I read my LLM's response?](#cut-to-the-chase--how-do-i-read-my-llms-response)
+  - [Cut to the chase – how do I read my LLM’s response?](#cut-to-the-chase--how-do-i-read-my-llms-response)
   - [Implementing a server](#implementing-a-server)
     - [Providers and why they are vital](#providers-and-why-they-are-vital)
     - [Meet Joe, the default provider](#meet-joe-the-default-provider)
     - [Publish your first event](#publish-your-first-event)
-    - [The server-side "Hello world"](#the-server-side-hello-world)
+    - [The server-side “Hello world”](#the-server-side-hello-world)
   - [Using the client](#using-the-client)
     - [Creating a client](#creating-a-client)
     - [Initiating a connection](#initiating-a-connection)
     - [Subscribing to events](#subscribing-to-events)
     - [Establishing the connection](#establishing-the-connection)
     - [Connection lost?](#connection-lost)
-    - [The "Hello world" server's client](#the-hello-world-servers-client)
+    - [The “Hello world” server’s client](#the-hello-world-servers-client)
   - [License](#license)
   - [Contributing](#contributing)
 
@@ -35,17 +35,17 @@ Install the package using `go get`:
 go get -u github.com/tmaxmax/go-sse
 ```
 
-It is strongly recommended to use tagged versions of `go-sse` in your projects. The `master` branch has tested but unreleased and maybe undocumented changes, which may break backwards compatibility - use with caution.
+It is strongly recommended to use tagged versions of `go-sse` in your projects. The `master` branch has tested but unreleased and maybe undocumented changes, which may break backwards compatibility – use with caution.
 
 The library provides both server-side and client-side implementations of the protocol. The implementations are completely decoupled and unopinionated: you can connect to a server created using `go-sse` from the browser and you can connect to any server that emits events using the client!
 
-If you are not familiar with the protocol or not sure how it works, read [MDN's guide for using server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events). [The spec](https://html.spec.whatwg.org/multipage/server-sent-events.html) is also useful read!
+If you are not familiar with the protocol or not sure how it works, read [MDN’s guide for using server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events). [The spec](https://html.spec.whatwg.org/multipage/server-sent-events.html) is also useful read!
 
-`go-sse` promises to support the [Go versions supported by the Go team](https://go.dev/doc/devel/release#policy) – that is, the 2 most recent major releases.
+`go-sse` promises to support the [Go versions supported by the Go team](https://go.dev/doc/devel/release#policy) – that is, the 2 most recent minor releases.
 
-## Cut to the chase – how do I read my LLM's response?
+## Cut to the chase – how do I read my LLM’s response?
 
-If you're here just to read ChatGPT's, Claude's or whichever LLM's response stream, you're in the right place! Let's take a look at [`sse.Read`](https://pkg.go.dev/github.com/tmaxmax/go-sse#Read): you just make your HTTP request the same way you'd do for any other API and call it on the request body. Here's some code:
+If you’re here just to read ChatGPT’s, Claude’s or whichever LLM’s response stream, you’re in the right place! Let’s take a look at [`sse.Read`](https://pkg.go.dev/github.com/tmaxmax/go-sse#Read): you just make your HTTP request the same way you’d do for any other API and call it on the request body. Here’s some code:
 
 ```go
 req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.yourllm.com/v1/chat/completions", payload)
@@ -67,7 +67,7 @@ for ev, err := range sse.Read(res.Body, nil) {
 }
 ```
 
-See the [LLM example](cmd/llm/main.go) for a fully working Go program. `sse.Read` is also useful if you're implementing an LLM SDK: call it in your code and spare yourself time and maintenance burden by not reimplementing event stream parsing.
+See the [LLM example](cmd/llm/main.go) for a fully working Go program. `sse.Read` is also useful if you’re implementing an LLM SDK: call it in your code and spare yourself time and maintenance burden by not reimplementing event stream parsing.
 
 ## Implementing a server
 
@@ -81,7 +81,7 @@ import "github.com/tmaxmax/go-sse"
 s := &sse.Server{} // zero value ready to use!
 ```
 
-The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server/server.go#L156) to learn how to implement your own custom logic. It also has some additional configuration options:
+The `sse.Server` type also implements the `http.Handler` interface, but a server is framework-agnostic: See the [`ServeHTTP` implementation](https://github.com/tmaxmax/go-sse/blob/master/server.go#L132) to learn how to implement your own custom logic. It also has some additional configuration options:
 
 ```go
 s := &sse.Server{
@@ -91,7 +91,7 @@ s := &sse.Server{
 }
 ```
 
-What is this "provider"? A provider is an implementation of the publish-subscribe messaging system:
+What is this “provider”? A provider is an implementation of the publish-subscribe messaging system:
 
 ```go
 type Provider interface {
@@ -125,7 +125,7 @@ import "github.com/tmaxmax/go-sse"
 joe := &sse.Joe{} // the zero value is ready to use!
 ```
 
-and he'll dispatch events all day! By default, he has no memory of what events he has received, but you can help him remember and replay older messages to new clients using a `Replayer`:
+and he’ll dispatch events all day! By default, he has no memory of what events he has received, but you can help him remember and replay older messages to new clients using a `Replayer`:
 
 ```go
 type Replayer interface {
@@ -169,7 +169,7 @@ m := &sse.Message{}
 m.AppendData("Hello world!", "Nice\nto see you.")
 ```
 
-Now let's send it to our clients:
+Now let’s send it to our clients:
 
 ```go
 var s *sse.Server
@@ -187,7 +187,7 @@ data: to see you.
 
 You can also see that `go-sse` takes care of splitting input by lines into new fields, as required by the specification.
 
-Keep in mind that replayers, such as the `ValidReplayer` used above, will give an error for and won't replay the events without an ID (unless, of course, they give the IDs themselves). To have our event expire, as configured, we must set an ID for the event:
+Keep in mind that replayers, such as the `ValidReplayer` used above, will give an error for and won’t replay the events without an ID (unless, of course, they give the IDs themselves). To have our event expire, as configured, we must set an ID for the event:
 
 ```go
 m.ID = sse.ID("unique")
@@ -202,17 +202,17 @@ data: Nice
 data: to see you.
 ```
 
-Now that it has an ID, the event will be considered expired 5 minutes after it's been published – it won't be replayed to clients after it expires!
+Now that it has an ID, the event will be considered expired 5 minutes after it’s been published – it won’t be replayed to clients after it expires!
 
-`sse.ID` is a function that returns an `EventID` – a special type that denotes an event's ID. An ID must not have newlines, so we must use special functions which validate the value beforehand. The `ID` constructor function we've used above panics (it is useful when creating IDs from static strings), but there's also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
+`sse.ID` is a function that returns an `EventID` – a special type that denotes an event’s ID. An ID must not have newlines, so we must use special functions which validate the value beforehand. The `ID` constructor function we’ve used above panics (it is useful when creating IDs from static strings), but there’s also `NewID`, which returns an error indicating whether the value was successfully converted to an ID or not:
 
 ```go
 id, err := sse.NewID("invalid\nID")
 ```
 
-Here, `err` will be non-nil and `id` will be an unset value: no `id` field will be sent to clients if you set an event's ID using that value!
+Here, `err` will be non-nil and `id` will be an unset value: no `id` field will be sent to clients if you set an event’s ID using that value!
 
-Setting the event's type (the `event` field) is equally easy:
+Setting the event’s type (the `event` field) is equally easy:
 
 ```go
 m.Type = sse.Type("The event's name")
@@ -220,9 +220,9 @@ m.Type = sse.Type("The event's name")
 
 Like IDs, types cannot have newlines. You are provided with constructors that follow the same convention: `Type` panics, `NewType` returns an error. Read the [docs][4] to find out more about messages and how to use them!
 
-### The server-side "Hello world"
+### The server-side “Hello world”
 
-Now, let's put everything that we've learned together! We'll create a server that sends a "Hello world!" message every second to all its clients, with Joe's help:
+Now, let’s put everything that we’ve learned together! We’ll create a server that sends a “Hello world!” message every second to all its clients, with Joe’s help:
 
 ```go
 package main
@@ -274,18 +274,18 @@ type Client struct {
 }
 ```
 
-As you can see, it uses a `net/http` client. Read the [client docs][5] to find out how to configure the client. We'll use the default client the package provides for further examples.
+As you can see, it uses a `net/http` client. Read the [client docs][5] to find out how to configure the client. We’ll use the default client the package provides for further examples.
 
 ### Initiating a connection
 
-We must first create an `http.Request` - yup, a fully customizable request:
+We must first create an `http.Request` – yup, a fully customizable request:
 
 ```go
 req, err := http.NewRequestWithContext(ctx, http.MethodGet, "host", http.NoBody)
 ```
 
-Any kind of request is valid as long as your server handler supports it: you can do a GET, a POST, send a body; do whatever! The context is used as always for cancellation - to stop receiving events you will have to cancel the context.
-Let's initiate a connection with this request:
+Any kind of request is valid as long as your server handler supports it: you can do a GET, a POST, send a body; do whatever! The context is used as always for cancellation – to stop receiving events you will have to cancel the context.
+Let’s initiate a connection with this request:
 
 ```go
 import "github.com/tmaxmax/go-sse"
@@ -298,7 +298,7 @@ conn := sse.DefaultClient.NewConnection(req)
 
 ### Subscribing to events
 
-Great! Let's imagine the event stream looks as following:
+Great! Let’s imagine the event stream looks as following:
 
 ```txt
 data: some unnamed event
@@ -318,7 +318,7 @@ unsubscribe := conn.SubscribeMessages(func (event sse.Event) {
 })
 ```
 
-To receive the events named "I have a name":
+To receive the events named “I have a name”:
 
 ```go
 unsubscribe := conn.SubscribeEvent("I have a name", func (event sse.Event) {
@@ -341,14 +341,14 @@ In order to work with events, the `sse.Event` type has some fields and methods e
 ```go
 type Event struct {
     LastEventID string
-    Name        string
+    Type        string
     Data        string
 }
 ```
 
 Pretty self-explanatory, but make sure to read the [docs][6]!
 
-Now, with this knowledge, let's subscribe to all unnamed events and, when the connection is established, print their data:
+Now, with this knowledge, let’s subscribe to all unnamed events and, when the connection is established, print their data:
 
 ```go
 unsubscribe := conn.SubscribeMessages(func(event sse.Event) {
@@ -358,7 +358,7 @@ unsubscribe := conn.SubscribeMessages(func(event sse.Event) {
 
 ### Establishing the connection
 
-Great, we are subscribed now! Let's start receiving events:
+Great, we are subscribed now! Let’s start receiving events:
 
 ```go
 err := conn.Connect()
@@ -406,13 +406,15 @@ retry: 60000
 : is a comment which is ignored by the client
 ```
 
-Not a sweat, though! The connection will automatically be reattempted after a minute, when we'll hope the server's back up again. Canceling the request's context will cancel any reconnection attempt, too.
+Not a sweat, though! The connection will automatically be reattempted after a minute, when we’ll hope the server’s back up again. Canceling the request’s context will cancel any reconnection attempt, too.
 
-If the server doesn't set a retry time, the client's `DefaultReconnectionTime` is used.
+If the server doesn’t set a retry time, the reconnection time from the client’s
+[`Backoff`](https://pkg.go.dev/github.com/tmaxmax/go-sse#Backoff)
+configuration is used, 500ms by default.
 
-### The "Hello world" server's client
+### The “Hello world” server’s client
 
-Let's use what we know to create a client for the previous server example:
+Let’s use what we know to create a client for the previous server example:
 
 ```go
 package main
@@ -426,7 +428,7 @@ import (
 )
 
 func main() {
-    r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", nil)
+    r, _ := http.NewRequest(http.MethodGet, "http://localhost:8000", http.NoBody)
     conn := sse.NewConnection(r)
 
     conn.SubscribeMessages(func(ev sse.Event) {
@@ -453,7 +455,7 @@ Hello world!
 ...
 ```
 
-[See the complex example's client too!](cmd/complex_client/main.go)
+[See the complex example’s client too!](cmd/complex_client/main.go)
 
 ## License
 
@@ -461,7 +463,7 @@ This project is licensed under the [MIT license](LICENSE).
 
 ## Contributing
 
-The library's in its early stages, so contributions are vital - I'm so glad you wish to improve `go-sse`! Maybe start by opening an issue first, to describe the intended modifications and further discuss how to integrate them. Open PRs to the `master` branch and wait for CI to complete. If all is clear, your changes will soon be merged! Also, make sure your changes come with an extensive set of tests and the code is formatted.
+The library’s in its early stages, so contributions are vital – I’m so glad you wish to improve `go-sse`! Maybe start by opening an issue first, to describe the intended modifications and further discuss how to integrate them. Open PRs to the `master` branch and wait for CI to complete. If all is clear, your changes will soon be merged! Also, make sure your changes come with an extensive set of tests and the code is formatted.
 
 Thank you for contributing!
 
