@@ -48,6 +48,5 @@ func TestRead(t *testing.T) {
 
 		expected := []sse.Event{{LastEventID: "a"}, {LastEventID: "b"}}
 		tests.DeepEqual(t, recv, expected, "iterator didn't stop")
-
 	})
 }

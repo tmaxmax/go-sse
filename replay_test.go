@@ -186,7 +186,7 @@ func TestFiniteReplayProvider_allocations(t *testing.T) {
 	queue := make([]*sse.Message, runs+1)
 	lastID := runs
 
-	for i := 0; i < len(queue); i++ {
+	for i := range queue {
 		queue[i] = msg(t,
 			fmt.Sprintf("message %d", i),
 			strconv.Itoa(i),

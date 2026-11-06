@@ -10,6 +10,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ### Changed
 
+- Updated minimum supported Go version to the oldest officially supported, 1.26.
 - `Client.NewConnection` now applies defaults to each connection's copy of the client. The original `HTTPClient`, `ResponseValidator` and `Backoff` fields stay unchanged. This breaks code that reads default values from those fields after creating a connection.
 
 ### Fixed

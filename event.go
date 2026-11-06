@@ -124,7 +124,7 @@ func read(pf func() *parser.Parser, lastEventID string, onRetry func(int64), ign
 		// End-of-input never dispatches a pending event. Read treats an
 		// incomplete final line like EOF; Connection retains the error for
 		// its reconnection policy. Other reader errors must still propagate.
-		if err != nil && !(ignoreEOF && (isEOF || err == parser.ErrUnexpectedEOF)) {
+		if err != nil && !(ignoreEOF && (isEOF || err == parser.ErrUnexpectedEOF)) { //nolint
 			yield(Event{}, err)
 		}
 	}
