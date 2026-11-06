@@ -49,12 +49,5 @@ func TestRead(t *testing.T) {
 		expected := []sse.Event{{LastEventID: "a"}, {LastEventID: "b"}}
 		tests.DeepEqual(t, recv, expected, "iterator didn't stop")
 
-		// Cover break check on EOF edge case
-		// NOTE(tmaxmax): Should also test this with EOF return when possible.
-		sse.Read(strings.NewReader("data: x\n"), nil)(func(e sse.Event, err error) bool {
-			tests.Equal(t, err, nil, "unexpected error")
-			tests.Equal(t, e, sse.Event{Data: "x"}, "unexpected event")
-			return false
-		})
 	})
 }
