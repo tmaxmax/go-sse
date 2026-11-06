@@ -178,7 +178,7 @@ func generateRandomNumbers() *sse.Message {
 	e := &sse.Message{}
 	count := 1 + rand.Intn(5)
 
-	for i := 0; i < count; i++ {
+	for range count {
 		e.AppendData(strconv.FormatUint(rand.Uint64(), 10))
 	}
 

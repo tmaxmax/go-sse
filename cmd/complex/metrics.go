@@ -27,7 +27,7 @@ func Inc(metric string) int64 {
 
 // Range loops through all metrics and calls the given function for each metric.
 func Range(fn func(key string, value int64) bool) {
-	metrics.Range(func(key, value interface{}) bool {
+	metrics.Range(func(key, value any) bool {
 		return fn(key.(string), value.(int64))
 	})
 }

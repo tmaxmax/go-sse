@@ -35,7 +35,7 @@ func main() {
 			cancel()
 		default: // no event name
 			var sum, num big.Int
-			for _, n := range strings.Split(event.Data, "\n") {
+			for n := range strings.SplitSeq(event.Data, "\n") {
 				_, _ = num.SetString(n, 10)
 				sum.Add(&sum, &num)
 			}

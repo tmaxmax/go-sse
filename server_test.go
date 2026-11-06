@@ -263,7 +263,7 @@ func benchmarkServer(b *testing.B, conns int) {
 
 	m := getMessage(b)
 
-	for i := 0; i < conns; i++ {
+	for range conns {
 		w, r := getRequest(b)
 		go s.ServeHTTP(w, r)
 	}

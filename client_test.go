@@ -88,12 +88,10 @@ func TestClient_NewConnection_concurrent(t *testing.T) {
 	start := make(chan struct{})
 	var done sync.WaitGroup
 	for range 32 {
-		done.Add(1)
-		go func() {
-			defer done.Done()
+		done.Go(func() {
 			<-start
 			_ = c.NewConnection(r)
-		}()
+		})
 	}
 	close(start)
 	done.Wait()
@@ -620,8 +618,7 @@ func TestConnection_serverError(t *testing.T) {
 		ResponseValidator: sse.NoopValidator,
 		Backoff:           sse.Backoff{MaxRetries: -1},
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	conn := c.NewConnection(reqCtx(t, ctx, "", ts.URL, nil))
 
 	all, unsubAll := events(t, conn)

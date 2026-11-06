@@ -3,7 +3,6 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/tmaxmax/go-sse.svg)](https://pkg.go.dev/github.com/tmaxmax/go-sse)
 ![CI](https://github.com/tmaxmax/go-sse/actions/workflows/go.yml/badge.svg)
 [![codecov](https://codecov.io/gh/tmaxmax/go-sse/branch/master/graph/badge.svg?token=EP52XJI4RO)](https://codecov.io/gh/tmaxmax/go-sse)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tmaxmax/go-sse)](https://goreportcard.com/report/github.com/tmaxmax/go-sse)
 
 Lightweight, fully spec-compliant HTML5 server-sent events library.
 
@@ -68,17 +67,7 @@ for ev, err := range sse.Read(res.Body, nil) {
 }
 ```
 
-See the [LLM example](cmd/llm/main.go) for a fully working Go program.
-
-Go 1.23 iterators (officially ["range-over-func"](https://go.dev/blog/range-functions)) are used for this feature. If you are still on Go 1.22 use the `GOEXPERIMENT=rangefunc` environment variable (e.g. `GOEXPERIMENT=rangefunc go run main.go`) or use the iterator without the syntactic sugar:
-```go
-events(func(ev Event) bool {
-    // do something with event
-    return true // or false to stop iteration
-})
-```
-
-`sse.Read` is also useful if you're implementing an LLM SDK: call it in your code and spare yourself time and maintenance burden by not reimplementing event stream parsing.
+See the [LLM example](cmd/llm/main.go) for a fully working Go program. `sse.Read` is also useful if you're implementing an LLM SDK: call it in your code and spare yourself time and maintenance burden by not reimplementing event stream parsing.
 
 ## Implementing a server
 

@@ -2,7 +2,9 @@
 
 This file tracks changes to this project. It follows the [Keep a Changelog format](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.12.0] - 2026-11-06
+
+Fixes EOF handling to correctly follow [the SSE specification](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation); otherwise a minor API cleanup update.
 
 ### Removed
 
@@ -10,6 +12,7 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 ### Changed
 
+- Updated minimum supported Go version to the oldest officially supported, 1.26.
 - `Client.NewConnection` now applies defaults to each connection's copy of the client. The original `HTTPClient`, `ResponseValidator` and `Backoff` fields stay unchanged. This breaks code that reads default values from those fields after creating a connection.
 
 ### Fixed
