@@ -3,7 +3,6 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/tmaxmax/go-sse.svg)](https://pkg.go.dev/github.com/tmaxmax/go-sse)
 ![CI](https://github.com/tmaxmax/go-sse/actions/workflows/go.yml/badge.svg)
 [![codecov](https://codecov.io/gh/tmaxmax/go-sse/branch/master/graph/badge.svg?token=EP52XJI4RO)](https://codecov.io/gh/tmaxmax/go-sse)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tmaxmax/go-sse)](https://goreportcard.com/report/github.com/tmaxmax/go-sse)
 
 Lightweight, fully spec-compliant HTML5 server-sent events library.
 
