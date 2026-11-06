@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/tmaxmax/go-sse"
@@ -75,40 +77,94 @@ func TestClient_NewConnection(t *testing.T) {
 	r := req(t, "", "", nil)
 	_ = c.NewConnection(r)
 
-	tests.Equal(t, c.HTTPClient, http.DefaultClient, "incorrect default HTTP client")
+	tests.Equal(t, c.HTTPClient, nil, "connection creation changed the HTTP client")
+	tests.Equal(t, c.Backoff, sse.Backoff{}, "connection creation changed the backoff")
+	tests.Expect(t, c.ResponseValidator == nil, "connection creation changed the response validator")
+}
+
+func TestClient_NewConnection_concurrent(t *testing.T) {
+	c := sse.Client{}
+	r := req(t, http.MethodGet, "http://localhost", nil)
+	start := make(chan struct{})
+	var done sync.WaitGroup
+	for range 32 {
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			<-start
+			_ = c.NewConnection(r)
+		}()
+	}
+	close(start)
+	done.Wait()
+	tests.DeepEqual(t, c, sse.Client{}, "concurrent connections changed the caller configuration")
 }
 
 func TestConnection_Connect_retry(t *testing.T) {
-	var firstReconnectionTime time.Duration
-	var retryAttempts int
-
 	testErr := errors.New("done")
 
-	c := &sse.Client{
-		HTTPClient: &http.Client{
-			Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
-				return nil, testErr
-			}),
+	for _, test := range []struct {
+		err             error
+		name            string
+		backoff         sse.Backoff
+		initialInterval time.Duration
+	}{
+		{
+			name:            "default",
+			initialInterval: sse.DefaultClient.Backoff.InitialInterval,
+			err:             context.Canceled,
 		},
-		OnRetry: func(_ error, duration time.Duration) {
-			retryAttempts++
-			if retryAttempts == 1 {
-				firstReconnectionTime = duration
-			}
+		{
+			name: "custom",
+			backoff: sse.Backoff{
+				MaxRetries:      3,
+				InitialInterval: time.Millisecond,
+			},
+			initialInterval: time.Millisecond,
+			err:             testErr,
 		},
-		Backoff: sse.Backoff{
-			MaxRetries:      3,
-			InitialInterval: time.Millisecond,
-		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+
+				var firstReconnectionTime, totalReconnectionTime time.Duration
+				var retryAttempts int
+				start := time.Now()
+				c := &sse.Client{
+					HTTPClient: &http.Client{
+						Transport: roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+							if test.backoff.MaxRetries == 0 && retryAttempts == 3 {
+								cancel()
+								return nil, ctx.Err()
+							}
+							return nil, testErr
+						}),
+					},
+					OnRetry: func(err error, duration time.Duration) {
+						tests.ErrorIs(t, err, testErr, "retry callback received the wrong error")
+						tests.Equal(t, time.Since(start), totalReconnectionTime, "retry did not wait for the configured delay")
+						retryAttempts++
+						if retryAttempts == 1 {
+							firstReconnectionTime = duration
+						}
+						totalReconnectionTime += duration
+					},
+					Backoff: test.backoff,
+				}
+				r := reqCtx(t, ctx, "", "", http.NoBody)
+				err := c.NewConnection(r).Connect()
+
+				tests.ErrorIs(t, err, test.err, "invalid error received from Connect")
+				tests.Equal(t, retryAttempts, 3, "connection was not retried enough times")
+				tests.Equal(t, time.Since(start), totalReconnectionTime, "connection did not wait for all retry delays")
+
+				timeDelta := time.Duration(float64(test.initialInterval) * sse.DefaultClient.Backoff.Jitter)
+				tests.Expect(t, test.initialInterval-timeDelta <= firstReconnectionTime && firstReconnectionTime <= test.initialInterval+timeDelta, "reconnection time incorrectly set")
+			})
+		})
 	}
-	r := req(t, "", "", http.NoBody)
-	err := c.NewConnection(r).Connect()
-
-	tests.ErrorIs(t, err, testErr, "invalid error received from Connect")
-	tests.Equal(t, retryAttempts, c.Backoff.MaxRetries, "connection was not retried enough times")
-
-	timeDelta := time.Duration(float64(c.Backoff.InitialInterval) * sse.DefaultClient.Backoff.Jitter)
-	tests.Expect(t, c.Backoff.InitialInterval-timeDelta <= firstReconnectionTime && firstReconnectionTime <= c.Backoff.InitialInterval+timeDelta, "reconnection time incorrectly set")
 }
 
 func TestConnection_Connect_noRetryCtxErr(t *testing.T) {

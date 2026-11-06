@@ -8,10 +8,15 @@ This file tracks changes to this project. It follows the [Keep a Changelog forma
 
 - `Session.Req`, `Session.Res`, and `MessageWriter`; `Server.OnSession` gives the request and response directly, and in custom `sse.Upgrade` usage one has the request and response instances available already.
 
+### Changed
+
+- `Client.NewConnection` now applies defaults to each connection's copy of the client. The original `HTTPClient`, `ResponseValidator` and `Backoff` fields stay unchanged. This breaks code that reads default values from those fields after creating a connection.
+
 ### Fixed
 
 - `Read` and `Connection` now discard incomplete final events at EOF. The SSE specification requires a blank line to dispatch an event; reaching EOF alone must not turn a truncated event into a successful one. Producers must terminate the final event with a blank line for it to be delivered. `Read` treats an incomplete final line as successful end-of-input, while `Connection` retains its existing EOF and reconnection behavior.
 - Preserve underlying reader errors when a partial final field is buffered, so an unexpected-EOF parser error does not hide the cause of a failed read.
+- Concurrent calls to `Client.NewConnection` no longer write to the shared client configuration.
 
 ## [0.11.0] - 2025-05-14
 
